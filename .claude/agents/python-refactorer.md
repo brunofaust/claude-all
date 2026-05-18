@@ -1,1 +1,0 @@
-/Users/bfaust/Library/CloudStorage/OneDrive-Personal/Documents/My Git/claude-all/coding/agents/python/python-refactorer.md
