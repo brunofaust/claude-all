@@ -62,11 +62,11 @@ chmod +x install.sh
 
 Symlinks. Edits in this repo propagate to every project where the items are installed. To "update", just `git pull` here.
 
-## Agents
+## Coding
+
+### 1. Agents
 
 All agents follow the same pattern: a detailed `description` so Claude Code's auto-router picks the right one, a strict `model` (Haiku for mechanical work, Sonnet for judgment-heavy work), and a focused tool list.
-
-### 1. Coding
 
 #### 1.1 Generic (language-agnostic)
 
@@ -114,19 +114,21 @@ All agents follow the same pattern: a detailed `description` so Claude Code's au
 | `debugger` | sonnet-4-6 | Root-cause analysis on bugs, test failures, distributed system issues. Forms hypotheses, verifies cheaply, proposes minimum fix. |
 | `incident-responder` | sonnet-4-6 | Coordinates active-incident investigation across AWS services. Builds a unified timeline. Produces postmortem-ready summary. |
 
-## Skills
+### 2. Skills
+
+#### 2.1 Python
 
 | Skill | Description |
 |---|---|
 | brunofaust-python-style | Modern Python 3.14+ coding standards for async-first, type-safe production code. |
 
-## Plugins
+### 3. Plugins
 
 | Plugin | Description |
 |---|---|
 | _(none yet)_ | |
 
-## MCPs
+### 4. MCPs
 
 | MCP | Description |
 |---|---|
