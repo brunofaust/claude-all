@@ -6,7 +6,7 @@ Claude Code agents, skills, plugins, and MCP configurations. One place to manage
 
 ```
 claude-all/
-├── install.sh                # Interactive installer
+├── calude-all                # Interactive installer
 ├── coding/
 │   ├── agents/
 │   │   ├── generic/          # Language-agnostic, project-agnostic
@@ -30,23 +30,37 @@ The installer presents an interactive menu, lets you select what to install, and
 # Clone the repository
 git clone https://github.com/brunofaust/claude-all.git
 
-# Permission to install.sh to execute
-chmod +x install.sh
+# Permission to calude-all to execute
+chmod +x claude-all
+
+# Add it to the PATH in ~/.zshrc
+echo 'export PATH="$HOME/claude-all:$PATH"' >> ~/.zshrc
 
 # Full menu — everything available
-./install.sh
+calude-all
 
 # Filtered to a category
-./install.sh coding aws       # only AWS agents
-./install.sh coding agents    # all agents
-./install.sh coding skills    # all skills
+calude-all coding aws       # only AWS agents
+calude-all coding agents    # all agents
+calude-all coding skills    # all skills
 
 # Non-interactive listing
-./install.sh --list           # show everything
-./install.sh --list aws       # show AWS items only
+calude-all --list           # show everything
+calude-all --list aws       # show AWS items only
 
 # Help
-./install.sh --help
+calude-all --help
+```
+
+To install a resource in a project:
+
+```bash
+# Go to the project folder
+cd ~/repos/my_project
+
+# Just run
+claude-all
+
 ```
 
 ### Menu controls
@@ -146,7 +160,7 @@ Opus is intentionally absent — these agents are for routine work, and Opus is 
 1. Create the `.md` file in the right category folder.
 2. Frontmatter must include `name`, `description` (detailed, with triggers), `model`, and `tools`.
 3. Body describes capabilities, workflow, output format, and rules.
-4. Test with `./install.sh --list <category>` to verify discovery.
+4. Test with `calude-all --list <category>` to verify discovery.
 5. Update this README's table.
 
 Description guidelines: be explicit about WHEN to trigger AND when NOT to trigger. List specific user phrasings. The router uses this text to pick agents — vague descriptions cause wrong delegation.
