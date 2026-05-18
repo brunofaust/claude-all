@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
+
 # claude-all installer
 # Interactive menu to select and install agents/skills/plugins/mcps
 # at user level (~/.claude/) or project level (./.claude/)
 #
 # Usage:
-#   ./install.sh                    # Show full interactive menu
-#   ./install.sh coding             # Filter to 'coding' category
-#   ./install.sh coding aws         # Filter to coding/agents/aws
-#   ./install.sh --help             # Show help
+#   calude-all                    # Show full interactive menu
+#   calude-all coding             # Filter to 'coding' category
+#   calude-all coding aws         # Filter to coding/agents/aws
+#   calude-all --help             # Show help
 
 set -euo pipefail
 
@@ -44,10 +45,10 @@ print_help() {
 ${BOLD}claude-all installer${RESET}
 
 ${BOLD}Usage:${RESET}
-  ./install.sh                Show full interactive menu
-  ./install.sh <filter>...    Filter items (e.g. './install.sh coding aws')
-  ./install.sh --help         Show this help
-  ./install.sh --list         List all available items (no install)
+  calude-all                Show full interactive menu
+  calude-all <filter>...    Filter items (e.g. 'calude-all coding aws')
+  calude-all --help         Show this help
+  calude-all --list         List all available items (no install)
 
 ${BOLD}Filters:${RESET}
   coding              All coding-related items
@@ -270,7 +271,7 @@ main() {
   mapfile -t ITEMS < <(discover_items "$@")
   if [[ ${#ITEMS[@]} -eq 0 ]]; then
     echo "${RED}No items match filter: $*${RESET}"
-    echo "Try: ./install.sh --list"
+    echo "Try: calude-all --list"
     exit 1
   fi
 
