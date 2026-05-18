@@ -6,7 +6,8 @@ Claude Code agents, skills, plugins, and MCP configurations. One place to manage
 
 ```
 claude-all/
-├── calude-all                # Interactive installer
+├── claude-all                # Bash wrapper → dispatches to claude-all.py
+├── claude-all.py             # Interactive TUI installer (curses)
 ├── coding/
 │   ├── agents/
 │   │   ├── generic/          # Language-agnostic, project-agnostic
@@ -24,53 +25,69 @@ Future categories (travel, writing, research, etc.) live as siblings to `coding/
 
 ## Installation
 
-The installer presents an interactive menu, lets you select what to install, and chooses between user-level (`~/.claude/`) or project-level (`./.claude/`).
+### Requirements
+
+- macOS or Linux
+- `python3`
+
+### Setup
 
 ```bash
-# Clone the repository
+# 1. Clone the repository (anywhere — pick your own path)
 git clone https://github.com/brunofaust/claude-all.git
+cd claude-all
 
-# Permission to calude-all to execute
-chmod +x claude-all
+# 2. Make the wrapper executable
+chmod +x claude-all claude-all.py
 
-# Add it to the PATH in ~/.zshrc
-echo 'export PATH="$HOME/claude-all:$PATH"' >> ~/.zshrc
-
-# Full menu — everything available
-calude-all
-
-# Filtered to a category
-calude-all coding aws       # only AWS agents
-calude-all coding agents    # all agents
-calude-all coding skills    # all skills
-
-# Non-interactive listing
-calude-all --list           # show everything
-calude-all --list aws       # show AWS items only
-
-# Help
-calude-all --help
+# 3. Add the cloned directory to your PATH
+#    $(pwd) expands to the current directory at setup time.
+echo "export PATH=\"$(pwd):\$PATH\"" >> ~/.zshrc
+source ~/.zshrc
 ```
 
-To install a resource in a project:
+### Usage
+
+Interactive TUI. Select items, pick user-level (`~/.claude/`) or project-level (`./.claude/`).
 
 ```bash
-# Go to the project folder
-cd ~/repos/my_project
-
-# Just run
+# Full TUI — everything available
 claude-all
 
+# Filtered to a category
+claude-all coding aws       # only AWS agents
+claude-all coding agents    # all agents
+claude-all coding skills    # all skills
+
+# Non-interactive listing
+claude-all --list           # show everything
+claude-all --list aws       # show AWS items only
+
+# Non-interactive install
+claude-all --all --user coding aws       # all AWS agents → ~/.claude/
+claude-all --all --project coding skills # all skills → ./.claude/
+
+# Help
+claude-all --help
 ```
 
-### Menu controls
+Install into a project:
+
+```bash
+cd ~/repos/my_project
+claude-all
+```
+
+### TUI controls
 
 - `↑`/`↓` or `j`/`k` — move cursor
-- `SPACE` — toggle selection
-- `A` — select all visible
-- `N` — clear selection
-- `ENTER` — proceed to install level choice
-- `q` — quit
+- `PgUp`/`PgDn`, `Home`/`End` — jump
+- `SPACE` — toggle item under cursor
+- `a` — select all visible (respects active filter)
+- `n` — clear selection of visible
+- `/` — incremental filter (type to narrow, `ENTER` to confirm, `ESC` to clear)
+- `ENTER` — proceed to install-level choice
+- `q` or `ESC` — quit
 
 ### Installation method
 
@@ -160,7 +177,7 @@ Opus is intentionally absent — these agents are for routine work, and Opus is 
 1. Create the `.md` file in the right category folder.
 2. Frontmatter must include `name`, `description` (detailed, with triggers), `model`, and `tools`.
 3. Body describes capabilities, workflow, output format, and rules.
-4. Test with `calude-all --list <category>` to verify discovery.
+4. Test with `claude-all --list coding <category>` to verify discovery.
 5. Update this README's table.
 
 Description guidelines: be explicit about WHEN to trigger AND when NOT to trigger. List specific user phrasings. The router uses this text to pick agents — vague descriptions cause wrong delegation.
