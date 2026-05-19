@@ -109,6 +109,44 @@ claude-all
 
 Symlinks. Edits in this repo propagate to every project where the items are installed. To "update", just `git pull` here.
 
+### CLAUDE.md auto-injection
+
+Any resource directory may ship a `claude_md.md` snippet:
+
+- Agents (single file): `coding/agents/<cat>/<name>.claude_md.md`
+- Skills / plugins / mcps (dir): `<resource-dir>/claude_md.md`
+
+On install, the snippet is wrapped in tags and appended to the target `CLAUDE.md`:
+
+```
+<!-- claude-all:<kind>/<name>:start -->
+...snippet content...
+<!-- claude-all:<kind>/<name>:end -->
+```
+
+Target = `~/.claude/CLAUDE.md` for `--user`, `./CLAUDE.md` for `--project`.
+
+Re-install replaces the block in place (idempotent — no duplicates). Future uninstall strips the block between the tags.
+
+### Hook auto-injection
+
+Skills (and any other resource) may ship a `hook.py` + `hook.json` next to their main file. On install:
+
+1. `hook.py` is symlinked into `.claude/hooks/<kind>-<name>.py`
+2. `.claude/settings.json` is merged (idempotent, deduped by command path)
+
+Schema `hook.json`:
+
+```json
+{"event": "PreToolUse", "matcher": "Edit|Write", "timeout": 2000}
+```
+
+Shipped skill hooks are **non-blocking reminders** (exit code 1 — emits stderr, doesn't stop the tool). They fire only when the file being edited matches the skill's domain (e.g. `*.py` for python style, `*.tsx` with `<ViewTransition>` for view-transitions skill). Sonnet reads the stderr message and adjusts.
+
+Target settings file:
+- `--user` → `~/.claude/settings.json` + `~/.claude/hooks/`
+- `--project` → `./.claude/settings.json` + `./.claude/hooks/`
+
 ## Coding
 
 ### 1. Agents
@@ -127,6 +165,7 @@ All agents follow the same pattern: a detailed `description` so Claude Code's au
 | `docker-runner` | haiku-4-5 | Executes docker / docker compose commands (build, run, exec, logs, ps, compose up/down/restart/logs). Returns concise summary — image tag/size for builds, container state for ps, error chain for failures. Refuses destructive ops (rm/rmi/volume rm/prune/push/down -v) without explicit confirmation. |
 | `frontend-builder` | haiku-4-5 | Builds frontend / web apps — npm/pnpm/yarn build, vite/next/astro/nuxt/tsc -b. Returns success + bundle size + top chunks; or tight error chain for failures. Never runs dev server, never modifies config. |
 | `gh-runner` | haiku-4-5 | Read-only GitHub CLI (`gh`) inspection — PRs, issues, repos, releases, workflow runs, checks, comments, search. Returns tight summaries (PR table, issue header + body, failed CI step + error chain). Refuses any mutation (`gh pr create/merge/close`, `gh issue create`, `gh workflow run`, `gh secret set`, POST/PATCH/DELETE API calls). |
+| `e2e-scenario-runner` | haiku-4-5 | Executes generic multi-step end-to-end scenarios — setup via MCPs (Atlassian / Slack / etc.), trigger Lambdas / HTTP endpoints, poll DDB / Postgres / SQS / Step Functions for downstream effects, scan CloudWatch logs for errors. Returns structured BLOCK/HIGH/MEDIUM/INFO report per step with evidence (status, latency, log excerpt, file:line root-cause hint). Stops on first BLOCK by default. **Never attempts fixes** — that's the main session's job after reading the report. No hardcoded service names — user describes the scenario. |
 
 #### 1.2 AWS
 
@@ -161,7 +200,14 @@ All agents follow the same pattern: a detailed `description` so Claude Code's au
 | `python-deps` | haiku-4-5 | Executes Python dep-manager commands (uv/pip/poetry/pipx) and returns a concise summary — success, key changes, useful error chain, well-known fix suggestion when obvious. Never edits lockfiles or pyproject. |
 | `migration-reviewer` | sonnet-4-6 | Reviews Alembic migrations for safety, asyncpg correctness, ENUM patterns, lock contention, backfill docs, downgrade reversibility, and ORM consistency. Returns a BLOCK/WARN/INFO scored report with line refs. Read-only — never applies migrations. Pairs with the `alembic-migration` skill. |
 
-#### 1.5 Support (cross-cutting)
+#### 1.5 Web
+
+| Agent | Model | Description |
+|---|---|---|
+| `seo-runner` | haiku-4-5 | Executes live SEO / GEO / AEO audits via curl — Google PageSpeed Insights, Mozilla HTTP Observatory v2, W3C Markup Validator, on-page meta scrape, robots.txt + sitemap.xml + llms.txt fetch, security headers, AI-bot policy analysis. Returns severity-scored report (BLOCK / HIGH / MEDIUM / GOOD) with actionable priority fixes. Read-only. Pairs with the `seo` skill for the rule knowledge. |
+| `seo-reviewer` | sonnet-4-6 | Static code review for SEO / GEO / AEO — reads HTML, JSX/TSX, Next.js (App + Pages router), Astro, Remix, Gatsby, MDX, plus `robots.txt` / `sitemap.xml` / `llms.txt`. Framework-aware (knows `metadata` / `generateMetadata` / `<Head>` / Astro frontmatter). Returns BLOCK/HIGH/MEDIUM/INFO findings with file:line refs and code-block fix snippets. Read-only. Use BEFORE deploy. Pairs with the `seo` skill. |
+
+#### 1.6 Support (cross-cutting)
 
 | Agent | Model | Description |
 |---|---|---|
@@ -177,6 +223,29 @@ All agents follow the same pattern: a detailed `description` so Claude Code's au
 |---|---|
 | brunofaust-python-style | Modern Python 3.14+ coding standards for async-first, type-safe production code. |
 | alembic-migration | Generate Alembic migrations following busydone patterns — naming, backfill safety, merge resolution, ENUM handling, asyncpg query syntax. Anti-patterns table for common mistakes. |
+
+#### 2.2 Frontend
+
+All four kept under one `frontend/` folder — React-specific items are a subset of frontend work. Filter with `claude-all coding skills react` if you only want the React-named ones.
+
+| Skill | Description |
+|---|---|
+| vercel-react-best-practices | React + Next.js performance patterns from Vercel Engineering — bundle optimization, data fetching, render performance. |
+| vercel-composition-patterns | React composition patterns that scale — replace boolean prop sprawl, build flexible component libraries. |
+| vercel-react-view-transitions | React View Transition API — `<ViewTransition>`, `addTransitionType`, route/list/shared-element animations. |
+| web-design-guidelines | UI/UX/accessibility review checklist — design audits, "review my UI", "check accessibility". |
+
+#### 2.3 AWS
+
+| Skill | Description |
+|---|---|
+| aws-architecture | Serverless + event-driven AWS patterns — Lambda idempotency / VPC / cold starts, SQS visibility + DLQ, SNS vs EventBridge vs SQS decision matrix, DynamoDB partition design + single-table, Step Functions Express vs Standard, API Gateway HTTP vs REST, cost gotchas (NAT, CW Logs, cross-AZ). Anchored to AWS Well-Architected + Serverless Application Lens. |
+
+#### 2.4 Web
+
+| Skill | Description |
+|---|---|
+| seo | SEO + GEO + AEO — classic search ranking, generative-engine citation (Perplexity / ChatGPT / Gemini / AI Overviews), and answer-engine optimization (featured snippets, PAA, voice). Covers on-page, JSON-LD (with deprecation warnings for HowTo / non-authority FAQPage), Core Web Vitals (LCP / INP / CLS with current thresholds), robots/sitemap/hreflang, AI-bot access (GPTBot, ClaudeBot, PerplexityBot), `llms.txt`, programmatic-page caps. |
 
 ### 3. Plugins
 
