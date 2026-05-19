@@ -125,6 +125,8 @@ All agents follow the same pattern: a detailed `description` so Claude Code's au
 | `log-filter` | haiku-4-5 | Filters, summarizes, formats raw logs from any source (structlog JSON, CloudWatch output, stdout). Works on logs already in hand. |
 | `docs-updater` | sonnet-4-6 | Updates README, CLAUDE.md, ARCHITECTURE.md, CHANGELOG.md after code changes. Detects which doc needs the update; proposes diffs. |
 | `docker-runner` | haiku-4-5 | Executes docker / docker compose commands (build, run, exec, logs, ps, compose up/down/restart/logs). Returns concise summary — image tag/size for builds, container state for ps, error chain for failures. Refuses destructive ops (rm/rmi/volume rm/prune/push/down -v) without explicit confirmation. |
+| `frontend-builder` | haiku-4-5 | Builds frontend / web apps — npm/pnpm/yarn build, vite/next/astro/nuxt/tsc -b. Returns success + bundle size + top chunks; or tight error chain for failures. Never runs dev server, never modifies config. |
+| `gh-runner` | haiku-4-5 | Read-only GitHub CLI (`gh`) inspection — PRs, issues, repos, releases, workflow runs, checks, comments, search. Returns tight summaries (PR table, issue header + body, failed CI step + error chain). Refuses any mutation (`gh pr create/merge/close`, `gh issue create`, `gh workflow run`, `gh secret set`, POST/PATCH/DELETE API calls). |
 
 #### 1.2 AWS
 
@@ -143,6 +145,7 @@ All agents follow the same pattern: a detailed `description` so Claude Code's au
 | `terraform-reviewer` | sonnet-4-6 | Reviews Terraform code and plan output for security, cost, IAM scope, operational risks. Read-only. |
 | `cloudformation-deployer` | haiku-4-5 | Executes CloudFormation via change sets. Validates, describes, deploys after confirmation. |
 | `cloudformation-reviewer` | sonnet-4-6 | Reviews CloudFormation templates and change sets for security and operational risks. Read-only. |
+| `aws-lambda-deployer` | haiku-4-5 | Executes Lambda code-deploys, invokes, and smoke tests (`aws lambda update-function-code`, `aws lambda invoke`, `make deploy-lambda*`, `make test-lambdas`). Returns per-function status + S3 upload + ARN updates; groups identical failures across N functions; surfaces well-known causes (KMS/Decrypt, ResourceConflict Pending, RequestEntityTooLarge, ImportError after build). Refuses config changes (`update-function-configuration`, `publish-version`, `put-concurrency`) and deletes without explicit confirmation. |
 
 #### 1.3 Databases (non-AWS)
 
