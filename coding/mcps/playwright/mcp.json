@@ -1,0 +1,10 @@
+{
+  "name": "playwright",
+  "github": "https://github.com/microsoft/playwright-mcp",
+  "package": "@playwright/mcp",
+  "command": "npx",
+  "args": ["-y", "@playwright/mcp"],
+  "env": {},
+  "transport": "stdio",
+  "description": "Playwright MCP — browser automation. Navigate, click, fill forms, screenshot, evaluate JS. Useful for scraping, e2e testing, and inspecting live web pages."
+}

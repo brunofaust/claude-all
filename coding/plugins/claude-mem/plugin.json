@@ -1,0 +1,8 @@
+{
+  "name": "claude-mem",
+  "github": "https://github.com/thedotmack/claude-mem",
+  "type": "claude-marketplace",
+  "marketplace": "thedotmack/claude-mem",
+  "plugin": "claude-mem",
+  "description": "Persistent cross-session memory for Claude Code."
+}
