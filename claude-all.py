@@ -320,14 +320,229 @@ def install_mcp(item: Item, level: str) -> str:
     return f"added mcp {name} (scope: {scope})"
 
 
+# ---------------------- hook injection ----------------------
+
+def _hook_files(item: Item) -> tuple[Path, Path] | None:
+    """Return (hook.json, hook.py) paths if both exist next to the resource."""
+    if item.kind == "agents":
+        base = item.src.parent
+        json_path = base / f"{item.name}.hook.json"
+        py_path = base / f"{item.name}.hook.py"
+    else:
+        base = item.src.parent  # SKILL.md / plugin.json / mcp.json parent
+        json_path = base / "hook.json"
+        py_path = base / "hook.py"
+    if json_path.exists() and py_path.exists():
+        return json_path, py_path
+    return None
+
+
+def _settings_path(level: str) -> Path:
+    if level == "user":
+        return Path.home() / ".claude" / "settings.json"
+    return Path.cwd() / ".claude" / "settings.json"
+
+
+def _hook_symlink_dest(level: str, item: Item) -> Path:
+    if level == "user":
+        base = Path.home() / ".claude" / "hooks"
+    else:
+        base = Path.cwd() / ".claude" / "hooks"
+    return base / f"{item.kind}-{item.name}.py"
+
+
+def inject_hook(item: Item, level: str) -> str | None:
+    """Install hook: symlink script to .claude/hooks/, merge into settings.json.
+
+    Idempotent — re-install replaces the entry keyed by command path.
+    """
+    files = _hook_files(item)
+    if files is None:
+        return None
+    json_path, py_path = files
+
+    try:
+        hook_meta = json.loads(json_path.read_text())
+    except json.JSONDecodeError as e:
+        return f"hook skipped (invalid hook.json: {e})"
+
+    event = hook_meta.get("event", "PreToolUse")
+    matcher = hook_meta.get("matcher", "Edit|Write")
+    timeout = int(hook_meta.get("timeout", 2000))
+
+    # Symlink hook script
+    dest = _hook_symlink_dest(level, item)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    if dest.is_symlink() or dest.exists():
+        dest.unlink()
+    os.symlink(py_path, dest)
+
+    # Merge into settings.json
+    settings_file = _settings_path(level)
+    settings_file.parent.mkdir(parents=True, exist_ok=True)
+    if settings_file.exists():
+        try:
+            settings = json.loads(settings_file.read_text())
+        except json.JSONDecodeError:
+            settings = {}
+    else:
+        settings = {}
+
+    settings.setdefault("hooks", {})
+    event_blocks = settings["hooks"].setdefault(event, [])
+
+    # Find or create a block with the matching matcher
+    target_block = None
+    for block in event_blocks:
+        if block.get("matcher") == matcher:
+            target_block = block
+            break
+    if target_block is None:
+        target_block = {"matcher": matcher, "hooks": []}
+        event_blocks.append(target_block)
+
+    target_block.setdefault("hooks", [])
+    # Dedup by command path
+    cmd_str = str(dest)
+    target_block["hooks"] = [h for h in target_block["hooks"] if h.get("command") != cmd_str]
+    target_block["hooks"].append({
+        "type": "command",
+        "command": cmd_str,
+        "timeout": timeout,
+    })
+
+    settings_file.write_text(json.dumps(settings, indent=2) + "\n")
+    return f"hook installed → {dest}, registered in {settings_file}"
+
+
+def remove_hook(item: Item, level: str) -> str | None:
+    """Remove hook entry from settings.json + delete symlink. Idempotent."""
+    dest = _hook_symlink_dest(level, item)
+    settings_file = _settings_path(level)
+
+    removed_any = False
+
+    if settings_file.exists():
+        try:
+            settings = json.loads(settings_file.read_text())
+        except json.JSONDecodeError:
+            settings = {}
+        cmd_str = str(dest)
+        for event_blocks in settings.get("hooks", {}).values():
+            for block in event_blocks:
+                before = len(block.get("hooks", []))
+                block["hooks"] = [h for h in block.get("hooks", []) if h.get("command") != cmd_str]
+                if before != len(block.get("hooks", [])):
+                    removed_any = True
+            # Drop empty blocks
+        for ev, blocks in list(settings.get("hooks", {}).items()):
+            settings["hooks"][ev] = [b for b in blocks if b.get("hooks")]
+            if not settings["hooks"][ev]:
+                del settings["hooks"][ev]
+        if not settings.get("hooks"):
+            settings.pop("hooks", None)
+        settings_file.write_text(json.dumps(settings, indent=2) + "\n")
+
+    if dest.is_symlink() or dest.exists():
+        dest.unlink()
+        removed_any = True
+
+    return "hook removed" if removed_any else None
+
+
+# ---------------------- CLAUDE.md injection ----------------------
+
+def _claude_md_snippet_path(item: Item) -> Path | None:
+    """Optional `claude_md.md` next to the resource (agents/skills/plugins/mcps).
+
+    For agents (single-file): same dir as the agent .md, named `<agent>.claude_md.md`.
+    For skills/plugins/mcps (dir-based): `claude_md.md` inside the dir.
+    """
+    if item.kind == "agents":
+        candidate = item.src.with_name(f"{item.name}.claude_md.md")
+    else:
+        candidate = item.src.parent / "claude_md.md"
+    return candidate if candidate.exists() else None
+
+
+def _claude_md_target(level: str) -> Path:
+    if level == "user":
+        return Path.home() / ".claude" / "CLAUDE.md"
+    return Path.cwd() / "CLAUDE.md"
+
+
+def _snippet_tags(item: Item) -> tuple[str, str]:
+    key = f"{item.kind}/{item.name}"
+    return (
+        f"<!-- claude-all:{key}:start -->",
+        f"<!-- claude-all:{key}:end -->",
+    )
+
+
+def inject_claude_md(item: Item, level: str) -> str | None:
+    """Inject the resource's claude_md.md snippet into the target CLAUDE.md.
+
+    Idempotent: re-install replaces the existing tagged block.
+    Returns a short status string, or None if no snippet exists.
+    """
+    snippet_path = _claude_md_snippet_path(item)
+    if snippet_path is None:
+        return None
+
+    target = _claude_md_target(level)
+    target.parent.mkdir(parents=True, exist_ok=True)
+
+    start_tag, end_tag = _snippet_tags(item)
+    snippet_body = snippet_path.read_text().rstrip()
+    block = f"\n{start_tag}\n{snippet_body}\n{end_tag}\n"
+
+    existing = target.read_text() if target.exists() else ""
+
+    if start_tag in existing and end_tag in existing:
+        before = existing.split(start_tag, 1)[0].rstrip()
+        after = existing.split(end_tag, 1)[1].lstrip("\n")
+        new_text = f"{before}\n{block}\n{after}".rstrip() + "\n"
+        action = "updated"
+    else:
+        # Append, ensuring single blank line separator
+        new_text = (existing.rstrip() + "\n" + block).lstrip("\n")
+        action = "appended"
+
+    target.write_text(new_text)
+    return f"CLAUDE.md {action} ({target})"
+
+
+def remove_claude_md(item: Item, level: str) -> str | None:
+    """Strip the resource's tagged block from the target CLAUDE.md."""
+    target = _claude_md_target(level)
+    if not target.exists():
+        return None
+    start_tag, end_tag = _snippet_tags(item)
+    text = target.read_text()
+    if start_tag not in text or end_tag not in text:
+        return None
+    before = text.split(start_tag, 1)[0].rstrip()
+    after = text.split(end_tag, 1)[1].lstrip("\n")
+    target.write_text((before + "\n" + after).rstrip() + "\n")
+    return f"CLAUDE.md stripped ({target})"
+
+
 def install_item(item: Item, target_root: Path) -> str:
+    level = "user" if target_root == USER_CLAUDE_DIR else "project"
+
     if item.kind == "plugins":
-        return install_plugin(item)
+        result = install_plugin(item)
+        md = inject_claude_md(item, level)
+        if md:
+            print(f"  ↳ {md}")
+        return result
 
     if item.kind == "mcps":
-        # target_root encodes level via its parent: USER_CLAUDE_DIR vs cwd/.claude
-        level = "user" if target_root == USER_CLAUDE_DIR else "project"
-        return install_mcp(item, level)
+        result = install_mcp(item, level)
+        md = inject_claude_md(item, level)
+        if md:
+            print(f"  ↳ {md}")
+        return result
 
     if item.kind == "agents":
         target_dir = target_root / "agents"
@@ -337,10 +552,6 @@ def install_item(item: Item, target_root: Path) -> str:
         target_dir = target_root / "skills"
         target_path = target_dir / item.name
         src = item.src.parent
-    elif item.kind == "mcps":
-        target_dir = target_root / "mcps"
-        target_path = target_dir / item.name
-        src = item.src
     else:
         return f"unknown kind: {item.kind}"
 
@@ -356,6 +567,14 @@ def install_item(item: Item, target_root: Path) -> str:
 
     os.symlink(src, target_path)
     record_install(item.kind, item.name, target_path)
+
+    md = inject_claude_md(item, level)
+    if md:
+        print(f"  ↳ {md}")
+    hk = inject_hook(item, level)
+    if hk:
+        print(f"  ↳ {hk}")
+
     return f"{'replaced' if replaced else 'linked'} {item.kind}/{item.name}"
 
 
@@ -432,7 +651,22 @@ def update_item(kind: str, name: str, install_record: dict, all_items: list[Item
     os.symlink(src, target_path)
     # Refresh timestamp
     record_install(kind, name, target_path)
-    return f"  ✓ refreshed {kind}/{name} ({target_path})"
+
+    # Infer level from target path so claude_md + hook re-injection lands in the right scope
+    level = "user" if str(target_path).startswith(str(USER_CLAUDE_DIR)) else "project"
+
+    extras = []
+    md = inject_claude_md(match, level)
+    if md:
+        extras.append(md)
+    hk = inject_hook(match, level)
+    if hk:
+        extras.append(hk)
+
+    msg = f"  ✓ refreshed {kind}/{name} ({target_path})"
+    for e in extras:
+        msg += f"\n    ↳ {e}"
+    return msg
 
 
 def run_update_all() -> None:
