@@ -1,0 +1,8 @@
+{
+  "name": "caveman",
+  "github": "https://github.com/JuliusBrussee/caveman",
+  "type": "claude-marketplace",
+  "marketplace": "JuliusBrussee/caveman",
+  "plugin": "caveman@caveman",
+  "description": "Ultra-compressed communication mode. Cuts token usage from Claude responses."
+}

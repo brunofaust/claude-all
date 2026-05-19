@@ -1,0 +1,13 @@
+{
+  "name": "context7",
+  "github": "https://github.com/upstash/context7",
+  "package": "@upstash/context7-mcp",
+  "command": "npx",
+  "args": ["-y", "@upstash/context7-mcp"],
+  "env": {
+    "CONTEXT7_API_KEY": "keychain:CONTEXT7_API_KEY"
+  },
+  "transport": "stdio",
+  "description": "Context7 MCP — up-to-date library docs fetched on demand. Resolves library IDs and returns current API/usage snippets. Requires CONTEXT7_API_KEY.",
+  "post_install_message": "Store the API key in macOS keychain BEFORE install (or re-install after):\n  security add-generic-password -a \"$USER\" -s \"CONTEXT7_API_KEY\" -w \"ctx7sk-XXXXXX\"\nInstaller reads it via:\n  security find-generic-password -a \"$USER\" -s \"CONTEXT7_API_KEY\" -w"
+}
