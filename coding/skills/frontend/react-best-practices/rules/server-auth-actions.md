@@ -1,9 +1,6 @@
----
-title: Authenticate Server Actions Like API Routes
-impact: CRITICAL
-impactDescription: prevents unauthorized access to server mutations
-tags: server, server-actions, authentication, security, authorization
----
+______________________________________________________________________
+
+## title: Authenticate Server Actions Like API Routes impact: CRITICAL impactDescription: prevents unauthorized access to server mutations tags: server, server-actions, authentication, security, authorization
 
 ## Authenticate Server Actions Like API Routes
 
@@ -36,16 +33,16 @@ import { unauthorized } from '@/lib/errors'
 export async function deleteUser(userId: string) {
   // Always check auth inside the action
   const session = await verifySession()
-  
+
   if (!session) {
     throw unauthorized('Must be logged in')
   }
-  
+
   // Check authorization too
   if (session.user.role !== 'admin' && session.user.id !== userId) {
     throw unauthorized('Cannot delete other users')
   }
-  
+
   await db.user.delete({ where: { id: userId } })
   return { success: true }
 }
@@ -68,18 +65,18 @@ const updateProfileSchema = z.object({
 export async function updateProfile(data: unknown) {
   // Validate input first
   const validated = updateProfileSchema.parse(data)
-  
+
   // Then authenticate
   const session = await verifySession()
   if (!session) {
     throw new Error('Unauthorized')
   }
-  
+
   // Then authorize
   if (session.user.id !== validated.userId) {
     throw new Error('Can only update own profile')
   }
-  
+
   // Finally perform the mutation
   await db.user.update({
     where: { id: validated.userId },
@@ -88,7 +85,7 @@ export async function updateProfile(data: unknown) {
       email: validated.email
     }
   })
-  
+
   return { success: true }
 }
 ```

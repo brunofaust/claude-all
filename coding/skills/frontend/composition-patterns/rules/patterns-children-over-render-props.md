@@ -1,9 +1,6 @@
----
-title: Prefer Composing Children Over Render Props
-impact: MEDIUM
-impactDescription: cleaner composition, better readability
-tags: composition, children, render-props
----
+______________________________________________________________________
+
+## title: Prefer Composing Children Over Render Props impact: MEDIUM impactDescription: cleaner composition, better readability tags: composition, children, render-props
 
 ## Prefer Children Over Render Props
 

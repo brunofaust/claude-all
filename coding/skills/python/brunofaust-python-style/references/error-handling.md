@@ -13,8 +13,10 @@
 class MetadataNotDefined(Warning):
     """Warning raised when metadata is not defined for an operation."""
 
+
 class DataError(Exception):
     """Exception raised when there is an error with data processing."""
+
 
 class NoItemsToProcess(Warning):
     """Warning raised when no items are found to process."""
@@ -158,13 +160,13 @@ def upload_file(path: str) -> str:
 
 #### Common Rationalizations Against `suppress()`
 
-| Excuse | Reality | Counter |
-|--------|---------|---------|
-| "suppress() is too implicit/magic" | `suppress(FileNotFoundError)` explicitly says "ignore this." Try/except + `pass` requires a comment to infer intent. `suppress()` is MORE explicit. | Grep for `suppress(FileNotFoundError)` across the codebase. Compare to grepping for `pass`. |
-| "I prefer try/except so readers see what's happening" | Readers must infer from a comment that the exception is intentional. Code intent is locked in at the call site with `suppress()`. | Ask: "Does try/except + `pass` communicate intent better than `with suppress(FileNotFoundError):`?" The answer is no. |
-| "What if more statements get added to this block?" | Then you should use try/except. But TODAY'S code should be written for TODAY'S scope, not hypothetical future code. | Refactor when scope changes. Don't pre-emptively use try/except for code that might change. Overfitting to unknown futures creates worse code. |
-| "My team doesn't know suppress()" | True for the first three uses. False by the fourth. Training takes 2 minutes. | Use it consistently; document in code review that `suppress()` is the standard for single-statement expected exceptions. |
-| "suppress() doesn't support logging/side effects" | Correct — that's why try/except exists. If you need logging, use try/except. | Ask: "Do we need to log this exception?" If yes, try/except. If no, suppress(). |
+| Excuse                                                | Reality                                                                                                                                             | Counter                                                                                                                                        |
+| ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| "suppress() is too implicit/magic"                    | `suppress(FileNotFoundError)` explicitly says "ignore this." Try/except + `pass` requires a comment to infer intent. `suppress()` is MORE explicit. | Grep for `suppress(FileNotFoundError)` across the codebase. Compare to grepping for `pass`.                                                    |
+| "I prefer try/except so readers see what's happening" | Readers must infer from a comment that the exception is intentional. Code intent is locked in at the call site with `suppress()`.                   | Ask: "Does try/except + `pass` communicate intent better than `with suppress(FileNotFoundError):`?" The answer is no.                          |
+| "What if more statements get added to this block?"    | Then you should use try/except. But TODAY'S code should be written for TODAY'S scope, not hypothetical future code.                                 | Refactor when scope changes. Don't pre-emptively use try/except for code that might change. Overfitting to unknown futures creates worse code. |
+| "My team doesn't know suppress()"                     | True for the first three uses. False by the fourth. Training takes 2 minutes.                                                                       | Use it consistently; document in code review that `suppress()` is the standard for single-statement expected exceptions.                       |
+| "suppress() doesn't support logging/side effects"     | Correct — that's why try/except exists. If you need logging, use try/except.                                                                        | Ask: "Do we need to log this exception?" If yes, try/except. If no, suppress().                                                                |
 
 #### Logging Format
 
@@ -190,7 +192,9 @@ import structlog
 logger = structlog.get_logger()
 
 # Structured — each field is a searchable key-value pair
-logger.info("file_processed", file_name="orders.parquet", row_count=1500, duration_ms=230)
+logger.info(
+    "file_processed", file_name="orders.parquet", row_count=1500, duration_ms=230
+)
 logger.warning("retry_triggered", operation="put_item", attempt=3, error="throttled")
 logger.error("pipeline_failed", entity="users", stage="transform", error=str(e))
 
@@ -208,7 +212,7 @@ structlog.configure(
         structlog.contextvars.merge_contextvars,
         structlog.processors.add_log_level,
         structlog.processors.TimeStamper(fmt="iso"),
-        structlog.dev.ConsoleRenderer()  # Switch to JSONRenderer() in prod
+        structlog.dev.ConsoleRenderer(),  # Switch to JSONRenderer() in prod
     ],
 )
 ```
@@ -220,13 +224,80 @@ and inject structlog in production, a null logger in tests.
 
 Use Python's built-in exception types appropriately.
 
-| Failure Type | Exception | Example |
-|--------------|-----------|---------|
-| Invalid input | `ValueError` | Bad parameter values |
-| Wrong type | `TypeError` | Expected string, got int |
-| Missing item | `KeyError` | Dict key not found |
-| Operational failure | `RuntimeError` | Service unavailable |
-| Timeout | `TimeoutError` | Operation took too long |
-| File not found | `FileNotFoundError` | Path doesn't exist |
-| Permission denied | `PermissionError` | Access forbidden |
+| Failure Type        | Exception           | Example                  |
+| ------------------- | ------------------- | ------------------------ |
+| Invalid input       | `ValueError`        | Bad parameter values     |
+| Wrong type          | `TypeError`         | Expected string, got int |
+| Missing item        | `KeyError`          | Dict key not found       |
+| Operational failure | `RuntimeError`      | Service unavailable      |
+| Timeout             | `TimeoutError`      | Operation took too long  |
+| File not found      | `FileNotFoundError` | Path doesn't exist       |
+| Permission denied   | `PermissionError`   | Access forbidden         |
 
+## Error Handling Discipline — no silent swallow
+
+**Rule:** No silent exceptions. No `log.debug` inside `except`. Every caught exception must either be re-raised with context or logged at `warning`/`error` with structured context.
+
+### Anti-patterns
+
+```python
+# BAD: bare except, no context
+try:
+    process(x)
+except Exception:
+    pass
+
+# BAD: debug-level swallowing
+try:
+    fetch_related(ticket)
+except Exception as e:
+    log.debug("failed to fetch related", error=str(e))  # vanishes in prod
+
+# BAD: catching too broad
+try:
+    parse_json(s)
+except Exception:
+    return None
+```
+
+### Correct patterns
+
+```python
+# GOOD: specific exception, structured log, re-raise or convert
+try:
+    parse_json(s)
+except json.JSONDecodeError as e:
+    log.warning("invalid json payload", payload_len=len(s), error=str(e))
+    raise InvalidPayloadError(f"could not parse: {e}") from e
+
+# GOOD: external API error, downgrade to None with explicit warning
+try:
+    parent = await jira.get_issue(parent_key)
+except JiraNotFoundError:
+    log.warning("parent ticket missing", parent_key=parent_key)
+    parent = None
+except JiraRateLimitError:
+    raise  # propagate for retry
+
+# GOOD: defensive catch with explicit reason and metric
+try:
+    enrich_with_ai_summary(ticket)
+except AnthropicAPIError as e:
+    log.error("ai_summary_failed", ticket_key=ticket.key, error=str(e))
+    metrics.increment("ai_summary.failure")
+    # continue without summary — degraded mode is intentional
+```
+
+### Rules
+
+1. Never `except Exception: pass`.
+1. Never `log.debug` inside `except`. Use `warning` minimum.
+1. Catch the narrowest exception class possible.
+1. Include structured context (ids, keys, etc.) in every log.
+1. Use `raise ... from e` when converting exceptions.
+1. Document degraded modes in code comments when intentionally swallowing.
+
+### Enforcement
+
+- Ruff: `BLE001`, `TRY002`, `TRY003`, `TRY004`, `TRY200`, `TRY201`, `B904`.
+- `skill_enforcer.py` rule `no_debug_in_except` — bans `log.debug` inside `except` blocks. See `references/enforcement.md`.

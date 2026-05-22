@@ -1,22 +1,52 @@
 #!/usr/bin/env python3
 """Reminder hook for seo skill — fires when SEO-relevant content is being written."""
+
 from __future__ import annotations
 
 import json
 import sys
 
 # File types where SEO-meaningful edits live
-WEB_EXTS = (".html", ".htm", ".tsx", ".jsx", ".astro", ".vue", ".svelte", ".md", ".mdx", ".xml", ".txt")
+WEB_EXTS = (
+    ".html",
+    ".htm",
+    ".tsx",
+    ".jsx",
+    ".astro",
+    ".vue",
+    ".svelte",
+    ".md",
+    ".mdx",
+    ".xml",
+    ".txt",
+)
 
 SEO_MARKERS = (
-    "<title", "</title", "<meta name=\"description\"", "<meta name='description'",
-    "<meta property=\"og:", "<meta property='og:", "<meta name=\"twitter:",
-    "<link rel=\"canonical\"", "<link rel='canonical'",
-    "application/ld+json", "@context", "schema.org",
-    "hreflang", "robots.txt", "sitemap.xml", "llms.txt",
-    "Article", "BreadcrumbList", "Organization", "FAQPage", "HowTo", "Product",
+    "<title",
+    "</title",
+    '<meta name="description"',
+    "<meta name='description'",
+    '<meta property="og:',
+    "<meta property='og:",
+    '<meta name="twitter:',
+    '<link rel="canonical"',
+    "<link rel='canonical'",
+    "application/ld+json",
+    "@context",
+    "schema.org",
+    "hreflang",
+    "robots.txt",
+    "sitemap.xml",
+    "llms.txt",
+    "Article",
+    "BreadcrumbList",
+    "Organization",
+    "FAQPage",
+    "HowTo",
+    "Product",
     # Next.js metadata API
-    "export const metadata", "generateMetadata",
+    "export const metadata",
+    "generateMetadata",
 )
 
 
@@ -40,8 +70,20 @@ def main() -> int:
         if not any(m in new_string for m in SEO_MARKERS):
             return 0
 
+    import os
+    import tempfile
+
+    session_id = data.get("session_id") or "no-session"
+    flag = os.path.join(tempfile.gettempdir(), f"claude-all-seo-{session_id}.flag")
+    if os.path.exists(flag):
+        return 0
+    try:
+        open(flag, "w").write(file_path)
+    except OSError:
+        pass
+
     print(
-        "Reminder (seo): "
+        "Reminder (seo, first SEO-touching edit this session): "
         "title 50-60 chars; meta description 150-160; one <h1>; canonical on every indexable page; "
         "JSON-LD (Article/BreadcrumbList/Organization/Product) — SKIP deprecated HowTo and non-authority FAQPage; "
         "Core Web Vitals: LCP ≤ 2.5s, INP ≤ 200ms (not FID), CLS ≤ 0.1; "

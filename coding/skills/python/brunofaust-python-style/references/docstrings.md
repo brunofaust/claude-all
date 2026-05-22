@@ -52,8 +52,7 @@ async def get_entity_metadata(
 - `Raises:` — every exception the caller should be aware of
 - `Examples:` — include for complex or non-obvious functions
 - For simple one-line getters, a one-line docstring is fine:
-  ```python
-  async def is_loaded(self) -> bool:
-      """Check whether the client has been loaded."""
-  ```
-
+    ```python
+    async def is_loaded(self) -> bool:
+        """Check whether the client has been loaded."""
+    ```

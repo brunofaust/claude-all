@@ -1,9 +1,6 @@
----
-title: Hoist RegExp Creation
-impact: LOW-MEDIUM
-impactDescription: avoids recreation
-tags: javascript, regexp, optimization, memoization
----
+______________________________________________________________________
+
+## title: Hoist RegExp Creation impact: LOW-MEDIUM impactDescription: avoids recreation tags: javascript, regexp, optimization, memoization
 
 ## Hoist RegExp Creation
 

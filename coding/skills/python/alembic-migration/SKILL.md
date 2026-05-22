@@ -1,15 +1,6 @@
----
-name: alembic-migration
-description: >
-  Generate Alembic migrations following busydone patterns — naming, backfill
-  safety, merge resolution, ENUM handling, asyncpg query syntax.
-  Use when: creating a new alembic revision, adding/dropping/renaming columns,
-  adding/altering ENUM types, backfilling data, merging divergent branches,
-  resolving migration drift, running `alembic upgrade/downgrade`, debugging
-  failed migrations, reviewing migration PRs.
-disable-model-invocation: false
-user-invocable: true
----
+______________________________________________________________________
+
+## name: alembic-migration description: > Generate Alembic migrations following busydone patterns — naming, backfill safety, merge resolution, ENUM handling, asyncpg query syntax. Use when: creating a new alembic revision, adding/dropping/renaming columns, adding/altering ENUM types, backfilling data, merging divergent branches, resolving migration drift, running `alembic upgrade/downgrade`, debugging failed migrations, reviewing migration PRs. disable-model-invocation: false user-invocable: true
 
 # Alembic Migration Skill (busydone)
 
@@ -38,7 +29,7 @@ Format: `{number}_{snake_case_description}.py` where:
 - `{number}` = next int after current max (e.g. `134_add_status_column.py`)
 - `{snake_case_description}` is short, verb-first, no article
 - The `revision = "..."` identifier inside the file is alembic's auto-generated
-  hash — do NOT change it. The filename number is for humans only.
+    hash — do NOT change it. The filename number is for humans only.
 
 ```python
 """Add status column to orders.
@@ -70,6 +61,7 @@ def upgrade() -> None:
             server_default="pending",
         ),
     )
+
 
 # 135_drop_status_default.py — runs AFTER deploy + backfill verification
 def upgrade() -> None:
@@ -193,12 +185,12 @@ Inline backfill is OK for small tables (< 1M rows, < 30s). For anything
 larger:
 
 1. Add the column with `server_default` (sets all existing rows fast)
-2. Deploy
-3. Run a separate background job (script, dbt model, lambda) to compute
-   the real values
-4. In a follow-up migration, drop the `server_default`
+1. Deploy
+1. Run a separate background job (script, dbt model, lambda) to compute
+    the real values
+1. In a follow-up migration, drop the `server_default`
 
-Don't do million-row UPDATEs inside `upgrade()` — they hold transaction-level
+Don't do million-row UPDATEEs inside `upgrade()` — they hold transaction-level
 locks and block writes.
 
 ## Preview before applying
@@ -208,9 +200,10 @@ uv run alembic upgrade head --sql > /tmp/migration.sql
 ```
 
 Read it. Confirm:
+
 - No surprise `DROP` statements
 - Index creation uses `CONCURRENTLY` for big tables (raw SQL — alembic can't
-  do this via op functions)
+    do this via op functions)
 - No `ALTER TABLE ... USING` casts on huge tables (full rewrite)
 
 ## Validation
@@ -238,18 +231,127 @@ Backfill: existing rows get 'pending'. Follow-up 135 drops default.
 Reference the migration number in the subject. Body explains backfill +
 follow-up plan if applicable.
 
+## ENUM ALTER inside autocommit block
+
+**Common foot-gun.** `ALTER TYPE ... ADD VALUE` is **not transactional** in
+PostgreSQL — it cannot run inside the implicit transaction Alembic wraps each
+migration in. Running it normally will fail with:
+
+```
+ERROR: ALTER TYPE ... ADD cannot run inside a transaction block
+```
+
+Use `op.get_context().autocommit_block()` to escape the outer transaction:
+
+```python
+from alembic import op
+
+
+def upgrade() -> None:
+    with op.get_context().autocommit_block():
+        op.execute("ALTER TYPE order_status ADD VALUE IF NOT EXISTS 'refunded'")
+        op.execute("ALTER TYPE order_status ADD VALUE IF NOT EXISTS 'disputed'")
+```
+
+Notes:
+
+- `IF NOT EXISTS` makes the statement re-runnable (safe on partially-applied
+    migrations).
+- Works with asyncpg-driven Alembic (busydone setup) — the autocommit block
+    uses a separate connection state, no special async handling needed.
+- Don't mix DDL + data migration in the same autocommit block — if the data
+    step fails, the ENUM value is already committed and can't be rolled back.
+    Split into two migrations: one for the ENUM additions (autocommit), one for
+    data using the new value (normal transaction).
+
+## Zero-downtime column rename (expand-contract)
+
+`op.alter_column(... new_column_name=...)` takes an `ACCESS EXCLUSIVE` lock and
+rewrites the column metadata — on a hot table it blocks every reader and
+writer until done. **Never do it directly in production.**
+
+Use the 5-step expand-contract pattern, split across at least two migrations
+and one app deploy:
+
+1. **Add new column** (nullable, or with `server_default`) — fast metadata-only
+    op.
+1. **Dual-write** — application writes BOTH old + new columns. Deploy.
+1. **Backfill** old → new in batches via a background job (NOT inline in the
+    migration — see "Backfill of existing data" above).
+1. **Switch reads** to the new column. Deploy.
+1. **Drop old column** in a separate migration once you're confident nothing
+    reads it.
+
+Concrete example — renaming `orders.user_id` → `orders.customer_id`:
+
+```python
+# 140_add_customer_id_to_orders.py
+def upgrade() -> None:
+    op.add_column(
+        "orders",
+        sa.Column("customer_id", sa.BigInteger(), nullable=True),
+    )
+    op.create_index("ix_orders_customer_id", "orders", ["customer_id"], unique=False)
+
+
+def downgrade() -> None:
+    op.drop_index("ix_orders_customer_id", table_name="orders")
+    op.drop_column("orders", "customer_id")
+```
+
+```python
+# 145_drop_orders_user_id.py — runs AFTER app fully migrated to customer_id
+def upgrade() -> None:
+    op.drop_column("orders", "user_id")
+
+
+def downgrade() -> None:
+    op.add_column(
+        "orders",
+        sa.Column("user_id", sa.BigInteger(), nullable=True),
+    )
+    # NOTE: backfill from customer_id is the app's responsibility on rollback.
+```
+
+Between migrations 140 and 145: deploy app version that dual-writes, run
+backfill, deploy app version that reads `customer_id`, verify, THEN apply 145.
+
+## `alembic stamp` — recovery only
+
+When prod history diverges from migration files (manual hotfix applied
+directly to DB, restored from a snapshot, etc.), `alembic stamp` marks the
+database at a specific revision **without running any migration code**:
+
+```bash
+uv run alembic stamp <revision_hash>      # mark DB at this revision
+uv run alembic stamp head                 # mark DB as up-to-date
+```
+
+**Recovery-only.** Stamping skips the actual schema change — the DB and the
+migration history are now claimed to match, whether they do or not. Verify
+schema manually before stamping:
+
+```bash
+uv run alembic upgrade head --sql > /tmp/expected.sql
+# compare against current DB structure
+```
+
+NEVER use `stamp` to "fix" a failed migration on a normal flow — debug the
+migration, downgrade properly, retry. Stamp is for genuine drift recovery
+(post-restore, post-manual-hotfix) only.
+
 ## Anti-patterns
 
-| Anti-pattern | Why | Use instead |
-|---|---|---|
-| `op.add_column(..., nullable=False)` without `server_default` | Fails on existing data | Add `server_default`, drop in follow-up |
-| `IN :param` with asyncpg | Doesn't work | `= ANY(:param)` with list |
-| Add + drop column in one migration | Lock contention | Two migrations |
-| `ALTER TYPE ... ADD VALUE` inline with data migration | Non-transactional, can deadlock | New type → migrate → drop old |
-| `op.batch_alter_table()` | SQLite compat — irrelevant | Plain op functions |
-| Inline million-row UPDATE | Holds locks, blocks writes | Background job + follow-up migration |
-| Empty `downgrade()` left as autogen `pass` | Silently irreversible | Explicit reverse, or `raise NotImplementedError` |
-| Rewriting alembic history (squash old migrations) | Breaks staging/prod alignment | Leave history alone; refactor models, not history |
+| Anti-pattern                                                  | Why                             | Use instead                                       |
+| ------------------------------------------------------------- | ------------------------------- | ------------------------------------------------- |
+| `op.add_column(..., nullable=False)` without `server_default` | Fails on existing data          | Add `server_default`, drop in follow-up           |
+| `IN :param` with asyncpg                                      | Doesn't work                    | `= ANY(:param)` with list                         |
+| Add + drop column in one migration                            | Lock contention                 | Two migrations                                    |
+| `ALTER TYPE ... ADD VALUE` inline with data migration         | Non-transactional, can deadlock | New type → migrate → drop old                     |
+| `op.batch_alter_table()`                                      | SQLite compat — irrelevant      | Plain op functions                                |
+| Inline million-row UPDATE                                     | Holds locks, blocks writes      | Background job + follow-up migration              |
+| Empty `downgrade()` left as autogen `pass`                    | Silently irreversible           | Explicit reverse, or `raise NotImplementedError`  |
+| Rewriting alembic history (squash old migrations)             | Breaks staging/prod alignment   | Leave history alone; refactor models, not history |
 
 ## Reference migrations
 
