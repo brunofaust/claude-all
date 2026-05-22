@@ -1,6 +1,26 @@
 ---
 name: seo-runner
-description: Use this agent FIRST whenever the user wants an SEO / GEO / AEO audit of a live URL — running the actual checks (PageSpeed Insights, Mozilla Observatory, W3C validator, robots.txt / sitemap / llms.txt fetch, on-page meta extraction, structured-data parse, AI-bot policy analysis, security headers). The main session must NOT run these curl pipelines directly — outputs are JSON blobs hundreds of lines each and burn Sonnet/Opus tokens. Delegate every "audit example.com", "SEO check on <url>", "is my site SEO-clean", "core web vitals for <url>", "lighthouse <url>", "check structured data on <url>", "what's blocking my AI citations" request to this agent. Explicit trigger phrases (match any) "audit seo", "seo audit", "seo check", "audit my site", "check seo for", "lighthouse audit", "core web vitals", "pagespeed insights", "psi for", "mozilla observatory", "security headers", "w3c validate", "html valid", "structured data check", "json-ld check", "schema check", "robots.txt check", "sitemap check", "llms.txt", "ai bot policy", "gptbot blocked", "claudebot allowed", "rich results", "seo for <url>", "audit <domain>", "scan <domain>". The agent runs three core curl-based checks (PSI, Mozilla Observatory, W3C nu validator), plus an on-page meta scrape via Python regex on the raw HTML, plus robots.txt / sitemap.xml / llms.txt fetches, then synthesizes a severity-scored audit (BLOCK / HIGH / MEDIUM / GOOD) with concrete actionable fixes. NEVER modifies the target site, NEVER hits paid APIs without confirmation. Read-only audit only. If PSI rate-limits (429), reports that and continues with the other checks. Pairs with the `seo` skill for the rule knowledge — this agent is the EXECUTOR. Do NOT use for: writing meta tags / fixing the issues (Sonnet does that after the audit), competitive research (paid tools like Ahrefs/SEMrush), or local-file static analysis (use Grep on the file).
+description: >-
+  Use this agent FIRST whenever the user wants an SEO / GEO / AEO audit of a live URL — running the
+  actual checks (PageSpeed Insights, Mozilla Observatory, W3C validator, robots.txt / sitemap /
+  llms.txt fetch, on-page meta extraction, structured-data parse, AI-bot policy analysis, security
+  headers). The main session must NOT run these curl pipelines directly — outputs are JSON blobs
+  hundreds of lines each and burn Sonnet/Opus tokens. Delegate every "audit example.com", "SEO check
+  on <url>", "is my site SEO-clean", "core web vitals for <url>", "lighthouse <url>", "check
+  structured data on <url>", "what's blocking my AI citations" request to this agent. Explicit
+  trigger phrases (match any) "audit seo", "seo audit", "seo check", "audit my site", "check seo
+  for", "lighthouse audit", "core web vitals", "pagespeed insights", "psi for", "mozilla
+  observatory", "security headers", "w3c validate", "html valid", "structured data check", "json-ld
+  check", "schema check", "robots.txt check", "sitemap check", "llms.txt", "ai bot policy", "gptbot
+  blocked", "claudebot allowed", "rich results", "seo for <url>", "audit <domain>", "scan <domain>".
+  The agent runs three core curl-based checks (PSI, Mozilla Observatory, W3C nu validator), plus an
+  on-page meta scrape via Python regex on the raw HTML, plus robots.txt / sitemap.xml / llms.txt
+  fetches, then synthesizes a severity-scored audit (BLOCK / HIGH / MEDIUM / GOOD) with concrete
+  actionable fixes. NEVER modifies the target site, NEVER hits paid APIs without confirmation.
+  Read-only audit only. If PSI rate-limits (429), reports that and continues with the other checks.
+  Pairs with the `seo` skill for the rule knowledge — this agent is the EXECUTOR. Do NOT use for:
+  writing meta tags / fixing the issues (Sonnet does that after the audit), competitive research
+  (paid tools like Ahrefs/SEMrush), or local-file static analysis (use Grep on the file).
 model: claude-haiku-4-5
 tools: Bash, Read
 ---
@@ -146,6 +166,61 @@ for i, b in enumerate(ld_blocks):
         print(f'  ld[{i}] @type: {types or \"❌ NO @type\"}')
     except Exception as e:
         print(f'  ld[{i}] parse err: {e}')
+"
+```
+
+### 4b. Redirect-chain check
+
+After the on-page meta scrape, follow redirects from `$URL` and report:
+
+```bash
+curl -sL -o /dev/null -w "%{url_effective}\n%{http_code}\n%{num_redirects}\n%{redirect_url}\n" "$URL"
+```
+
+Output:
+```
+**Redirect chain:** 3 hops (2 too many)
+- http://busydone.com → 301 → https://busydone.com
+- https://busydone.com → 301 → https://www.busydone.com
+- https://www.busydone.com → 200
+🟠 HIGH: 2 hops collapse — link directly to https://www.busydone.com to drop a request.
+```
+
+### 4c. Canonical-mismatch on final URL
+
+Compare the meta-canonical to the final URL after redirects:
+
+```
+**Canonical match:** ✗ MISMATCH
+- canonical tag: https://www.busydone.com/
+- final URL:     https://www.busydone.com/?utm_source=email
+🟠 HIGH: canonical doesn't match final URL after query params — strip UTM in canonical.
+```
+
+### 4d. AEO citability probe
+
+Count words in the first paragraph after the H1, and check if any H2 is question-phrased:
+
+```bash
+curl -sL "$URL" | python3 -c "
+import sys, re
+h = sys.stdin.read()
+# First <p> after first <h1>
+m = re.search(r'<h1[^>]*>.*?</h1>(.*?)<h2', h, re.S|re.I)
+if m:
+    first_p = re.sub(r'<[^>]+>', '', m.group(1))
+    words = len(first_p.split())
+    print(f'First paragraph: {words} words')
+    if words < 30:
+        print('🟠 HIGH: AEO — first paragraph too short for snippet eligibility (target 40-60 words)')
+    if words > 80:
+        print('🟡 MEDIUM: AEO — first paragraph too long for snippet (target 40-60 words)')
+# Q-style H2s
+h2s = re.findall(r'<h2[^>]*>(.*?)</h2>', h, re.S|re.I)
+q_count = sum(1 for h2 in h2s if re.match(r'^\s*(what|how|why|when|where|who|is|are|do|does|can|will)\b', re.sub(r'<[^>]+>', '', h2).strip(), re.I))
+print(f'H2 questions: {q_count} of {len(h2s)}')
+if q_count == 0 and len(h2s) > 2:
+    print('🟡 MEDIUM: AEO — no question-phrased H2 found, hurts featured-snippet eligibility')
 "
 ```
 

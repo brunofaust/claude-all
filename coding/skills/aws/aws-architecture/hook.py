@@ -41,8 +41,18 @@ def main() -> int:
     if not fires:
         return 0
 
+    import os, tempfile
+    session_id = data.get("session_id") or "no-session"
+    flag = os.path.join(tempfile.gettempdir(), f"claude-all-aws-arch-{session_id}.flag")
+    if os.path.exists(flag):
+        return 0
+    try:
+        open(flag, "w").write(file_path)
+    except OSError:
+        pass
+
     print(
-        "Reminder (aws-architecture): "
+        "Reminder (aws-architecture, first AWS-touching edit this session): "
         "Lambda idempotency on async invokes; SQS visibility ≥ 6× processing time + DLQ; "
         "SNS→SQS fanout, EventBridge for filter/replay/cross-account; "
         "DynamoDB high-cardinality partition keys, never Scan in hot paths; "

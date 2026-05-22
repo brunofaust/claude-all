@@ -1,6 +1,13 @@
 ---
 name: postgres-query
-description: Use this agent to run read-only SQL queries against a generic PostgreSQL database (local Docker, on-prem, Supabase, Neon, self-hosted, or any non-AWS Postgres). Triggers on "query postgres", "run this SELECT", "explain this query plan", "check table size in postgres", "what's in <table>", "local Postgres query". Read-only — only SELECT, EXPLAIN, SHOW, and pg_*/information_schema queries. NEVER runs INSERT/UPDATE/DELETE/DDL. For AWS RDS PostgreSQL specifically, use rds-postgres-query agent (handles IAM auth and RDS Proxy). Use THIS agent when the database is local, on Docker, Supabase, Neon, or any non-AWS host.
+description: >-
+  Use this agent to run read-only SQL queries against a generic PostgreSQL database (local Docker,
+  on-prem, Supabase, Neon, self-hosted, or any non-AWS Postgres). Triggers on "query postgres", "run
+  this SELECT", "explain this query plan", "check table size in postgres", "what's in <table>",
+  "local Postgres query". Read-only — only SELECT, EXPLAIN, SHOW, and pg_*/information_schema
+  queries. NEVER runs INSERT/UPDATE/DELETE/DDL. For AWS RDS PostgreSQL specifically, use
+  rds-postgres-query agent (handles IAM auth and RDS Proxy). Use THIS agent when the database is
+  local, on Docker, Supabase, Neon, or any non-AWS host.
 model: claude-haiku-4-5
 tools: Bash
 ---
@@ -60,6 +67,57 @@ If multiple matches, prefer `DATABASE_URL`.
 - Planning time: <ms> (if EXPLAIN)
 - Buffers: <if EXPLAIN ANALYZE>
 ```
+
+## EXPLAIN ANALYZE — flag Seq Scans on big tables
+
+When running `EXPLAIN ANALYZE`, prefer the JSON form so the plan can be parsed mechanically:
+
+```sql
+EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) <query>;
+```
+
+Then:
+
+1. Find every `Seq Scan` node in the plan tree.
+2. For each Seq Scan, fetch the table's estimated row count:
+   ```sql
+   SELECT reltuples::bigint AS rows
+     FROM pg_class
+    WHERE oid = '<schema>.<table>'::regclass;
+   ```
+3. Severity:
+   - 🔴 **BLOCK** if `rows > 100_000` — surface table name + estimated rows + recommended index based on the `Filter` / join columns.
+   - 🟡 **MEDIUM** if `10_000 <= rows <= 100_000`.
+   - ✓ otherwise (small table, Seq Scan is fine).
+
+Extraction recipe:
+
+```bash
+psql "$DSN" -c "EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) <query>" | jq '
+  .. | objects | select(.["Node Type"] == "Seq Scan")
+  | {table: .["Relation Name"], rows: .["Actual Rows"], filter: .["Filter"]}
+'
+```
+
+Output format:
+
+```
+**EXPLAIN ANALYZE** — 2 issues
+- 🔴 Seq Scan on `extracted_documents` (3.2M rows) — filter on `project_id`
+  Suggested: `CREATE INDEX CONCURRENTLY ix_extracted_documents_project_id ON extracted_documents(project_id);`
+- 🟡 Seq Scan on `users` (45K rows) — filter on `email`
+  Suggested: `CREATE INDEX CONCURRENTLY ix_users_email ON users(email);` (or UNIQUE if appropriate)
+```
+
+Index-suggestion heuristics:
+- Single equality predicate (`col = $1`) → btree on that column.
+- Range predicate (`col > $1`, `col BETWEEN ...`) → btree on that column.
+- Multi-column AND filter → composite btree, most selective column first.
+- `LIKE 'prefix%'` → btree with `text_pattern_ops`.
+- `ILIKE '%...%'` / full-text → suggest `pg_trgm` GIN index, not plain btree.
+- JOIN on FK column with no index on the FK side → btree on the FK column.
+
+Always prefix DDL suggestions with `CREATE INDEX CONCURRENTLY` (non-blocking) — never bare `CREATE INDEX`. NEVER execute the suggestion; this agent is read-only.
 
 ## Rules
 

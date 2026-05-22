@@ -230,3 +230,71 @@ Use Python's built-in exception types appropriately.
 | File not found | `FileNotFoundError` | Path doesn't exist |
 | Permission denied | `PermissionError` | Access forbidden |
 
+
+## Error Handling Discipline — no silent swallow
+
+**Rule:** No silent exceptions. No `log.debug` inside `except`. Every caught exception must either be re-raised with context or logged at `warning`/`error` with structured context.
+
+### Anti-patterns
+
+```python
+# BAD: bare except, no context
+try:
+    process(x)
+except Exception:
+    pass
+
+# BAD: debug-level swallowing
+try:
+    fetch_related(ticket)
+except Exception as e:
+    log.debug("failed to fetch related", error=str(e))  # vanishes in prod
+
+# BAD: catching too broad
+try:
+    parse_json(s)
+except Exception:
+    return None
+```
+
+### Correct patterns
+
+```python
+# GOOD: specific exception, structured log, re-raise or convert
+try:
+    parse_json(s)
+except json.JSONDecodeError as e:
+    log.warning("invalid json payload", payload_len=len(s), error=str(e))
+    raise InvalidPayloadError(f"could not parse: {e}") from e
+
+# GOOD: external API error, downgrade to None with explicit warning
+try:
+    parent = await jira.get_issue(parent_key)
+except JiraNotFoundError:
+    log.warning("parent ticket missing", parent_key=parent_key)
+    parent = None
+except JiraRateLimitError:
+    raise  # propagate for retry
+
+# GOOD: defensive catch with explicit reason and metric
+try:
+    enrich_with_ai_summary(ticket)
+except AnthropicAPIError as e:
+    log.error("ai_summary_failed", ticket_key=ticket.key, error=str(e))
+    metrics.increment("ai_summary.failure")
+    # continue without summary — degraded mode is intentional
+```
+
+### Rules
+
+1. Never `except Exception: pass`.
+2. Never `log.debug` inside `except`. Use `warning` minimum.
+3. Catch the narrowest exception class possible.
+4. Include structured context (ids, keys, etc.) in every log.
+5. Use `raise ... from e` when converting exceptions.
+6. Document degraded modes in code comments when intentionally swallowing.
+
+### Enforcement
+
+- Ruff: `BLE001`, `TRY002`, `TRY003`, `TRY004`, `TRY200`, `TRY201`, `B904`.
+- `skill_enforcer.py` rule `no_debug_in_except` — bans `log.debug` inside `except` blocks. See `references/enforcement.md`.
