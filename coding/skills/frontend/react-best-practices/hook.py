@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Reminder hook for vercel-react-best-practices skill. One reminder per session."""
+
 from __future__ import annotations
 
 import json
@@ -23,7 +24,9 @@ def main() -> int:
         return 0
 
     session_id = data.get("session_id") or "no-session"
-    flag = os.path.join(tempfile.gettempdir(), f"claude-all-react-best-{session_id}.flag")
+    flag = os.path.join(
+        tempfile.gettempdir(), f"claude-all-react-best-{session_id}.flag"
+    )
     if os.path.exists(flag):
         return 0
     try:

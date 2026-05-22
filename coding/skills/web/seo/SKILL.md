@@ -1,50 +1,41 @@
----
-name: seo
-description: >
-  SEO + GEO + AEO audit and optimization. Use when: writing or editing HTML
-  meta / titles / OpenGraph / structured data (JSON-LD), auditing a page for
-  search performance, improving Core Web Vitals, optimizing for generative
-  engines (ChatGPT / Perplexity / Gemini / Google AI Overviews), winning
-  featured snippets, designing programmatic-SEO pages, reviewing sitemaps /
-  robots / canonicals / hreflang, or troubleshooting why a page isn't ranking.
-  Covers classic search-engine SEO, GEO (Generative Engine Optimization), and
-  AEO (Answer Engine Optimization).
-disable-model-invocation: false
-user-invocable: true
----
+______________________________________________________________________
+
+## name: seo description: > SEO + GEO + AEO audit and optimization. Use when: writing or editing HTML meta / titles / OpenGraph / structured data (JSON-LD), auditing a page for search performance, improving Core Web Vitals, optimizing for generative engines (ChatGPT / Perplexity / Gemini / Google AI Overviews), winning featured snippets, designing programmatic-SEO pages, reviewing sitemaps / robots / canonicals / hreflang, or troubleshooting why a page isn't ranking. Covers classic search-engine SEO, GEO (Generative Engine Optimization), and AEO (Answer Engine Optimization). disable-model-invocation: false user-invocable: true
 
 # SEO + GEO + AEO Skill
 
 Three pillars — different objectives, different signals:
 
-| Pillar | Goal | Engines | Key signals |
-|---|---|---|---|
-| **SEO** | Rank on SERPs | Google, Bing | Titles, links, Core Web Vitals, canonicals |
-| **GEO** (Generative Engine Optimization) | Get *cited* by AI engines | Perplexity, ChatGPT Search, Gemini, Google AI Overviews | E-E-A-T, factual density, entity clarity, `llms.txt`, AI-bot access |
-| **AEO** (Answer Engine Optimization) | Win featured snippets, PAA, voice | Google snippets, Alexa, Siri | Question-headings, FAQPage / HowTo schema, direct ≤40-word answers |
+| Pillar                                   | Goal                              | Engines                                                 | Key signals                                                         |
+| ---------------------------------------- | --------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------------- |
+| **SEO**                                  | Rank on SETPs                     | Google, Bing                                            | Titles, links, Core Web Vitals, canonicals                          |
+| **GEO** (Generative Engine Optimization) | Get *cited* by AI engines         | Perplexity, ChatGPT Search, Gemini, Google AI Overviews | E-E-A-T, factual density, entity clarity, `llms.txt`, AI-bot access |
+| **AEO** (Answer Engine Optimization)     | Win featured snippets, PAA, voice | Google snippets, Alexa, Siri                            | Question-headings, FAQPage / HowTo schema, direct ≤40-word answers  |
 
 GEO engines **cite sources, they don't rank** — different optimization shape from classic SEO.
 
----
+______________________________________________________________________
 
 ## Skill Contract
 
 **Inputs:** a URL, a local file (HTML / TSX / JSX / Astro / MD), or a folder of pages.
 
 **Tools available:**
+
 - `WebFetch` for fetching live URLs + raw HTML
 - `Bash` for `curl -I`, `lighthouse` (if installed), reading sitemap/robots
 - `Read` / `Glob` / `Grep` for local files
 - Optional MCPs: `muningis/seo-check-mcp` (24 dedicated check tools — read-sitemap, validate-schema, analyze-meta, etc.), DataForSEO / Ahrefs / SEMrush (paid)
 
 **Output modes:**
+
 - **Quick audit** (default) — top issues sorted by severity, < 30 lines
 - **Full audit** — all categories below, grouped + actionable, ≤ 300 lines
 - **Specific category** — when user names one (e.g. "audit my structured data")
 
 **Handoff:** end the audit with a numbered prioritized fix list. If the fix needs design / copy / accessibility work, suggest the related skill (`web-design-guidelines` for a11y, `vercel-react-best-practices` for Next.js metadata API).
 
----
+______________________________________________________________________
 
 ## Severity scale
 
@@ -53,7 +44,7 @@ GEO engines **cite sources, they don't rank** — different optimization shape f
 - **🟡 MEDIUM** — best-practice gap (no OG image, no breadcrumb schema, thin internal linking)
 - **🔵 INFO** — improvement opportunity (no `llms.txt`, no FAQPage where it'd help)
 
----
+______________________________________________________________________
 
 ## 1. On-page SEO checks
 
@@ -91,7 +82,7 @@ GEO engines **cite sources, they don't rank** — different optimization shape f
 - Anchor text descriptive (`How to deploy Lambda` — not `click here`).
 - Orphaned pages (no incoming internal link) → fix or noindex.
 
----
+______________________________________________________________________
 
 ## 2. Structured data (JSON-LD)
 
@@ -116,23 +107,25 @@ Use **JSON-LD in `<head>`**, not Microdata / RDFa.
 - Run through Google's [Rich Results Test](https://search.google.com/test/rich-results) or `validator.schema.org`.
 - Use `@graph` for multiple types on one page. Cross-reference via `@id`.
 
----
+______________________________________________________________________
 
 ## 3. Core Web Vitals
 
 Current thresholds (June 2024+):
 
-| Metric | Good | Needs improvement | Poor |
-|---|---|---|---|
-| **LCP** (Largest Contentful Paint) | ≤ 2.5s | ≤ 4.0s | > 4.0s |
-| **INP** (Interaction to Next Paint) — **replaced FID March 2024** | ≤ 200ms | ≤ 500ms | > 500ms |
-| **CLS** (Cumulative Layout Shift) | ≤ 0.1 | ≤ 0.25 | > 0.25 |
+| Metric                                                            | Good    | Needs improvement | Poor    |
+| ----------------------------------------------------------------- | ------- | ----------------- | ------- |
+| **LCP** (Largest Contentful Paint)                                | ≤ 2.5s  | ≤ 4.0s            | > 4.0s  |
+| **INP** (Interaction to Next Paint) — **replaced FID March 2024** | ≤ 200ms | ≤ 500ms           | > 500ms |
+| **CLS** (Cumulative Layout Shift)                                 | ≤ 0.1   | ≤ 0.25            | > 0.25  |
 
 Supporting metrics (not ranking but useful):
+
 - **TTFB** ≤ 800ms
 - **FCP** ≤ 1.8s
 
 ### Common LCP fixes
+
 - Preload the LCP image (`<link rel="preload" as="image">`).
 - Modern formats: AVIF > WebP > JPEG.
 - `loading="eager"` on above-the-fold image; `loading="lazy"` everywhere else.
@@ -140,20 +133,23 @@ Supporting metrics (not ranking but useful):
 - Server-side render the LCP element (no client-side hydration delay).
 
 ### Common INP fixes
+
 - Break long tasks (> 50ms) with `scheduler.yield()` or `requestIdleCallback`.
 - Defer non-critical JS (`<script defer>` or `<script type="module">`).
 - Avoid synchronous third-party scripts (chat widgets, analytics) in the critical path.
 
 ### Common CLS fixes
+
 - Always set `width` + `height` on images and iframes.
 - Reserve space for ads / embeds.
 - Avoid injecting content above existing content (banners pushing down the page).
 
 ### Measurement
+
 - **Lab**: `npx lighthouse <url> --output=json --only-categories=performance,seo`
 - **Field**: PageSpeed Insights + CrUX (real user data) — the metric Google actually uses.
 
----
+______________________________________________________________________
 
 ## 4. Technical SEO
 
@@ -163,12 +159,12 @@ Supporting metrics (not ranking but useful):
 - Allow indexing of important paths. **Block** admin, search, faceted-filter URLs.
 - Reference the sitemap: `Sitemap: https://example.com/sitemap.xml`.
 - **AI bot access** — for GEO, you usually WANT these allowed:
-  - `GPTBot` (OpenAI), `ChatGPT-User` (ChatGPT browse), `OAI-SearchBot` (ChatGPT Search)
-  - `ClaudeBot` (Anthropic crawler), `Claude-Web` (interactive), `anthropic-ai`
-  - `PerplexityBot`, `Perplexity-User`
-  - `Google-Extended` (Bard/Gemini training — separate from Googlebot)
-  - `CCBot` (Common Crawl, feeds many models)
-  Blocking these by accident is a common GEO killer.
+    - `GPTBot` (OpenAI), `ChatGPT-User` (ChatGPT browse), `OAI-SearchBot` (ChatGPT Search)
+    - `ClaudeBot` (Anthropic crawler), `Claude-Web` (interactive), `anthropic-ai`
+    - `PerplexityBot`, `Perplexity-User`
+    - `Google-Extended` (Bard/Gemini training — separate from Googlebot)
+    - `CCBot` (Common Crawl, feeds many models)
+        Blocking these by accident is a common GEO killer.
 
 ### Sitemap
 
@@ -179,6 +175,7 @@ Supporting metrics (not ranking but useful):
 ### hreflang
 
 For multi-language sites:
+
 - Self-reference required (each page lists itself + its alternates).
 - ISO 639-1 language codes + optional ISO 3166-1 alpha-2 region (`en`, `en-US`, `pt-BR`).
 - `x-default` for the language picker.
@@ -193,7 +190,7 @@ For multi-language sites:
 - HTTPS everywhere. Mixed-content (`http://` resources on `https://` pages) breaks ranking + browser security.
 - HSTS header recommended for production.
 
----
+______________________________________________________________________
 
 ## 5. Mobile + accessibility
 
@@ -209,11 +206,12 @@ For multi-language sites:
 - `srcset` + `sizes` for responsive.
 - `loading="lazy"` below the fold.
 
----
+______________________________________________________________________
 
 ## 6. Social meta (OpenGraph + Twitter)
 
 Required on shareable pages:
+
 ```html
 <meta property="og:title" content="...">
 <meta property="og:description" content="...">
@@ -225,7 +223,7 @@ Required on shareable pages:
 
 Validate with Facebook Sharing Debugger + Twitter Card Validator.
 
----
+______________________________________________________________________
 
 ## 7. GEO — Generative Engine Optimization
 
@@ -234,17 +232,18 @@ For AI engines that cite sources instead of ranking pages.
 ### Key signals
 
 1. **E-E-A-T** (Experience, Expertise, Authoritativeness, Trustworthiness) — per Google's Sep 2025 Quality Rater Guidelines, but generative engines apply similar weighting.
-   - Author bylines with credentials, photo, social profiles.
-   - "About" page + clear ownership.
-   - Citations to primary sources, not other content marketing.
 
-2. **Factual density** — concrete numbers, dates, percentages, specific names. Generative engines preferentially cite content with verifiable facts.
+    - Author bylines with credentials, photo, social profiles.
+    - "About" page + clear ownership.
+    - Citations to primary sources, not other content marketing.
 
-3. **Entity clarity** — Use Wikipedia-style consistent naming. Define key entities up front (`The Lambda Powertools library …`). Crisp definitions get extracted.
+1. **Factual density** — concrete numbers, dates, percentages, specific names. Generative engines preferentially cite content with verifiable facts.
 
-4. **Answer-first format** — Lead each section with a direct answer (1–3 sentences), then expand. Generative engines extract the lead.
+1. **Entity clarity** — Use Wikipedia-style consistent naming. Define key entities up front (`The Lambda Powertools library …`). Crisp definitions get extracted.
 
-5. **Statistics integration** — Pages with original data / surveys / proprietary stats get disproportionate AI citations.
+1. **Answer-first format** — Lead each section with a direct answer (1–3 sentences), then expand. Generative engines extract the lead.
+
+1. **Statistics integration** — Pages with original data / surveys / proprietary stats get disproportionate AI citations.
 
 ### `llms.txt`
 
@@ -269,7 +268,7 @@ Not yet a confirmed ranking factor anywhere, but cheap to add.
 
 Verify these are NOT blocked in robots.txt (see §4 robots.txt).
 
----
+______________________________________________________________________
 
 ## 8. AEO — Answer Engine Optimization
 
@@ -290,17 +289,17 @@ For featured snippets, People-Also-Ask, voice assistants.
 - `<table>` = table snippets
 - ≤ 50 words per answer = paragraph snippet
 
----
+______________________________________________________________________
 
 ## 9. Programmatic SEO (template-driven pages)
 
 If you generate pages from a template + data (location pages, comparison pages, glossary terms):
 
-| Page count | Risk | Action |
-|---|---|---|
-| ≤ 30 | Low | Ship if each page has unique value |
-| 30–50 | Medium | Each page must have ≥ 300 words of unique content + unique data point |
-| 50+ | **High — block** | Cannibalisation likely. Consolidate or skip programmatic strategy. |
+| Page count | Risk             | Action                                                                |
+| ---------- | ---------------- | --------------------------------------------------------------------- |
+| ≤ 30       | Low              | Ship if each page has unique value                                    |
+| 30–50      | Medium           | Each page must have ≥ 300 words of unique content + unique data point |
+| 50+        | **High — block** | Cannibalisation likely. Consolidate or skip programmatic strategy.    |
 
 ### Avoid
 
@@ -315,17 +314,17 @@ If you generate pages from a template + data (location pages, comparison pages, 
 - Canonical to the highest-value variant when overlap is unavoidable
 - Block faceted filters in robots.txt or noindex them
 
----
+______________________________________________________________________
 
 ## 10. Audit workflow
 
 ### Quick audit (`audit seo for <url>`)
 
 1. Fetch the page (`WebFetch` for live, `Read` for local).
-2. Extract: `<title>`, `<meta description>`, canonical, h1, JSON-LD blocks, OG tags, `lang`, viewport.
-3. Check sitemap + robots if you can reach them.
-4. Run Lighthouse if available locally.
-5. Return top 5–10 issues by severity.
+1. Extract: `<title>`, `<meta description>`, canonical, h1, JSON-LD blocks, OG tags, `lang`, viewport.
+1. Check sitemap + robots if you can reach them.
+1. Run Lighthouse if available locally.
+1. Return top 5–10 issues by severity.
 
 Output template:
 
@@ -362,7 +361,7 @@ Same shape but with all 10 sections covered, all findings listed (not just top-N
 
 When user asks about one slice ("review my structured data", "check Core Web Vitals"), do only that section in depth.
 
----
+______________________________________________________________________
 
 ## Related skills
 
@@ -372,7 +371,7 @@ Hand off to these when their domain is more specific:
 - `vercel-react-best-practices` — Next.js metadata API, performance for CWV
 - `vercel-react-view-transitions` — animation patterns (CLS-friendly transitions)
 
----
+______________________________________________________________________
 
 ## References — primary sources
 

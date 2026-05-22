@@ -3,10 +3,10 @@
 Before saying "tests pass" / "it works" / "fixed" / "ready to merge" / "done", apply the `adversarial-verification` skill:
 
 1. **IDENTIFY** the specific claim
-2. **RUN** the command that proves it
-3. **READ** the full output (exit code + last 20 lines)
-4. **VERIFY** output matches the claim
-5. **CLAIM** only now, with evidence quoted verbatim
+1. **RUN** the command that proves it
+1. **READ** the full output (exit code + last 20 lines)
+1. **VERIFY** output matches the claim
+1. **CLAIM** only now, with evidence quoted verbatim
 
 Forbidden phrases until step 5: "should work", "looks good", "seems to", "probably", "I think it's working". If you typed one, restart the gate.
 

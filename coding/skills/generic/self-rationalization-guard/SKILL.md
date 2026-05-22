@@ -1,15 +1,6 @@
----
-name: self-rationalization-guard
-description: >-
-  Behavioral guard — detects when an agent is writing explanations / restating
-  constraints / pre-emptively surrendering instead of executing the task. Fires
-  when the agent emits >2 sentences before any tool call on an actionable
-  request. Pairs with `adversarial-verification` (output-side discipline).
-  Synthesized from obra/superpowers writing-skills + verification-before-
-  completion + kadaliao/claude-code-skills-collection.
-disable-model-invocation: false
-user-invocable: true
----
+______________________________________________________________________
+
+## name: self-rationalization-guard description: >- Behavioral guard — detects when an agent is writing explanations / restating constraints / pre-emptively surrendering instead of executing the task. Fires when the agent emits >2 sentences before any tool call on an actionable request. Pairs with `adversarial-verification` (output-side discipline). Synthesized from obra/superpowers writing-skills + verification-before- completion + kadaliao/claude-code-skills-collection. disable-model-invocation: false user-invocable: true
 
 # Self-rationalization guard
 
@@ -28,6 +19,7 @@ Detect any of these in your OWN response. Restart if found.
 ### 1. Explaining instead of executing
 
 Trigger phrases:
+
 - "Let me describe what would happen if I ran…"
 - "The approach here would be to…"
 - "We need to first understand…"
@@ -37,6 +29,7 @@ Fix: **stop. Run the command. Show the output.**
 ### 2. Restating constraints
 
 Trigger phrases:
+
 - "Given that we cannot X, the answer is…"
 - "Since we don't have access to Y…"
 - "Because the framework restricts Z…"
@@ -46,6 +39,7 @@ Fix: **name the line of code / docs / rule that imposes the constraint, OR drop 
 ### 3. Pre-emptive surrender
 
 Trigger phrases:
+
 - "This is too ambiguous to proceed without clarification."
 - "I'd need more context before I can…"
 - "Without knowing X, Y, Z, I can't say…"
@@ -55,6 +49,7 @@ Fix: **one tool call to resolve the ambiguity.** Read the file. List the directo
 ### 4. Spirit-vs-letter dodge
 
 Trigger phrases:
+
 - "I followed the intent even though I skipped the step."
 - "The spirit of the rule is X, so technically…"
 - "It's about the principle, not the ritual."
@@ -64,6 +59,7 @@ Fix: **skipping the step IS skipping the rule.** Run the step or call out that y
 ### 5. Retroactive scope shrink
 
 Trigger phrases (after hitting friction):
+
 - "The task actually only needs…"
 - "We can simplify by skipping…"
 - "Actually X is enough for now."
@@ -73,6 +69,7 @@ Fix: **the task is what was asked, not what's convenient now.** If scope MUST sh
 ### 6. False-equivalence substitution
 
 Trigger phrases:
+
 - "Manual testing achieves the same thing."
 - "Code review is equivalent to running it."
 - "Visual inspection of the diff is enough."
@@ -82,6 +79,7 @@ Fix: **run the actual test.** Manual ≠ tested. Inspection ≠ verified. Compil
 ### 7. Authority deflection
 
 Trigger phrases:
+
 - "The user probably meant…"
 - "The convention is to…"
 - "Industry best practice says…"
@@ -93,16 +91,16 @@ Fix: **either ask the user, or quote the source.** Unsourced authority is invent
 When a signal fires, paste one of these to re-orient:
 
 1. **"Stop explaining. Run the command. Quote the output."**
-2. **"You stated a constraint — name the line of code or rule that imposes it, or drop it."**
-3. **"If you used the word 'should', delete the sentence and try again with evidence."**
+1. **"You stated a constraint — name the line of code or rule that imposes it, or drop it."**
+1. **"If you used the word 'should', delete the sentence and try again with evidence."**
 
 ## Restart contract
 
 When a signal fires:
 
 1. Discard the current draft response (don't send it).
-2. Emit ONE tool call that advances the task.
-3. THEN write the response, with the tool's output quoted as evidence.
+1. Emit ONE tool call that advances the task.
+1. THEN write the response, with the tool's output quoted as evidence.
 
 Exception: signals 3 (pre-emptive surrender) and 7 (authority deflection) may legitimately require asking the user. But the question must be ONE sentence, name the EXACT decision needed, and offer 2-3 concrete options.
 

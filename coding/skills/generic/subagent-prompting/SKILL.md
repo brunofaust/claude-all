@@ -1,17 +1,6 @@
----
-name: subagent-prompting
-description: >-
-  How to write a self-contained one-shot subagent dispatch prompt. Use BEFORE
-  invoking the Agent / Task tool. The subagent has ZERO memory of the parent
-  conversation — every input, success criterion, and refuse-condition must be
-  inlined. Use for: dispatching a research task, parallel investigation,
-  delegating mechanical work to a haiku agent, fanning out to multiple
-  general-purpose agents. Synthesized from obra/superpowers subagent-driven-
-  development + dispatching-parallel-agents + kadaliao worker-prompt-craft +
-  undeadlist/claude-code-agents.
-disable-model-invocation: false
-user-invocable: true
----
+______________________________________________________________________
+
+## name: subagent-prompting description: >- How to write a self-contained one-shot subagent dispatch prompt. Use BEFORE invoking the Agent / Task tool. The subagent has ZERO memory of the parent conversation — every input, success criterion, and refuse-condition must be inlined. Use for: dispatching a research task, parallel investigation, delegating mechanical work to a haiku agent, fanning out to multiple general-purpose agents. Synthesized from obra/superpowers subagent-driven- development + dispatching-parallel-agents + kadaliao worker-prompt-craft + undeadlist/claude-code-agents. disable-model-invocation: false user-invocable: true
 
 # Subagent prompting
 
@@ -22,6 +11,7 @@ A subagent dispatch fails when the prompt assumes parent-session context that do
 ## Self-containment rule (the most-violated)
 
 Subagent has NO memory of:
+
 - This conversation's prior turns
 - The user's preferences set hours ago
 - Files referenced "above" or "in the plan"
@@ -79,13 +69,13 @@ Fill in EVERY field before sending. Skip one → dispatch usually misfires.
 
 Standardize subagent return values so parent can route automatically:
 
-| Status | Meaning | Parent action |
-|---|---|---|
-| `DONE` | All criteria met, evidence quoted | Use the result |
-| `DONE_WITH_CONCERNS` | Criteria met but caveats — list them | Use + verify caveats |
-| `NEEDS_CONTEXT` | Subagent hit ambiguity not resolvable from inputs | Add missing inputs, re-dispatch |
-| `BLOCKED` | Precondition missing (auth, env, tool) | Fix precondition, re-dispatch |
-| `OVER_BUDGET` | Time/token budget exhausted | Re-scope smaller or bigger budget |
+| Status               | Meaning                                           | Parent action                     |
+| -------------------- | ------------------------------------------------- | --------------------------------- |
+| `DONE`               | All criteria met, evidence quoted                 | Use the result                    |
+| `DONE_WITH_CONCERNS` | Criteria met but caveats — list them              | Use + verify caveats              |
+| `NEEDS_CONTEXT`      | Subagent hit ambiguity not resolvable from inputs | Add missing inputs, re-dispatch   |
+| `BLOCKED`            | Precondition missing (auth, env, tool)            | Fix precondition, re-dispatch     |
+| `OVER_BUDGET`        | Time/token budget exhausted                       | Re-scope smaller or bigger budget |
 
 Always paste the enum + meanings in the dispatch prompt.
 
@@ -94,8 +84,8 @@ Always paste the enum + meanings in the dispatch prompt.
 Before fanning out N subagents in parallel, verify ALL of:
 
 1. **No shared writable state** — none write to the same file / table / queue.
-2. **No sequential dependency** — subagent B doesn't need subagent A's output.
-3. **No race-prone resource** — none mutate the same Lambda / deploy / branch.
+1. **No sequential dependency** — subagent B doesn't need subagent A's output.
+1. **No race-prone resource** — none mutate the same Lambda / deploy / branch.
 
 If any fail → serial dispatch, not parallel.
 

@@ -1,6 +1,7 @@
 ## Python style — brunofaust-python-style
 
 When writing or editing Python (`*.py`) files, follow the `brunofaust-python-style` skill:
+
 - Python 3.14+ syntax: pipe unions (`str | None`), `match` statements, `asyncio.TaskGroup`, `exception.add_note()`.
 - Strict type hints — `TypedDict` for structured dicts, `Literal` for constrained values, `@overload` for polymorphism. Enforced with mypy (strict) + Ruff.
 - Structured logging via `structlog`.

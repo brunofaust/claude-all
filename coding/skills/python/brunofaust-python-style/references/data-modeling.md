@@ -39,9 +39,11 @@ def process_ticket(task: dict[str, Any]) -> dict[str, Any]:
 ```python
 from pydantic import BaseModel, Field, field_validator
 
+
 class Comment(BaseModel):
     body: str = ""
     author: str | None = None
+
 
 class Ticket(BaseModel):
     model_config = {"validate_assignment": True, "extra": "ignore"}
@@ -63,9 +65,11 @@ class Ticket(BaseModel):
 ```python
 from dataclasses import dataclass
 
+
 @dataclass(frozen=True, slots=True)
 class TicketContext:
     """Context assembled for a ticket. Already validated upstream."""
+
     ticket_key: str
     parent_summary: str | None
     siblings: tuple[str, ...]

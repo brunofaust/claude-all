@@ -55,4 +55,3 @@ uv run ruff check --fix .  # Lint and auto-fix
 uv run ruff format .       # Format code
 uv run mypy .              # Type check
 ```
-

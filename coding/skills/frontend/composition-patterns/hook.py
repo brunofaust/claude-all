@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Reminder hook for vercel-composition-patterns skill. One reminder per session."""
+
 from __future__ import annotations
 
 import json
@@ -23,11 +24,24 @@ def main() -> int:
         return 0
 
     new_string = data.get("tool_input", {}).get("new_string", "") or ""
-    if not any(t in new_string for t in ("interface Props", "type Props", "Props =", "Props:", "boolean", ": false", ": true")):
+    if not any(
+        t in new_string
+        for t in (
+            "interface Props",
+            "type Props",
+            "Props =",
+            "Props:",
+            "boolean",
+            ": false",
+            ": true",
+        )
+    ):
         return 0
 
     session_id = data.get("session_id") or "no-session"
-    flag = os.path.join(tempfile.gettempdir(), f"claude-all-composition-{session_id}.flag")
+    flag = os.path.join(
+        tempfile.gettempdir(), f"claude-all-composition-{session_id}.flag"
+    )
     if os.path.exists(flag):
         return 0
     try:

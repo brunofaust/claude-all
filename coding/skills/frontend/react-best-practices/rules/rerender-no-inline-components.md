@@ -1,9 +1,6 @@
----
-title: Don't Define Components Inside Components
-impact: HIGH
-impactDescription: prevents remount on every render
-tags: rerender, components, remount, performance
----
+______________________________________________________________________
+
+## title: Don't Define Components Inside Components impact: HIGH impactDescription: prevents remount on every render tags: rerender, components, remount, performance
 
 ## Don't Define Components Inside Components
 
@@ -76,6 +73,7 @@ function UserProfile({ user, theme }) {
 ```
 
 **Symptoms of this bug:**
+
 - Input fields lose focus on every keystroke
 - Animations restart unexpectedly
 - `useEffect` cleanup/setup runs on every parent render

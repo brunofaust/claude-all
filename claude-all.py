@@ -19,6 +19,7 @@ Keys in TUI:
     ENTER        proceed (install selected)
     q / ESC      quit
 """
+
 from __future__ import annotations
 
 import argparse
@@ -39,6 +40,7 @@ STATE_FILE = STATE_DIR / "state.json"
 
 
 # ---------------------- state file ----------------------
+
 
 def state_key(kind: str, name: str) -> str:
     return f"{kind}/{name}"
@@ -72,13 +74,14 @@ def record_install(kind: str, name: str, target_path: Path | None) -> None:
 
 # ---------------------- item model ----------------------
 
+
 @dataclass
 class Item:
-    kind: str          # agents | skills | plugins | mcps
-    category: str      # coding
-    subcategory: str   # aws | python | ...
+    kind: str  # agents | skills | plugins | mcps
+    category: str  # coding
+    subcategory: str  # aws | python | ...
     name: str
-    src: Path          # source path (file for agents, SKILL.md for skills, plugin.json for plugins)
+    src: Path  # source path (file for agents, SKILL.md for skills, plugin.json for plugins)
     selected: bool = False
     installed: bool = False
 
@@ -93,13 +96,15 @@ def discover(filters: list[str]) -> list[Item]:
             parts = rel.parts
             if len(parts) < 4:
                 continue
-            items.append(Item(
-                kind="agents",
-                category=parts[0],
-                subcategory=parts[2],
-                name=p.stem,
-                src=p,
-            ))
+            items.append(
+                Item(
+                    kind="agents",
+                    category=parts[0],
+                    subcategory=parts[2],
+                    name=p.stem,
+                    src=p,
+                )
+            )
 
     skill_root = REPO_ROOT / "coding" / "skills"
     if skill_root.exists():
@@ -108,39 +113,45 @@ def discover(filters: list[str]) -> list[Item]:
             parts = rel.parts
             if len(parts) < 4:
                 continue
-            items.append(Item(
-                kind="skills",
-                category=parts[0],
-                subcategory=parts[2],
-                name=parts[3],
-                src=p,
-            ))
+            items.append(
+                Item(
+                    kind="skills",
+                    category=parts[0],
+                    subcategory=parts[2],
+                    name=parts[3],
+                    src=p,
+                )
+            )
 
     plugin_root = REPO_ROOT / "coding" / "plugins"
     if plugin_root.exists():
         for p in sorted(plugin_root.glob("*/plugin.json")):
             rel = p.relative_to(REPO_ROOT)
             parts = rel.parts
-            items.append(Item(
-                kind="plugins",
-                category=parts[0],
-                subcategory="marketplace",
-                name=parts[2],
-                src=p,
-            ))
+            items.append(
+                Item(
+                    kind="plugins",
+                    category=parts[0],
+                    subcategory="marketplace",
+                    name=parts[2],
+                    src=p,
+                )
+            )
 
     mcp_root = REPO_ROOT / "coding" / "mcps"
     if mcp_root.exists():
         for p in sorted(mcp_root.glob("*/mcp.json")):
             rel = p.relative_to(REPO_ROOT)
             parts = rel.parts
-            items.append(Item(
-                kind="mcps",
-                category=parts[0],
-                subcategory="stdio",
-                name=parts[2],
-                src=p,
-            ))
+            items.append(
+                Item(
+                    kind="mcps",
+                    category=parts[0],
+                    subcategory="stdio",
+                    name=parts[2],
+                    src=p,
+                )
+            )
 
     tool_root = REPO_ROOT / "coding" / "tools"
     if tool_root.exists():
@@ -152,18 +163,22 @@ def discover(filters: list[str]) -> list[Item]:
                 subcategory = meta.get("type", "brew")
             except (json.JSONDecodeError, OSError):
                 subcategory = "brew"
-            items.append(Item(
-                kind="tools",
-                category=parts[0],
-                subcategory=subcategory,
-                name=parts[2],
-                src=p,
-            ))
+            items.append(
+                Item(
+                    kind="tools",
+                    category=parts[0],
+                    subcategory=subcategory,
+                    name=parts[2],
+                    src=p,
+                )
+            )
 
     if filters:
+
         def matches(it: Item) -> bool:
             rel = str(it.src.relative_to(REPO_ROOT))
             return all(f in rel for f in filters)
+
         items = [it for it in items if matches(it)]
 
     items.sort(key=lambda i: (i.kind, i.subcategory, i.name))
@@ -180,6 +195,7 @@ def annotate_installed(items: list[Item]) -> None:
 
 # ---------------------- install ----------------------
 
+
 def install_plugin(item: Item) -> str:
     meta = json.loads(item.src.read_text())
     ptype = meta.get("type", "claude-marketplace")
@@ -192,7 +208,9 @@ def install_plugin(item: Item) -> str:
             return f"skipped plugin {item.name}: missing 'marketplace' or 'plugin'"
         if shutil.which("claude") is None:
             return f"skipped plugin {item.name}: 'claude' CLI not in PATH"
-        subprocess.run(["claude", "plugin", "marketplace", "add", marketplace], check=True)
+        subprocess.run(
+            ["claude", "plugin", "marketplace", "add", marketplace], check=True
+        )
         subprocess.run(["claude", "plugin", "install", plugin_ref], check=True)
         result_msg = f"installed plugin {item.name} ({plugin_ref})"
 
@@ -221,10 +239,16 @@ def install_plugin(item: Item) -> str:
     # Post-install hooks
     for cmd in meta.get("post_install") or []:
         if not isinstance(cmd, list) or not cmd:
-            print(f"  ! {item.name}: skipping invalid post_install entry: {cmd!r}", file=sys.stderr)
+            print(
+                f"  ! {item.name}: skipping invalid post_install entry: {cmd!r}",
+                file=sys.stderr,
+            )
             continue
         if shutil.which(cmd[0]) is None:
-            print(f"  ! {item.name}: post_install '{cmd[0]}' not on PATH — open a new shell and run: {' '.join(cmd)}", file=sys.stderr)
+            print(
+                f"  ! {item.name}: post_install '{cmd[0]}' not on PATH — open a new shell and run: {' '.join(cmd)}",
+                file=sys.stderr,
+            )
             continue
         print(f"  → post_install: {' '.join(cmd)}")
         subprocess.run(cmd, check=True)
@@ -241,10 +265,10 @@ def install_plugin(item: Item) -> str:
 def _keychain_subst(value: str) -> str:
     """Return a shell command substitution for a keychain ref, else the literal value."""
     if isinstance(value, str) and value.startswith("keychain:"):
-        service = value[len("keychain:"):]
+        service = value[len("keychain:") :]
         # Quote the service name so spaces/specials are safe inside $(...)
         safe_service = service.replace('"', '\\"')
-        return f"$(security find-generic-password -a \"$USER\" -s \"{safe_service}\" -w)"
+        return f'$(security find-generic-password -a "$USER" -s "{safe_service}" -w)'
     return value
 
 
@@ -275,9 +299,7 @@ def install_mcp(item: Item, level: str) -> str:
 
     has_keychain = any(
         isinstance(v, str) and v.startswith("keychain:") for v in raw_env.values()
-    ) or any(
-        isinstance(a, str) and a.startswith("keychain:") for a in raw_args
-    )
+    ) or any(isinstance(a, str) and a.startswith("keychain:") for a in raw_args)
 
     scope = "user" if level == "user" else "project"
     cmd = ["claude", "mcp", "add", name, "--scope", scope]
@@ -305,13 +327,15 @@ def install_mcp(item: Item, level: str) -> str:
         for a in raw_args:
             if isinstance(a, str) and a.startswith("keychain:"):
                 # Wrap the subst in double quotes so spaces in the secret are safe as one arg.
-                exec_parts.append(f"\"{_keychain_subst(a)}\"")
+                exec_parts.append(f'"{_keychain_subst(a)}"')
             else:
                 exec_parts.append(_shell_quote(str(a)))
 
         shell_line = (
-            " ".join(env_inline_parts) + (" " if env_inline_parts else "") +
-            "exec " + " ".join(exec_parts)
+            " ".join(env_inline_parts)
+            + (" " if env_inline_parts else "")
+            + "exec "
+            + " ".join(exec_parts)
         )
 
         cmd += ["--", "sh", "-c", shell_line]
@@ -325,8 +349,12 @@ def install_mcp(item: Item, level: str) -> str:
         cmd.extend(str(a) for a in raw_args)
 
     # Remove first if exists — idempotent re-install
-    subprocess.run(["claude", "mcp", "remove", name, "--scope", scope],
-                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+    subprocess.run(
+        ["claude", "mcp", "remove", name, "--scope", scope],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
 
     subprocess.run(cmd, check=True)
     record_install(item.kind, item.name, None)
@@ -347,8 +375,6 @@ def install_tool(item: Item) -> str:
     """
     meta = json.loads(item.src.read_text())
     ttype = meta.get("type", "brew")
-    name = meta.get("name") or item.name
-
     if ttype == "brew":
         if shutil.which("brew") is None:
             return (
@@ -363,7 +389,10 @@ def install_tool(item: Item) -> str:
         # Tap first if specified + not already tapped
         if tap:
             tapped = subprocess.run(
-                ["brew", "tap"], capture_output=True, text=True, check=False,
+                ["brew", "tap"],
+                capture_output=True,
+                text=True,
+                check=False,
             ).stdout
             if tap not in tapped.split():
                 print(f"  → brew tap {tap}")
@@ -372,7 +401,9 @@ def install_tool(item: Item) -> str:
         # Check if already installed
         installed = subprocess.run(
             ["brew", "list", "--formula", package],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
         )
         if installed.returncode == 0:
             print(f"  → {package} already installed via brew (skipping install)")
@@ -406,6 +437,7 @@ def install_tool(item: Item) -> str:
 
 
 # ---------------------- hook injection ----------------------
+
 
 def _hook_files(item: Item) -> tuple[Path, Path] | None:
     """Return (hook.json, hook.py) paths if both exist next to the resource."""
@@ -489,12 +521,16 @@ def inject_hook(item: Item, level: str) -> str | None:
     target_block.setdefault("hooks", [])
     # Dedup by command path
     cmd_str = str(dest)
-    target_block["hooks"] = [h for h in target_block["hooks"] if h.get("command") != cmd_str]
-    target_block["hooks"].append({
-        "type": "command",
-        "command": cmd_str,
-        "timeout": timeout,
-    })
+    target_block["hooks"] = [
+        h for h in target_block["hooks"] if h.get("command") != cmd_str
+    ]
+    target_block["hooks"].append(
+        {
+            "type": "command",
+            "command": cmd_str,
+            "timeout": timeout,
+        }
+    )
 
     settings_file.write_text(json.dumps(settings, indent=2) + "\n")
     return f"hook installed → {dest}, registered in {settings_file}"
@@ -516,7 +552,9 @@ def remove_hook(item: Item, level: str) -> str | None:
         for event_blocks in settings.get("hooks", {}).values():
             for block in event_blocks:
                 before = len(block.get("hooks", []))
-                block["hooks"] = [h for h in block.get("hooks", []) if h.get("command") != cmd_str]
+                block["hooks"] = [
+                    h for h in block.get("hooks", []) if h.get("command") != cmd_str
+                ]
                 if before != len(block.get("hooks", [])):
                     removed_any = True
             # Drop empty blocks
@@ -536,6 +574,7 @@ def remove_hook(item: Item, level: str) -> str | None:
 
 
 # ---------------------- CLAUDE.md injection ----------------------
+
 
 def _claude_md_snippet_path(item: Item) -> Path | None:
     """Optional `claude_md.md` next to the resource (agents/skills/plugins/mcps).
@@ -672,7 +711,10 @@ def install_item(item: Item, target_root: Path) -> str:
 
 # ---------------------- update ----------------------
 
-def update_item(kind: str, name: str, install_record: dict, all_items: list[Item]) -> str:
+
+def update_item(
+    kind: str, name: str, install_record: dict, all_items: list[Item]
+) -> str:
     """Update a single installed item. Looks up live meta from repo."""
     # Find matching item in current repo
     match = next((it for it in all_items if it.kind == kind and it.name == name), None)
@@ -695,7 +737,9 @@ def update_item(kind: str, name: str, install_record: dict, all_items: list[Item
         update_cmd = meta.get("update_command")
         if update_cmd and isinstance(update_cmd, list) and update_cmd:
             if shutil.which(update_cmd[0]) is None:
-                return f"  ✗ plugins/{name}: update_command '{update_cmd[0]}' not on PATH"
+                return (
+                    f"  ✗ plugins/{name}: update_command '{update_cmd[0]}' not on PATH"
+                )
             print(f"  → update: {' '.join(update_cmd)}")
             subprocess.run(update_cmd, check=True)
             return f"  ✓ updated plugins/{name}"
@@ -774,13 +818,17 @@ def run_update_all() -> None:
             msg = update_item(rec["kind"], rec["name"], rec, all_items)
             print(msg)
         except subprocess.CalledProcessError as e:
-            print(f"  ✗ {rec['kind']}/{rec['name']}: command failed ({e.returncode})", file=sys.stderr)
+            print(
+                f"  ✗ {rec['kind']}/{rec['name']}: command failed ({e.returncode})",
+                file=sys.stderr,
+            )
         except OSError as e:
             print(f"  ✗ {rec['kind']}/{rec['name']}: {e}", file=sys.stderr)
     print("\nUpdate complete.")
 
 
 # ---------------------- TUI ----------------------
+
 
 @dataclass
 class TuiState:
@@ -795,7 +843,8 @@ class TuiState:
         if self.filter_text:
             ft = self.filter_text.lower()
             self.visible = [
-                i for i, it in enumerate(self.items)
+                i
+                for i, it in enumerate(self.items)
                 if ft in it.name.lower()
                 or ft in it.subcategory.lower()
                 or ft in it.kind.lower()
@@ -835,7 +884,7 @@ def draw(stdscr, state: TuiState):
     for vi in range(state.offset, min(state.offset + page, len(state.visible))):
         idx = state.visible[vi]
         it = state.items[idx]
-        is_cursor = (vi == state.cursor)
+        is_cursor = vi == state.cursor
         marker = "[x]" if it.selected else "[ ]"
         prefix = "▸ " if is_cursor else "  "
         installed_tag = "  (installed)" if it.installed else ""
@@ -855,7 +904,7 @@ def draw(stdscr, state: TuiState):
     inst = sum(1 for it in state.items if it.installed)
     total = len(state.items)
     shown = len(state.visible)
-    scroll_info = f" {state.cursor+1}/{shown}" if shown else " 0/0"
+    scroll_info = f" {state.cursor + 1}/{shown}" if shown else " 0/0"
     footer = f" selected {sel}/{total}  │  installed {inst}/{total}  │  shown {shown}/{total}  │ {scroll_info}"
     try:
         stdscr.addstr(h - 1, 0, footer[:w].ljust(w), curses.A_REVERSE)
@@ -873,6 +922,7 @@ TUI_QUIT = "quit"
 
 def tui_select(items: list[Item]) -> str:
     """Return TUI_INSTALL, TUI_UPDATE, or TUI_QUIT."""
+
     def _run(stdscr):
         curses.curs_set(0)
         stdscr.keypad(True)
@@ -939,7 +989,7 @@ def choose_level_tui() -> str | None:
         curses.curs_set(0)
         stdscr.keypad(True)
         choices = [
-            ("user",    f"User level    →  {USER_CLAUDE_DIR}"),
+            ("user", f"User level    →  {USER_CLAUDE_DIR}"),
             ("project", f"Project level →  {Path.cwd() / '.claude'}"),
         ]
         cursor = 0
@@ -968,6 +1018,7 @@ def choose_level_tui() -> str | None:
 
 # ---------------------- main ----------------------
 
+
 def cmd_list(items: list[Item]):
     last_kind = None
     last_subcat = None
@@ -991,9 +1042,17 @@ def main(argv: list[str]) -> int:
     )
     ap.add_argument("--list", action="store_true", help="List items without installing")
     ap.add_argument("--all", action="store_true", help="Select everything (skip TUI)")
-    ap.add_argument("--user", action="store_true", help="Install to ~/.claude (skip level prompt)")
-    ap.add_argument("--project", action="store_true", help="Install to ./.claude (skip level prompt)")
-    ap.add_argument("filters", nargs="*", help="Filter tokens (each must appear in path)")
+    ap.add_argument(
+        "--user", action="store_true", help="Install to ~/.claude (skip level prompt)"
+    )
+    ap.add_argument(
+        "--project",
+        action="store_true",
+        help="Install to ./.claude (skip level prompt)",
+    )
+    ap.add_argument(
+        "filters", nargs="*", help="Filter tokens (each must appear in path)"
+    )
     args = ap.parse_args(argv)
 
     items = discover(args.filters)
@@ -1015,7 +1074,10 @@ def main(argv: list[str]) -> int:
         action = TUI_INSTALL
     else:
         if not sys.stdin.isatty() or not sys.stdout.isatty():
-            print("TUI needs a real terminal. Use --all or --list instead.", file=sys.stderr)
+            print(
+                "TUI needs a real terminal. Use --all or --list instead.",
+                file=sys.stderr,
+            )
             return 1
         action = tui_select(items)
 
@@ -1053,7 +1115,10 @@ def main(argv: list[str]) -> int:
         except OSError as e:
             print(f"  ✗ {it.kind}/{it.name}: {e}", file=sys.stderr)
         except subprocess.CalledProcessError as e:
-            print(f"  ✗ {it.kind}/{it.name}: command failed ({e.returncode})", file=sys.stderr)
+            print(
+                f"  ✗ {it.kind}/{it.name}: command failed ({e.returncode})",
+                file=sys.stderr,
+            )
 
     print("\nDone. Symlinks → edits in repo propagate to install location.")
     return 0

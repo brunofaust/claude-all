@@ -9,6 +9,7 @@ Session detection: Claude Code passes `session_id` in the hook input JSON.
 We flag `/tmp/claude-all-bruno-py-<session_id>` after the first emit; later
 edits in the same session see the flag and exit silently.
 """
+
 from __future__ import annotations
 
 import json

@@ -23,12 +23,12 @@ The project is async-first, using:
 ### Best Practices Summary
 
 1. **Use uvloop.run()** for entry point
-2. **Always await coroutines** to execute them
-3. **Limit concurrency with semaphores** - unbounded tasks can exhaust resources
-4. **Implement proper error handling** with try/except
-5. **Use timeouts** to prevent hanging operations
-6. **Pool connections** for better performance
-7. **Never block the event loop** - use `run_in_thread` for sync code
+1. **Always await coroutines** to execute them
+1. **Limit concurrency with semaphores** - unbounded tasks can exhaust resources
+1. **Implement proper error handling** with try/except
+1. **Use timeouts** to prevent hanging operations
+1. **Pool connections** for better performance
+1. **Never block the event loop** - use `run_in_thread` for sync code
 
 ### Event Loop Management
 
@@ -271,6 +271,7 @@ async def run_in_thread(
     else:
         # Sync function → run directly in thread pool
         import functools
+
         partial = functools.partial(func, *args, **kwargs)
         return await loop.run_in_executor(BLOCKING_THREADPOOL, partial)
 ```
@@ -333,18 +334,21 @@ class thread:
         if inspect.iscoroutinefunction(func):
             coro = func(*args, **kwargs)
             if self._run_in_new_loop:
+
                 def _isolated() -> Any:
                     new_loop = uvloop.new_event_loop()
                     try:
                         return new_loop.run_until_complete(coro)
                     finally:
                         new_loop.close()
+
                 return self._thread_pool.submit(_isolated)
             else:
                 loop = asyncio.get_running_loop()
                 return self._thread_pool.submit(loop.run_until_complete, coro)
         else:
             import functools
+
             partial = functools.partial(func, *args, **kwargs)
             return self._thread_pool.submit(partial)
 
@@ -355,11 +359,13 @@ class thread:
     ) -> tuple[set[Future], set[Future]]:
         """Wait for futures to complete."""
         from concurrent.futures import wait
+
         return await run_in_thread(wait, futures, return_when=return_when)
 
     async def results(self, futures: list[Future]) -> AsyncIterator[Any]:
         """Yield results as futures complete (async generator)."""
         from concurrent.futures import as_completed
+
         for future in as_completed(futures):
             yield future.result()
 
@@ -370,14 +376,14 @@ class thread:
 
 #### When to Use run_in_thread
 
-| Situation | Use run_in_thread? |
-|-----------|-------------------|
+| Situation                              | Use run_in_thread?           |
+| -------------------------------------- | ---------------------------- |
 | Polars `.collect()`, `.sink_parquet()` | Yes — blocks on C extensions |
-| DeltaTable construction, `.version()` | Yes — blocks on Rust FFI |
-| `open()` / file I/O | Yes — blocks on disk I/O |
-| `polars.testing.assert_frame_equal` | Yes — blocks on comparison |
-| Pure Python computation (< 1ms) | No — overhead not worth it |
-| `await client.get_object(...)` | No — already async |
+| DeltaTable construction, `.version()`  | Yes — blocks on Rust FFI     |
+| `open()` / file I/O                    | Yes — blocks on disk I/O     |
+| `polars.testing.assert_frame_equal`    | Yes — blocks on comparison   |
+| Pure Python computation (< 1ms)        | No — overhead not worth it   |
+| `await client.get_object(...)`         | No — already async           |
 
 #### InterpreterPoolExecutor (Python 3.14+)
 
@@ -389,9 +395,11 @@ need to share mutable state.
 ```python
 from concurrent.futures import InterpreterPoolExecutor
 
+
 def compute_square(x: int) -> int:
     """CPU-bound computation."""
     return x * x
+
 
 # Similar API to ThreadPoolExecutor / ProcessPoolExecutor
 with InterpreterPoolExecutor() as executor:
@@ -400,12 +408,12 @@ with InterpreterPoolExecutor() as executor:
 
 **When to use InterpreterPoolExecutor vs. run_in_thread:**
 
-| Situation | Use |
-|-----------|-----|
-| CPU-bound pure Python (parsing, math) | `InterpreterPoolExecutor` — true parallelism |
+| Situation                                  | Use                                                    |
+| ------------------------------------------ | ------------------------------------------------------ |
+| CPU-bound pure Python (parsing, math)      | `InterpreterPoolExecutor` — true parallelism           |
 | CPU-bound C extension (Polars, DeltaTable) | `run_in_thread` — C extensions already release the GIL |
-| Blocking I/O (file, network) | `run_in_thread` — simpler, lower overhead |
-| Needs shared mutable state | `run_in_thread` — interpreters are isolated |
+| Blocking I/O (file, network)               | `run_in_thread` — simpler, lower overhead              |
+| Needs shared mutable state                 | `run_in_thread` — interpreters are isolated            |
 
 **Limitations**: Only picklable arguments/results. Shareable types without pickling
 are limited to `str | bytes | int | float | bool | None | tuple | memoryview`.
@@ -478,9 +486,7 @@ async def process_items(items: Sequence[item_dtype], db: database_client) -> Non
     parallel_semaphore = asyncio.Semaphore(10)
     async with asyncio.TaskGroup() as tg:
         for item in items:
-            tg.create_task(
-                _process_item_do(parallel_semaphore, item, db)
-            )
+            tg.create_task(_process_item_do(parallel_semaphore, item, db))
 
 
 # Private worker — does the actual work for a single item
@@ -509,9 +515,7 @@ async def validate_items(
     async with asyncio.TaskGroup() as tg:
         for item in items:
             tasks.append(
-                tg.create_task(
-                    _validate_item_do(parallel_semaphore, item, db)
-                )
+                tg.create_task(_validate_item_do(parallel_semaphore, item, db))
             )
 
     # Collect results after TaskGroup completes (all tasks are done here)
@@ -627,9 +631,7 @@ async def process_ordered_groups(
         groups: Mapping of group_id to ordered items.
         concurrency: Maximum concurrent groups.
     """
-    queues: dict[str, asyncio.Queue[item_dtype]] = defaultdict(
-        lambda: asyncio.Queue()
-    )
+    queues: dict[str, asyncio.Queue[item_dtype]] = defaultdict(lambda: asyncio.Queue())
 
     for group_id, items in groups.items():
         for item in items:
@@ -731,11 +733,10 @@ async with storage_client() as client:
 
 ### Common Semaphore Values
 
-| Context | Value | Rationale |
-|---------|-------|-----------|
-| Database batch operations | 50 | Throughput limits |
-| File processing / logging | 25 | Moderate parallelism |
-| API key validation | 10 | Balance speed vs. throttling |
-| Test resource creation | 20 | Fast but safe for LocalStack |
-| General external API calls | 10 | Conservative default |
-
+| Context                    | Value | Rationale                    |
+| -------------------------- | ----- | ---------------------------- |
+| Database batch operations  | 50    | Throughput limits            |
+| File processing / logging  | 25    | Moderate parallelism         |
+| API key validation         | 10    | Balance speed vs. throttling |
+| Test resource creation     | 20    | Fast but safe for LocalStack |
+| General external API calls | 10    | Conservative default         |
