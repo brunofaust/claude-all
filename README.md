@@ -28,7 +28,7 @@ Future categories (travel, writing, research, etc.) live as siblings to `coding/
 ### Requirements
 
 - macOS or Linux
-- `python3` (stdlib only — no pip installs)
+- Python 3.11+ (stdlib only — no pip installs)
 - `claude` CLI in PATH (for plugins with `type: claude-marketplace`)
 - `pipx` in PATH (for plugins with `type: pip`)
 
