@@ -44,7 +44,12 @@ Read the matching file BEFORE deep work in that area. Each is a focused referenc
 | Architectural decisions — KISS, SRP, Separation of Concerns, Composition>Inheritance, Rule of Three, function size, DI, anti-patterns | [`references/architecture.md`](references/architecture.md) |
 | Writing/optimizing async code — TaskGroup, ExceptionGroup, `run_in_thread`, semaphores, rollback, FIFO, pagination | [`references/async-patterns.md`](references/async-patterns.md) |
 | Configuration management — Pydantic Settings, env var coercion, nested configs, secrets from files | [`references/config.md`](references/config.md) |
-| Writing tests — pytest, fixtures, parametrize, mocks, LocalStack, time freezing, snapshot | [`references/testing.md`](references/testing.md) |
+| Writing tests — pytest, fixtures, parametrize, mocks, LocalStack, time freezing, snapshot, **factory pattern (polyfactory/factory_boy), DI over module-global mocks, mirrored src/ structure** | [`references/testing.md`](references/testing.md) |
+| Choosing between Pydantic / dataclass / TypedDict — trust boundaries, internal contracts, test fixtures | [`references/data-modeling.md`](references/data-modeling.md) |
+| Owner-class pattern for external systems (Jira, AWS, OpenAI…), ruff `banned-api` config, audit recipe | [`references/external-system-ownership.md`](references/external-system-ownership.md) |
+| Module-level visibility — `__all__` over `_` prefix, vulture/ruff blind-spot fix | [`references/visibility.md`](references/visibility.md) |
+| Project folder layout — `domain/features/integrations/aws_resources/api/db`, per-resource files, `import-linter` contracts | [`references/project-structure.md`](references/project-structure.md) |
+| Enforcement matrix — every rule → ruff code / `skill_enforcer.py` rule / prek hook / GH Action | [`references/enforcement.md`](references/enforcement.md) |
 
 ## Naming conventions
 
@@ -134,6 +139,17 @@ Section headers for long files:
 # Data Processing
 ################################################################################
 ```
+
+## Architectural rules (one-liners — depth in references)
+
+1. **Data modeling.** Pydantic at trust boundaries, frozen dataclasses internally, TypedDict only for static test data. Never pass `dict[str, Any]` between modules. → `references/data-modeling.md`
+2. **External system ownership.** One owner class per external system (Jira, S3, OpenAI, …). All SDK / HTTP calls flow through it; ruff `banned-api` blocks raw imports outside owner folders. → `references/external-system-ownership.md`
+3. **Error handling discipline.** No silent except. No `log.debug` inside `except`. Catch narrowest class, log at `warning`/`error` with structured context, `raise ... from e` when converting. → `references/error-handling.md`
+4. **Test patterns.** Use factories (polyfactory / factory_boy). Never `mod._client = mock` (race-prone under xdist) — inject the dependency. Tests mirror `src/` 1:1. → `references/testing.md`
+5. **Visibility.** Module-level names never start with `_` — use `__all__`. Class-scope `self._x` is fine. The `_`-prefix blinds vulture, ruff, pyright to dead-code at module scope. → `references/visibility.md`
+6. **Project structure.** `domain/` (pure logic) → `features/` (vertical slices) → `integrations/` + `aws_resources/` + `db/` (horizontal). Entry points (`api/`, `cli/`, lambdas) stay thin. Enforce direction with `import-linter`. → `references/project-structure.md`
+7. **Documentation discipline.** Every code change ships with doc update. Mandatory files: README, CLAUDE.md (root + per resource), ARCHITECTURE, CHANGELOG, TODO. Prek hooks + GH Actions block merge if docs stale. → `references/project-docs.md`
+8. **Enforcement.** Every rule maps to ruff code / vulture / `import-linter` / `skill_enforcer.py` AST rule / prek hook / GH Action. No aspirational rules. → `references/enforcement.md`
 
 ## Quick rules — What NOT to do
 

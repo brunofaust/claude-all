@@ -142,6 +142,24 @@ def discover(filters: list[str]) -> list[Item]:
                 src=p,
             ))
 
+    tool_root = REPO_ROOT / "coding" / "tools"
+    if tool_root.exists():
+        for p in sorted(tool_root.glob("*/tool.json")):
+            rel = p.relative_to(REPO_ROOT)
+            parts = rel.parts
+            try:
+                meta = json.loads(p.read_text())
+                subcategory = meta.get("type", "brew")
+            except (json.JSONDecodeError, OSError):
+                subcategory = "brew"
+            items.append(Item(
+                kind="tools",
+                category=parts[0],
+                subcategory=subcategory,
+                name=parts[2],
+                src=p,
+            ))
+
     if filters:
         def matches(it: Item) -> bool:
             rel = str(it.src.relative_to(REPO_ROOT))
@@ -318,6 +336,73 @@ def install_mcp(item: Item, level: str) -> str:
         print(f"  ℹ  {item.name}:\n{msg}")
 
     return f"added mcp {name} (scope: {scope})"
+
+
+def install_tool(item: Item) -> str:
+    """Install a CLI tool. Dispatches on tool.json `type` (brew, etc.).
+
+    Tools are GLOBAL (user-machine-wide) — `--user` vs `--project` doesn't apply.
+    The optional `claude_md.md` snippet still gets injected at the level the
+    caller chose, so anti-pattern rules can be per-user or per-project.
+    """
+    meta = json.loads(item.src.read_text())
+    ttype = meta.get("type", "brew")
+    name = meta.get("name") or item.name
+
+    if ttype == "brew":
+        if shutil.which("brew") is None:
+            return (
+                f"skipped tool {item.name}: 'brew' not in PATH. "
+                "Install Homebrew first: https://brew.sh/"
+            )
+        package = meta.get("package")
+        tap = meta.get("tap")
+        if not package:
+            return f"skipped tool {item.name}: tool.json missing 'package'"
+
+        # Tap first if specified + not already tapped
+        if tap:
+            tapped = subprocess.run(
+                ["brew", "tap"], capture_output=True, text=True, check=False,
+            ).stdout
+            if tap not in tapped.split():
+                print(f"  → brew tap {tap}")
+                subprocess.run(["brew", "tap", tap], check=True)
+
+        # Check if already installed
+        installed = subprocess.run(
+            ["brew", "list", "--formula", package],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False,
+        )
+        if installed.returncode == 0:
+            print(f"  → {package} already installed via brew (skipping install)")
+        else:
+            print(f"  → brew install {package}")
+            subprocess.run(["brew", "install", package], check=True)
+
+        # Post-install hooks (e.g. `rtk init -g`)
+        for cmd in meta.get("post_install") or []:
+            if not isinstance(cmd, list) or not cmd:
+                continue
+            if shutil.which(cmd[0]) is None:
+                print(
+                    f"  ! {item.name}: post_install '{cmd[0]}' not on PATH. "
+                    f"Open a new shell and run: {' '.join(cmd)}",
+                    file=sys.stderr,
+                )
+                continue
+            print(f"  → post_install: {' '.join(cmd)}")
+            subprocess.run(cmd, check=True)
+
+        record_install(item.kind, item.name, None)
+
+        msg = meta.get("post_install_message")
+        if msg:
+            print(f"  ℹ  {item.name}:\n{msg}")
+
+        return f"installed tool {item.name} via brew ({package})"
+
+    return f"skipped tool {item.name}: unknown type '{ttype}'"
 
 
 # ---------------------- hook injection ----------------------
@@ -539,6 +624,13 @@ def install_item(item: Item, target_root: Path) -> str:
 
     if item.kind == "mcps":
         result = install_mcp(item, level)
+        md = inject_claude_md(item, level)
+        if md:
+            print(f"  ↳ {md}")
+        return result
+
+    if item.kind == "tools":
+        result = install_tool(item)
         md = inject_claude_md(item, level)
         if md:
             print(f"  ↳ {md}")

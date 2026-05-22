@@ -165,6 +165,7 @@ All agents follow the same pattern: a detailed `description` so Claude Code's au
 | `docker-runner` | haiku-4-5 | Executes docker / docker compose commands (build, run, exec, logs, ps, compose up/down/restart/logs). Returns concise summary — image tag/size for builds, container state for ps, error chain for failures. Refuses destructive ops (rm/rmi/volume rm/prune/push/down -v) without explicit confirmation. |
 | `frontend-builder` | haiku-4-5 | Builds frontend / web apps — npm/pnpm/yarn build, vite/next/astro/nuxt/tsc -b. Returns success + bundle size + top chunks; or tight error chain for failures. Never runs dev server, never modifies config. |
 | `gh-runner` | haiku-4-5 | Read-only GitHub CLI (`gh`) inspection — PRs, issues, repos, releases, workflow runs, checks, comments, search. Returns tight summaries (PR table, issue header + body, failed CI step + error chain). Refuses any mutation (`gh pr create/merge/close`, `gh issue create`, `gh workflow run`, `gh secret set`, POST/PATCH/DELETE API calls). |
+| `email-inspector` | haiku-4-5 | Read-only email triage via Gmail / Outlook / IMAP MCPs — filter inbox (Gmail-style operators: `from:`, `subject:`, `label:`, `is:unread`, `newer_than:`), summarize results, returns VERBATIM error/alarm text for CloudWatch / PagerDuty / Sentry / GitHub notification bodies. Refuses send / archive / delete / label changes. Pairs with `incident-responder` (hands off the verbatim alarm reason for live investigation). |
 | `e2e-scenario-runner` | haiku-4-5 | Executes generic multi-step end-to-end scenarios — setup via MCPs (Atlassian / Slack / etc.), trigger Lambdas / HTTP endpoints, poll DDB / Postgres / SQS / Step Functions for downstream effects, scan CloudWatch logs for errors. Returns structured BLOCK/HIGH/MEDIUM/INFO report per step with evidence (status, latency, log excerpt, file:line root-cause hint). Stops on first BLOCK by default. **Never attempts fixes** — that's the main session's job after reading the report. No hardcoded service names — user describes the scenario. |
 
 #### 1.2 AWS
@@ -184,6 +185,9 @@ All agents follow the same pattern: a detailed `description` so Claude Code's au
 | `terraform-reviewer` | sonnet-4-6 | Reviews Terraform code and plan output for security, cost, IAM scope, operational risks. Read-only. |
 | `cloudformation-deployer` | haiku-4-5 | Executes CloudFormation via change sets. Validates, describes, deploys after confirmation. |
 | `cloudformation-reviewer` | sonnet-4-6 | Reviews CloudFormation templates and change sets for security and operational risks. Read-only. |
+| `aws-events-scheduler` | haiku-4-5 | Inspects + (with confirmation) modifies EventBridge rules + Scheduler schedules — list, describe, put-rule, put-targets, create-schedule. Refuses writes without explicit "yes update/delete/disable" confirmation. Flags Terraform-managed rules and recommends IaC change. |
+| `dynamodb-mutator` | sonnet-4-6 | DynamoDB WRITES (put-item, update-item, delete-item, batch-write, transact-write). Confirmation gate enforced — refuses without explicit "yes delete/write" in the prompt. Captures BEFORE-snapshot, returns ALL_OLD for rollback. Prod-pattern tables (`*-prod-*`) need extra "prod confirmed". Closes the `subprocess.run([... 'dynamodb', 'delete-item' ...])` heredoc-bypass loophole. |
+| `secrets-fetcher` | haiku-4-5 | AWS Secrets Manager READ — returns metadata only (ARN, last-rotated, KMS key, JSON top-level keys), NEVER the secret value. Refuses writes (create/update/delete/rotate). If caller needs the value to execute something, emits a copy-paste shell snippet for the user's own terminal rather than executing it. |
 | `aws-lambda-deployer` | haiku-4-5 | Executes Lambda code-deploys, invokes, and smoke tests (`aws lambda update-function-code`, `aws lambda invoke`, `make deploy-lambda*`, `make test-lambdas`). Returns per-function status + S3 upload + ARN updates; groups identical failures across N functions; surfaces well-known causes (KMS/Decrypt, ResourceConflict Pending, RequestEntityTooLarge, ImportError after build). Refuses config changes (`update-function-configuration`, `publish-version`, `put-concurrency`) and deletes without explicit confirmation. |
 
 #### 1.3 Databases (non-AWS)
@@ -223,6 +227,14 @@ All agents follow the same pattern: a detailed `description` so Claude Code's au
 |---|---|
 | brunofaust-python-style | Modern Python 3.14+ coding standards for async-first, type-safe production code. |
 | alembic-migration | Generate Alembic migrations following busydone patterns — naming, backfill safety, merge resolution, ENUM handling, asyncpg query syntax. Anti-patterns table for common mistakes. |
+
+#### 2.5 Generic (cross-cutting)
+
+| Skill | Description |
+|---|---|
+| adversarial-verification | Evidence-first verification discipline. 5-step gate (IDENTIFY/RUN/READ/VERIFY/CLAIM) before claiming work complete. Forbids hedging language until evidence is quoted. Includes revert-and-rerun regression check + try-to-break failure probes. |
+| self-rationalization-guard | Behavioral guard — detects 7 execution-avoidance patterns (explaining instead of executing, restating constraints, pre-emptive surrender, spirit-vs-letter dodge, retroactive scope shrink, false-equivalence substitution, authority deflection) and forces redirect to action. |
+| subagent-prompting | 10-point dispatch-prompt checklist for high-quality Agent/Task tool calls. Subagent has zero memory of parent session — inline every input. Includes return-status enum (DONE / DONE_WITH_CONCERNS / NEEDS_CONTEXT / BLOCKED / OVER_BUDGET) + parallel-dispatch independence test. |
 
 #### 2.2 Frontend
 
@@ -312,6 +324,36 @@ Installed MCPs:
 | `context7` | `@upstash/context7-mcp` | [upstash/context7](https://github.com/upstash/context7) | Fresh library docs on demand — resolves library IDs, returns current API/usage snippets. |
 | `playwright` | `@playwright/mcp` | [microsoft/playwright-mcp](https://github.com/microsoft/playwright-mcp) | Browser automation — navigate, click, fill, screenshot, evaluate JS. |
 | `postgres` | `@modelcontextprotocol/server-postgres` | [mcp/server-postgres](https://github.com/modelcontextprotocol/servers/tree/main/src/postgres) | Read-only SQL against a Postgres DB. **Edit connection URL after install** (see `post_install_message`). |
+
+### 5. Tools
+
+CLI tools installed at the OS level (not into `~/.claude/`). Each tool lives at `coding/tools/<name>/tool.json`. Currently only `type: brew` (Homebrew) is supported.
+
+Schema:
+```json
+{
+  "name": "rtk",
+  "github": "...",
+  "type": "brew",
+  "package": "rtk",
+  "tap": "rtk-ai/rtk",
+  "post_install": [["rtk", "init", "-g"]],
+  "post_install_message": "..."
+}
+```
+
+Installer:
+- Checks `brew` on PATH (errors with `https://brew.sh/` link if missing)
+- `brew tap <tap>` (only if not already tapped)
+- `brew install <package>` (skipped if already installed)
+- Runs each `post_install` command (e.g. `rtk init -g`)
+- Injects optional `claude_md.md` into `~/.claude/CLAUDE.md` or `./CLAUDE.md` (per `--user` / `--project`)
+
+Installed tools:
+
+| Tool | Source | Install path | Purpose |
+|---|---|---|---|
+| `rtk` | [rtk-ai/rtk](https://github.com/rtk-ai/rtk) | `brew install rtk` + `rtk init -g` | Rust Token Killer — wraps `git`, `grep`, `cat`, `find`, `ls`, `aws`, `make`, `terraform`, `pytest`, `gh`, `npm`, `eslint`, `playwright`, `psql`, `wc` to cut output token cost 60-90%. Ships `rtk discover --all --since 30` to find missed adoption. |
 
 ## Model strategy
 

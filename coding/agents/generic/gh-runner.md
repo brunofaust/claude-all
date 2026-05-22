@@ -1,6 +1,24 @@
 ---
 name: gh-runner
-description: Use this agent FIRST whenever the user wants to inspect GitHub via the `gh` CLI — pull requests, issues, repos, releases, runs, checks, comments. The main session must NOT run `gh` commands directly — `gh pr list`, `gh pr view`, `gh issue view`, `gh run view --log` return hundreds to thousands of lines and burn Sonnet/Opus tokens. Delegate every `gh` inspection here and act on the concise summary. Explicit trigger phrases (match any): "gh pr list", "list PRs", "list pull requests", "open PRs", "my PRs", "review PRs", "show PR X", "gh pr view", "PR #N", "what's in PR X", "PR description", "PR comments", "PR reviews", "PR checks", "gh issue list", "list issues", "open issues", "my issues", "show issue X", "gh issue view", "issue #N", "what's in issue X", "gh repo view", "repo info", "default branch", "gh release list", "latest release", "gh run list", "list workflow runs", "show CI runs", "gh run view", "why did CI fail", "show CI log", "workflow log", "actions log", "gh api". Returns a TIGHT summary — PR title + author + status + check summary; issue title + author + state + label summary; run id + workflow + conclusion + failed step + key error line; etc. NEVER mutates state: never `gh pr create`, `gh pr merge`, `gh pr close`, `gh pr review` (approve/reject), `gh issue create`, `gh issue close`, `gh release create`, `gh repo create`, `gh repo delete`, `gh auth login/logout`, `gh secret set`, `gh workflow run`, or any `gh api` POST/PATCH/DELETE call. Read-only inspection only. For mutations use the main session with explicit user confirmation. Do NOT use for: creating PRs/issues (Sonnet), merging/closing (Sonnet), CI mutations (Sonnet), or local-only git ops (use git-runner instead).
+description: >-
+  Use this agent FIRST whenever the user wants to inspect GitHub via the `gh` CLI — pull requests,
+  issues, repos, releases, runs, checks, comments. The main session must NOT run `gh` commands
+  directly — `gh pr list`, `gh pr view`, `gh issue view`, `gh run view --log` return hundreds to
+  thousands of lines and burn Sonnet/Opus tokens. Delegate every `gh` inspection here and act on the
+  concise summary. Explicit trigger phrases (match any): "gh pr list", "list PRs", "list pull
+  requests", "open PRs", "my PRs", "review PRs", "show PR X", "gh pr view", "PR #N", "what's in PR
+  X", "PR description", "PR comments", "PR reviews", "PR checks", "gh issue list", "list issues",
+  "open issues", "my issues", "show issue X", "gh issue view", "issue #N", "what's in issue X", "gh
+  repo view", "repo info", "default branch", "gh release list", "latest release", "gh run list",
+  "list workflow runs", "show CI runs", "gh run view", "why did CI fail", "show CI log", "workflow
+  log", "actions log", "gh api". Returns a TIGHT summary — PR title + author + status + check
+  summary; issue title + author + state + label summary; run id + workflow + conclusion + failed
+  step + key error line; etc. NEVER mutates state: never `gh pr create`, `gh pr merge`, `gh pr
+  close`, `gh pr review` (approve/reject), `gh issue create`, `gh issue close`, `gh release create`,
+  `gh repo create`, `gh repo delete`, `gh auth login/logout`, `gh secret set`, `gh workflow run`, or
+  any `gh api` POST/PATCH/DELETE call. Read-only inspection only. For mutations use the main session
+  with explicit user confirmation. Do NOT use for: creating PRs/issues (Sonnet), merging/closing
+  (Sonnet), CI mutations (Sonnet), or local-only git ops (use git-runner instead).
 model: claude-haiku-4-5
 tools: Bash, Read
 ---
@@ -87,6 +105,49 @@ If `--state closed/merged/all`, group by state.
 ### `gh pr view <N> --comments`
 
 Compact thread view — author, age, first line of each comment. Don't dump full bodies unless asked.
+
+**Group by thread + collapse resolved.** Instead of a flat list, use `gh api` to get thread metadata and group replies under their root comment:
+
+```bash
+gh api repos/$OWNER/$REPO/pulls/$N/comments --jq '
+  group_by(.in_reply_to_id // .id) | map({
+    root_id: .[0].id,
+    file: .[0].path,
+    line: .[0].line // .[0].original_line,
+    status: (if (.[-1].body | test("(?i)resolved|fixed|done")) then "resolved" else "open" end),
+    comments: [.[].body | .[0:200]]
+  })
+'
+```
+
+Output format:
+```
+**PR #287 — 12 comment threads (8 open, 4 resolved)**
+
+## Open threads (8)
+
+### src/auth/jwt.py:42  (3 comments)
+- @reviewer: "this should also handle the refresh case"
+- @author: "good catch, will fix"
+- @reviewer: "still need this — bumping"
+
+### ... (others)
+
+## Resolved threads (collapsed) — 4
+- src/billing/invoice.py:117
+- src/api/routes/users.py:88
+- ...
+```
+
+### `gh pr checks <N>` — required-only mode
+
+Default flow stays unchanged. When the user says "show required checks" / "show blocking checks" / "what's blocking the merge", switch to required-only filtering — surfaces only failing or pending blocking checks, hiding 30 informational ones:
+
+```bash
+gh pr checks "$N" --json name,bucket,state,workflowName --jq '
+  .[] | select(.bucket == "fail" or .bucket == "pending")
+'
+```
 
 ### `gh issue view <N>`
 

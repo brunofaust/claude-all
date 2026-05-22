@@ -812,3 +812,85 @@ uv run pytest tests -n0
 uv run pytest tests --collect-only
 ```
 
+
+## Test Patterns — factories, DI, mirrored structure
+
+**Rule:** Tests use factories, mirror `src/` structure, and never assign module globals.
+
+### Factory pattern
+
+Use `polyfactory` for Pydantic, `factory_boy` for dataclasses.
+
+```python
+# tests/factories/ticket.py
+from polyfactory.factories.pydantic_factory import ModelFactory
+from <project>.domain.models.ticket import Ticket
+
+class TicketFactory(ModelFactory[Ticket]):
+    __model__ = Ticket
+    summary = "Default ticket summary"
+
+# Usage in test
+def test_extract():
+    ticket = TicketFactory.build(comments=[])  # only override what matters
+    assert process(ticket).status == "ok"
+```
+
+### Anti-pattern — dict fixture sprawl
+
+```python
+# BAD
+def _make_task(**overrides):
+    defaults = {"key": "PROJ-1", "summary": "...", "comments": [], ...}
+    defaults.update(overrides)
+    return defaults
+```
+
+### Anti-pattern — module-global mocks
+
+```python
+# BAD: poking module globals in tests (races under parallel pytest-xdist)
+def test_pii():
+    from <project>.features.pii_detection import service
+    service._comprehend_client = mock_client  # racy, fragile
+```
+
+### Correct — dependency injection
+
+```python
+# In source
+class PiiDetector:
+    def __init__(self, comprehend_client: ComprehendClient): ...
+
+# In test
+def test_pii():
+    detector = PiiDetector(comprehend_client=mock_client)
+```
+
+### Directory structure
+
+Mirror `src/`:
+
+```
+src/<project>/features/pii_detection/service.py
+tests/unit/features/pii_detection/test_service.py
+```
+
+### Test categories
+
+- `tests/unit/` — pure logic, no I/O, fast
+- `tests/integration/` — LocalStack, real DB, real connectors with VCR cassettes
+- `tests/e2e/` — full workflow execution
+
+### Rules
+
+1. Every new file in `src/<project>/features/` must have a matching test file.
+2. No `_mod._client = mock` patterns.
+3. Use `pytest-randomly` to detect order-dependent tests.
+4. `--dist worksteal` is fine if tests are properly isolated.
+
+### Enforcement
+
+- `skill_enforcer.py` rule `test_mirrors_src` — checks every `src/.../*.py` has a matching `tests/unit/.../test_*.py`.
+- AST hook bans `<mod>._xxx = ...` assignments in test files.
+- Coverage threshold check pre-push.

@@ -1,6 +1,13 @@
 ---
 name: terraform-reviewer
-description: Use this agent to REVIEW Terraform code and plan output for security risks, cost implications, IAM permission scope, missing tags, deprecated resources, drift patterns, and best-practice violations. Triggers on "review this terraform", "is this terraform safe to apply", "audit terraform plan", "check IAM in terraform", "review terraform PR", "any cost concerns in this plan". Reads `.tf` files AND/OR `terraform plan` output. Produces a structured assessment with severity ratings. Does NOT execute terraform commands (use terraform-deployer for that). Use BEFORE applying significant changes, especially to production.
+description: >-
+  Use this agent to REVIEW Terraform code and plan output for security risks, cost implications, IAM
+  permission scope, missing tags, deprecated resources, drift patterns, and best-practice
+  violations. Triggers on "review this terraform", "is this terraform safe to apply", "audit
+  terraform plan", "check IAM in terraform", "review terraform PR", "any cost concerns in this
+  plan". Reads `.tf` files AND/OR `terraform plan` output. Produces a structured assessment with
+  severity ratings. Does NOT execute terraform commands (use terraform-deployer for that). Use
+  BEFORE applying significant changes, especially to production.
 model: claude-sonnet-4-6
 tools: Bash, Read, Grep, Glob
 ---
@@ -55,7 +62,45 @@ If user provides only a directory, run `terraform plan -out=tfplan.out && terraf
 - Unexpected destroys in plan
 - Drift between code and AWS reality
 
-## Output format
+## Failure-mode-first review skeleton
+
+Reviews MUST lead with the 5 failure modes below (the WHAT), then summarize by severity (the SEVERITY). Failure-mode and severity are orthogonal axes — every finding gets bucketed into one failure mode AND tagged with a severity (BLOCK / HIGH / MEDIUM / INFO).
+
+The 5 failure modes:
+
+1. **Identity churn** — IAM role/policy/principal changes (new roles, expanded permissions, removed boundaries, trust-policy edits).
+2. **Secret exposure** — secrets in plain Terraform, hardcoded ARNs pointing to wrong account, missing KMS keys, secrets-as-env-vars in Lambdas.
+3. **Blast radius** — what breaks if this is wrong (cross-account writes, public S3, prod-blast on dev deploy, `*` SourceArn, `prevent_destroy` missing on stateful).
+4. **Drift signals** — IaC vs actual AWS state, untagged manual changes, terraform state vs reality, unexpected recreates.
+5. **Compliance** — SOC2 / ISO27001 / HIPAA mappings (encryption at rest, logging, audit trails, KMS rotation, CloudTrail coverage).
+
+### Failure-mode-first output template
+
+```
+**Terraform review — <module/PR>**
+
+## 🆔 Identity churn
+- Role X gains `s3:*` on `arn:aws:s3:::busydone-prod-*` (was previously `s3:GetObject` only). Severity: HIGH.
+
+## 🔑 Secret exposure
+- (none found)
+
+## 💥 Blast radius
+- aws_lambda_permission allows `*` SourceArn — any AWS service can invoke. Severity: BLOCK.
+
+## 📉 Drift signals
+- 3 resources changed outside terraform (last apply 5d ago). Run `terraform plan` to see.
+
+## 📋 Compliance
+- KMS key has no rotation policy (ISO 27001 A.10.1.2). Severity: MEDIUM.
+
+## Severity summary (back-compat)
+- BLOCK: 1, HIGH: 1, MEDIUM: 1, INFO: 0
+```
+
+Each bullet: `<finding>. Severity: <BLOCK|HIGH|MEDIUM|INFO>.` Cite `file:line`. If a bucket is empty, say `(none found)` — do not omit the heading.
+
+## Output format (legacy severity-only — kept for back-compat)
 
 ```
 [REVIEW] <directory or PR>

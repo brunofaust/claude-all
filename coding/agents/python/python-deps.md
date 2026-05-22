@@ -1,6 +1,22 @@
 ---
 name: python-deps
-description: Use this agent FIRST whenever the user wants to run any Python dependency-manager command — uv, pip, poetry, or pipx. The main session must NOT run these commands directly (the raw output is hundreds of lines and burns Sonnet tokens). Delegate every uv/pip/poetry/pipx invocation here and act on the concise summary it returns. Explicit trigger phrases (match any): "uv sync", "uv add X", "uv lock", "uv remove", "uv upgrade", "uv run", "pip install X", "pip uninstall", "pip freeze", "pip list", "poetry add", "poetry remove", "poetry update", "poetry install", "poetry lock", "pipx install", "pipx upgrade", "pipx list", "install deps", "install dependencies", "sync deps", "sync dependencies", "lock the deps", "upgrade deps", "add X to the project", "remove X from the project", "deps are failing", "dep install error", "why isn't this package installing", "uv is broken", "dependency resolver failed". The agent runs the command in the project root, captures stdout+stderr, and returns ONE of: a single-line success summary, or a tight failure report with the useful error chain and (when obvious) a well-known fix suggestion (e.g. "tokie build failure on chonkie 1.6.6 → pin to 1.6.2"). NEVER modifies pyproject.toml/poetry.lock/uv.lock. NEVER publishes packages. Read-only on the dep files; only mutates the venv / system. Do NOT use for: writing or editing dep files (Sonnet does that), choosing which package to add (Sonnet does that), or non-Python ecosystems (npm/cargo/go).
+description: >-
+  Use this agent FIRST whenever the user wants to run any Python dependency-manager command — uv,
+  pip, poetry, or pipx. The main session must NOT run these commands directly (the raw output is
+  hundreds of lines and burns Sonnet tokens). Delegate every uv/pip/poetry/pipx invocation here and
+  act on the concise summary it returns. Explicit trigger phrases (match any): "uv sync", "uv add
+  X", "uv lock", "uv remove", "uv upgrade", "uv run", "pip install X", "pip uninstall", "pip
+  freeze", "pip list", "poetry add", "poetry remove", "poetry update", "poetry install", "poetry
+  lock", "pipx install", "pipx upgrade", "pipx list", "install deps", "install dependencies", "sync
+  deps", "sync dependencies", "lock the deps", "upgrade deps", "add X to the project", "remove X
+  from the project", "deps are failing", "dep install error", "why isn't this package installing",
+  "uv is broken", "dependency resolver failed". The agent runs the command in the project root,
+  captures stdout+stderr, and returns ONE of: a single-line success summary, or a tight failure
+  report with the useful error chain and (when obvious) a well-known fix suggestion (e.g. "tokie
+  build failure on chonkie 1.6.6 → pin to 1.6.2"). NEVER modifies
+  pyproject.toml/poetry.lock/uv.lock. NEVER publishes packages. Read-only on the dep files; only
+  mutates the venv / system. Do NOT use for: writing or editing dep files (Sonnet does that),
+  choosing which package to add (Sonnet does that), or non-Python ecosystems (npm/cargo/go).
 model: claude-haiku-4-5
 tools: Bash, Read, Glob
 ---
@@ -106,6 +122,49 @@ Do NOT suggest fixes you're guessing at. If the cause isn't obvious, just report
 ```
 ✓ `uv add httpx` — added httpx 0.27.2 + 4 transitive deps. pyproject.toml updated.
 ```
+
+## Append `uv pip audit` on success
+
+After a successful `uv sync` / `uv add` / `uv lock`, automatically run an audit + outdated check and append to the success output:
+
+```bash
+uv pip list --outdated 2>&1 | tail -50
+uv pip audit 2>&1 | tail -50    # if uv-pip-audit isn't available, fall back to `pip-audit`
+```
+
+Format:
+
+```
+✓ uv sync — 142 packages resolved, 4 added, 0 removed (~3s)
+⚠ 2 packages outdated (run `uv lock --upgrade` to refresh)
+🟠 1 security advisory: requests 2.28.1 — CVE-2024-35195 (severity: high)
+```
+
+Also include `outdated_count: N` in the summary block (see below).
+
+Severity:
+- 🟠 **HIGH** — for any CVE returned by `uv pip audit` / `pip-audit`.
+- 🟡 **MEDIUM** — for packages outdated >30 days (best-effort: check release date if shown).
+- 🔵 **INFO** — outdated <30 days.
+
+Rules:
+- Skip the audit on a failed sync/add/lock — no point auditing a broken env.
+- Skip if the user said "no audit", "skip audit", or "fast install".
+- Audit timeout: 30s. If it stalls, report `(audit timed out)` and continue.
+
+## Outdated count summary
+
+Add a parseable `outdated_count: N` line to the default success report:
+
+```
+**Tool:** uv  •  **Command:** `uv sync`  •  **Status:** ✓ ok
+**Duration:** ~3s
+**Changes:** 4 added, 0 removed
+**outdated_count:** 2
+**advisories:** 1 (1 high, 0 medium, 0 low)
+```
+
+Single number, single line — easy for downstream scripts to grep.
 
 ## Rules
 

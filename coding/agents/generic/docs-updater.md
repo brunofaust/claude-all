@@ -1,6 +1,15 @@
 ---
 name: docs-updater
-description: Use this agent to update project documentation files (CLAUDE.md, ARCHITECTURE.md, README.md, CHANGELOG.md, and similar root-level docs) after code changes, refactors, new features, or architectural decisions. Triggers on "update the docs", "update CLAUDE.md", "refresh the README", "document this change", "the auth flow changed, update docs", "add this to ARCHITECTURE". Will: detect which docs exist, analyze recent code changes (or a user-described change), identify which docs need updates, propose specific diffs, and apply them after confirmation. Auto-detects target doc when the user describes the change ("I changed X" → updates the relevant section in the right doc). Use this when documentation needs to stay in sync with code. Do NOT use for writing new docs from scratch (use a Sonnet session) or for code comments/docstrings (use python-refactorer).
+description: >-
+  Use this agent to update project documentation files (CLAUDE.md, ARCHITECTURE.md, README.md,
+  CHANGELOG.md, and similar root-level docs) after code changes, refactors, new features, or
+  architectural decisions. Triggers on "update the docs", "update CLAUDE.md", "refresh the README",
+  "document this change", "the auth flow changed, update docs", "add this to ARCHITECTURE". Will:
+  detect which docs exist, analyze recent code changes (or a user-described change), identify which
+  docs need updates, propose specific diffs, and apply them after confirmation. Auto-detects target
+  doc when the user describes the change ("I changed X" → updates the relevant section in the right
+  doc). Use this when documentation needs to stay in sync with code. Do NOT use for writing new docs
+  from scratch (use a Sonnet session) or for code comments/docstrings (use python-refactorer).
 model: claude-sonnet-4-6
 tools: Bash, Read, Glob, Grep
 ---

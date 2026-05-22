@@ -35,6 +35,49 @@ This skill encodes the "what to do" and the "why" — for execution of `terrafor
 
 Every async-invocable Lambda (SQS, SNS, EventBridge, S3) **must be idempotent**. AWS re-invokes on failure. Idempotency keys → DynamoDB conditional writes, or the AWS Lambda Powertools idempotency utility.
 
+Concrete Powertools recipe (DynamoDB-backed persistence store):
+
+```python
+from aws_lambda_powertools.utilities.idempotency import (
+    DynamoDBPersistenceLayer,
+    idempotent,
+    IdempotencyConfig,
+)
+
+persistence_layer = DynamoDBPersistenceLayer(
+    table_name="idempotency-store",
+)
+
+config = IdempotencyConfig(
+    event_key_jmespath="ticket_key",   # uniquely identifies the request
+    expires_after_seconds=3600,         # 1h dedup window (also DDB TTL)
+    raise_on_no_idempotency_key=True,   # fail loud on missing key
+)
+
+@idempotent(config=config, persistence_store=persistence_layer)
+def handler(event, context):
+    # business logic — guaranteed once-per-key within the TTL window
+    ...
+```
+
+The idempotency table should have:
+- PK `id` (string), `expiration` attribute as DynamoDB TTL → free auto-cleanup.
+- On-demand billing (writes are spiky, one per invocation).
+
+**JMESPath decision matrix** — which key uniquely identifies the request:
+
+| Event shape | JMESPath | Why |
+|---|---|---|
+| API Gateway sync request with idempotency-key header | `headers."Idempotency-Key"` | Client-supplied, RFC-standard idempotency |
+| SQS message with explicit business key | `Records[0].body.<field>` | Use the business identifier (order_id, ticket_key) |
+| EventBridge event | `detail.<unique_field>` | The domain event ID, not `id` (which is the bus event ID, fine too) |
+| S3 ObjectCreated | `Records[0].s3.object.key` + `Records[0].s3.object.eTag` | Key alone repeats on overwrite — pair with ETag |
+| No natural key, full-event hash acceptable | omit `event_key_jmespath`, set `use_local_cache=False` | Powertools hashes the entire event |
+| Multiple fields jointly unique | `[customer_id, order_id]` | JMESPath returns a list; Powertools hashes it |
+
+If `raise_on_no_idempotency_key=True` and the JMESPath returns `None`, the
+Lambda fails — preferable to silently dedup nothing.
+
 ### Error handling per invocation type
 
 | Invoke mode | Retry behaviour | DLQ |
@@ -255,6 +298,22 @@ Only REST APIs have built-in caching. For HTTP APIs: cache at CloudFront in fron
 ## 9. Cost gotchas (the items that surprise you on the bill)
 
 1. **NAT Gateway** — $0.045/hour ($32/mo) per NAT + $0.045/GB processed. **VPC endpoints** (interface for AWS services, gateway for S3/DynamoDB) bypass NAT entirely. Use them for any high-traffic AWS API call.
+
+   **VPC endpoint vs NAT Gateway decision table:**
+
+   | Use case | NAT Gateway | VPC Endpoint (Interface) | VPC Endpoint (Gateway) |
+   |---|---|---|---|
+   | Lambda → S3 | $0.045/hr + $0.045/GB | n/a | **Free** — use this |
+   | Lambda → DynamoDB | $0.045/hr + $0.045/GB | n/a | **Free** — use this |
+   | Lambda → Secrets Manager | $0.045/hr + $0.045/GB | $0.01/hr per AZ + $0.01/GB | n/a |
+   | Lambda → Lambda (cross-region) | $0.045/hr + $0.045/GB | $0.01/hr per AZ + $0.01/GB | n/a |
+   | Lambda → public internet | NAT GW required | n/a | n/a |
+   | Lambda outside VPC | nothing | not applicable | not applicable |
+
+   **Rule:** Default to Lambda OUTSIDE the VPC. If it MUST be in a VPC (e.g.
+   talking to RDS in a private subnet), add S3 + DynamoDB Gateway endpoints
+   (free) plus Interface endpoints for any high-traffic AWS service (Secrets
+   Manager, KMS, SQS, SNS) — cheaper than NAT once traffic > ~10 GB/month.
 2. **CloudWatch Logs ingest** — $0.50/GB. Verbose Lambda logs (every event JSON dump) add up. Set `LOG_LEVEL=INFO` minimum in prod; ship debug to S3 if needed for retention.
 3. **CloudWatch Logs storage** — $0.03/GB-month. Set log group retention; default is "Never expire".
 4. **Lambda < 100ms** — billed in 1ms increments since 2020. Still, cold-start + init is a fixed cost. Don't optimize sub-ms; optimize architectural call patterns.
