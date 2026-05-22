@@ -23,8 +23,8 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: install pre-commit
-        run: pip install pre-commit
+      - name: install prek
+        run: pip install prek
 
       - name: run prek hooks
-        run: pre-commit run --all-files --config prek.toml
+        run: prek run --all-files
