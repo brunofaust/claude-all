@@ -1,9 +1,6 @@
----
-title: Decouple State Management from UI
-impact: MEDIUM
-impactDescription: enables swapping state implementations without changing UI
-tags: composition, state, architecture
----
+______________________________________________________________________
+
+## title: Decouple State Management from UI impact: MEDIUM impactDescription: enables swapping state implementations without changing UI tags: composition, state, architecture
 
 ## Decouple State Management from UI
 

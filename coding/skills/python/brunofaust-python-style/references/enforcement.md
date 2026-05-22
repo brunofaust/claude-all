@@ -4,26 +4,26 @@ Every rule in this skill has an enforcement mechanism. If a rule has no enforcem
 
 ## Matrix
 
-| Rule | Enforced by | Bypass |
-|---|---|---|
-| Pydantic on boundaries | mypy strict + `skill_enforcer.py` rule `no_dict_any_in_signatures` | per-file allow list |
-| Frozen dataclasses internally | `skill_enforcer.py` rule `dataclass_must_be_frozen` | `# skill-allow: mutable-dataclass` comment |
-| No raw boto3 outside aws_resources/ | ruff `banned-api` (TID251) | `[per-file-ignores]` in pyproject.toml |
-| No raw httpx outside integrations/ | ruff `banned-api` (TID251) | `[per-file-ignores]` in pyproject.toml |
-| No silent except | ruff `BLE001`, `skill_enforcer.py` rule `no_debug_in_except` | `# noqa: BLE001` with explanation |
-| Public names only (`__all__` not `_`) | vulture + `skill_enforcer.py` rule `no_module_underscore_names` | add to `__all__` |
-| Thin lambda handlers (<20 stmts) | `skill_enforcer.py` rule `thin_lambda_handlers` | none — split into feature service |
-| Dockerfile per resource | `skill_enforcer.py` rule `resource_mandatory_files` | none |
-| CLAUDE.md per resource | `skill_enforcer.py` rule `resource_mandatory_files` | none |
-| Layer dependency direction | `import-linter` | refactor required |
-| CHANGELOG updated | `precommit_changelog.sh` + GitHub Action | `skip-changelog` label |
-| Docs updated with code | `precommit_docs.sh` + GitHub Action | `skip-docs` label |
-| Resource CLAUDE.md updated | `precommit_resource_docs.sh` + GitHub Action | none |
-| Conventional commits | commitizen `commit-msg` hook | none |
-| Docstring coverage ≥ 90% | interrogate | raise the floor |
-| No bare `# type: ignore` | `python-check-blanket-type-ignore` | use specific code |
-| No bare `# noqa` | ruff `RUF100` | use specific code |
-| Test mirrors src structure | `skill_enforcer.py` rule `test_mirrors_src` | none |
+| Rule                                  | Enforced by                                                        | Bypass                                     |
+| ------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------ |
+| Pydantic on boundaries                | mypy strict + `skill_enforcer.py` rule `no_dict_any_in_signatures` | per-file allow list                        |
+| Frozen dataclasses internally         | `skill_enforcer.py` rule `dataclass_must_be_frozen`                | `# skill-allow: mutable-dataclass` comment |
+| No raw boto3 outside aws_resources/   | ruff `banned-api` (TID251)                                         | `[per-file-ignores]` in pyproject.toml     |
+| No raw httpx outside integrations/    | ruff `banned-api` (TID251)                                         | `[per-file-ignores]` in pyproject.toml     |
+| No silent except                      | ruff `BLE001`, `skill_enforcer.py` rule `no_debug_in_except`       | `# noqa: BLE001` with explanation          |
+| Public names only (`__all__` not `_`) | vulture + `skill_enforcer.py` rule `no_module_underscore_names`    | add to `__all__`                           |
+| Thin lambda handlers (\<20 stmts)     | `skill_enforcer.py` rule `thin_lambda_handlers`                    | none — split into feature service          |
+| Dockerfile per resource               | `skill_enforcer.py` rule `resource_mandatory_files`                | none                                       |
+| CLAUDE.md per resource                | `skill_enforcer.py` rule `resource_mandatory_files`                | none                                       |
+| Layer dependency direction            | `import-linter`                                                    | refactor required                          |
+| CHANGELOG updated                     | `precommit_changelog.sh` + GitHub Action                           | `skip-changelog` label                     |
+| Docs updated with code                | `precommit_docs.sh` + GitHub Action                                | `skip-docs` label                          |
+| Resource CLAUDE.md updated            | `precommit_resource_docs.sh` + GitHub Action                       | none                                       |
+| Conventional commits                  | commitizen `commit-msg` hook                                       | none                                       |
+| Docstring coverage ≥ 90%              | interrogate                                                        | raise the floor                            |
+| No bare `# type: ignore`              | `python-check-blanket-type-ignore`                                 | use specific code                          |
+| No bare `# noqa`                      | ruff `RUF100`                                                      | use specific code                          |
+| Test mirrors src structure            | `skill_enforcer.py` rule `test_mirrors_src`                        | none                                       |
 
 **Single enforcement tool:** `scripts/skill_enforcer.py` — AST-based, config-driven via `skill_rules.toml`. One hook in `prek.toml`, all rules toggleable.
 
@@ -31,6 +31,7 @@ Every rule in this skill has an enforcement mechanism. If a rule has no enforcem
 
 ```python
 import ast, sys, pathlib, tomllib
+
 
 class SkillChecker(ast.NodeVisitor):
     def __init__(self, path, rules):
@@ -43,19 +44,31 @@ class SkillChecker(ast.NodeVisitor):
         if "integrations/" not in str(self.path):
             for arg in node.args.args:
                 if self._is_dict_any(arg.annotation):
-                    self.errors.append(f"{self.path}:{node.lineno} dict[str, Any] in signature")
+                    self.errors.append(
+                        f"{self.path}:{node.lineno} dict[str, Any] in signature"
+                    )
         # Rule: no business logic in lambda handlers
         if "aws_resources/lambdas/" in str(self.path) and node.name == "lambda_handler":
             stmt_count = sum(1 for n in ast.walk(node) if isinstance(n, ast.stmt))
-            if stmt_count > self.rules.get("thin_lambda_handlers", {}).get("max_statements", 20):
-                self.errors.append(f"{self.path}:{node.lineno} handler too thick ({stmt_count} stmts)")
+            if stmt_count > self.rules.get("thin_lambda_handlers", {}).get(
+                "max_statements", 20
+            ):
+                self.errors.append(
+                    f"{self.path}:{node.lineno} handler too thick ({stmt_count} stmts)"
+                )
         self.generic_visit(node)
 
     def visit_Assign(self, node):
         # Rule: ban module-level underscore-prefixed names
         for t in node.targets:
-            if isinstance(t, ast.Name) and t.id.startswith("_") and not t.id.startswith("__"):
-                self.errors.append(f"{self.path}:{node.lineno} module-level _{t.id} — use __all__")
+            if (
+                isinstance(t, ast.Name)
+                and t.id.startswith("_")
+                and not t.id.startswith("__")
+            ):
+                self.errors.append(
+                    f"{self.path}:{node.lineno} module-level _{t.id} — use __all__"
+                )
 
     def visit_ImportFrom(self, node):
         # Rule: no raw SDK imports outside owner folders
@@ -63,14 +76,23 @@ class SkillChecker(ast.NodeVisitor):
         for sdk, owner_glob in banned.items():
             if sdk == "enabled":
                 continue
-            if node.module and node.module.startswith(sdk) and owner_glob not in str(self.path):
-                self.errors.append(f"{self.path}:{node.lineno} import {sdk} only allowed in {owner_glob}")
+            if (
+                node.module
+                and node.module.startswith(sdk)
+                and owner_glob not in str(self.path)
+            ):
+                self.errors.append(
+                    f"{self.path}:{node.lineno} import {sdk} only allowed in {owner_glob}"
+                )
 
     def visit_ExceptHandler(self, node):
         # Rule: no silent except (log.debug inside except = swallowing)
         for n in ast.walk(node):
             if isinstance(n, ast.Call) and self._is_log_debug(n):
-                self.errors.append(f"{self.path}:{node.lineno} log.debug inside except — silent swallow")
+                self.errors.append(
+                    f"{self.path}:{node.lineno} log.debug inside except — silent swallow"
+                )
+
 
 def main():
     rules = tomllib.loads(pathlib.Path("skill_rules.toml").read_text())

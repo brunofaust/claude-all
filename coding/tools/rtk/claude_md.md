@@ -6,25 +6,25 @@
 
 ### Mandatory substitutions
 
-| Native command | Use this instead | Why |
-|---|---|---|
-| `git log ...` | `rtk git log ...` | huge diff/log output → summarized |
-| `git diff ...` | `rtk git diff ...` | same |
-| `git blame ...` | `rtk git blame ...` | same |
-| `grep -n ...` / `grep -rn ...` | `rtk grep ...` | grep output collapsed |
-| `cat <file>` | `rtk read <file>` (or use the `Read` tool) | file content with smart truncation |
-| `find <path> ...` | `rtk find ...` (or use the `Glob` tool) | trimmed result set |
-| `ls <path>` | `rtk ls ...` (or use the `Glob` tool) | terse listing |
-| `wc -l <file>` | `rtk wc -l <file>` | trivial passthrough but accounted |
-| `aws ...` (any subcommand) | `rtk aws ...` | AWS JSON responses are massive |
-| `make <target>` | `rtk make <target>` | wraps long build output |
-| `terraform <cmd>` | `rtk terraform <cmd>` | massive plan / apply logs |
-| `pytest ...` | `rtk pytest ...` | tracebacks + coverage compressed |
-| `gh pr ...` / `gh issue ...` | `rtk gh ...` | PR / issue content trimmed |
-| `npm run <script>` | `rtk npm run ...` | build/dev output trimmed |
-| `npx eslint ...` | `rtk lint ...` | lint output grouped |
-| `npx playwright ...` | `rtk playwright ...` | browser test output trimmed |
-| `psql ...` / `PGPASSWORD=... psql ...` | `rtk psql ...` | rows + plan trimmed |
+| Native command                         | Use this instead                           | Why                                |
+| -------------------------------------- | ------------------------------------------ | ---------------------------------- |
+| `git log ...`                          | `rtk git log ...`                          | huge diff/log output → summarized  |
+| `git diff ...`                         | `rtk git diff ...`                         | same                               |
+| `git blame ...`                        | `rtk git blame ...`                        | same                               |
+| `grep -n ...` / `grep -rn ...`         | `rtk grep ...`                             | grep output collapsed              |
+| `cat <file>`                           | `rtk read <file>` (or use the `Read` tool) | file content with smart truncation |
+| `find <path> ...`                      | `rtk find ...` (or use the `Glob` tool)    | trimmed result set                 |
+| `ls <path>`                            | `rtk ls ...` (or use the `Glob` tool)      | terse listing                      |
+| `wc -l <file>`                         | `rtk wc -l <file>`                         | trivial passthrough but accounted  |
+| `aws ...` (any subcommand)             | `rtk aws ...`                              | AWS JSON responses are massive     |
+| `make <target>`                        | `rtk make <target>`                        | wraps long build output            |
+| `terraform <cmd>`                      | `rtk terraform <cmd>`                      | massive plan / apply logs          |
+| `pytest ...`                           | `rtk pytest ...`                           | tracebacks + coverage compressed   |
+| `gh pr ...` / `gh issue ...`           | `rtk gh ...`                               | PR / issue content trimmed         |
+| `npm run <script>`                     | `rtk npm run ...`                          | build/dev output trimmed           |
+| `npx eslint ...`                       | `rtk lint ...`                             | lint output grouped                |
+| `npx playwright ...`                   | `rtk playwright ...`                       | browser test output trimmed        |
+| `psql ...` / `PGPASSWORD=... psql ...` | `rtk psql ...`                             | rows + plan trimmed                |
 
 ### Anti-patterns (NEVER do this when rtk is installed)
 
@@ -39,9 +39,9 @@
 ### Precedence
 
 1. **Built-in tools first** — `Read`, `Glob`, `Grep` beat any rtk command for filesystem ops.
-2. **Specialized agents second** — `git-runner`, `gh-runner`, `aws-lambda-deployer`, `terraform-deployer`, `test-runner`, `code-quality`, `docker-runner`, `frontend-builder` all internally prefer rtk where it helps.
-3. **rtk wrapper third** — when shelling out is unavoidable, prefix with `rtk`.
-4. **Raw command last** — only when rtk doesn't ship a wrapper for that command.
+1. **Specialized agents second** — `git-runner`, `gh-runner`, `aws-lambda-deployer`, `terraform-deployer`, `test-runner`, `code-quality`, `docker-runner`, `frontend-builder` all internally prefer rtk where it helps.
+1. **rtk wrapper third** — when shelling out is unavoidable, prefix with `rtk`.
+1. **Raw command last** — only when rtk doesn't ship a wrapper for that command.
 
 ### Verifying adoption
 

@@ -1,9 +1,6 @@
----
-title: Do not wrap a simple expression with a primitive result type in useMemo
-impact: LOW-MEDIUM
-impactDescription: wasted computation on every render
-tags: rerender, useMemo, optimization
----
+______________________________________________________________________
+
+## title: Do not wrap a simple expression with a primitive result type in useMemo impact: LOW-MEDIUM impactDescription: wasted computation on every render tags: rerender, useMemo, optimization
 
 ## Do not wrap a simple expression with a primitive result type in useMemo
 

@@ -1,9 +1,6 @@
----
-title: Combine Multiple Array Iterations
-impact: LOW-MEDIUM
-impactDescription: reduces iterations
-tags: javascript, arrays, loops, performance
----
+______________________________________________________________________
+
+## title: Combine Multiple Array Iterations impact: LOW-MEDIUM impactDescription: reduces iterations tags: javascript, arrays, loops, performance
 
 ## Combine Multiple Array Iterations
 

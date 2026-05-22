@@ -18,15 +18,17 @@ class OutputFormatterFactory:
         def decorator(formatter_cls):
             cls._formatters[name] = formatter_cls
             return formatter_cls
+
         return decorator
 
     @classmethod
     def create(cls, name: str) -> Formatter:
         return cls._formatters[name]()
 
+
 @OutputFormatterFactory.register("json")
-class JsonFormatter(Formatter):
-    ...
+class JsonFormatter(Formatter): ...
+
 
 # Simple: Just use a dictionary
 FORMATTERS = {
@@ -34,6 +36,7 @@ FORMATTERS = {
     "csv": CsvFormatter,
     "xml": XmlFormatter,
 }
+
 
 # Simple beats clever
 # Instead of a factory/registry pattern:
@@ -65,11 +68,13 @@ class UserHandler:
         # Database access
         user = await db.execute(
             "INSERT INTO users (email, name) VALUES ($1, $2) RETURNING *",
-            data["email"], data["name"]
+            data["email"],
+            data["name"],
         )
 
         # Response formatting
         return Response({"id": user.id, "email": user.email}, status=201)
+
 
 # GOOD: Separated concerns
 class UserService:
@@ -82,6 +87,7 @@ class UserService:
         # Only business rules here
         user = User(email=data.email, name=data.name)
         return await self._repo.save(user)
+
 
 class UserHandler:
     """HTTP concerns only."""
@@ -132,10 +138,9 @@ Each layer depends only on layers below it:
 # Repository: Data access
 class UserRepository:
     async def get_by_id(self, user_id: str) -> User | None:
-        row = await self._db.fetchrow(
-            "SELECT * FROM users WHERE id = $1", user_id
-        )
+        row = await self._db.fetchrow("SELECT * FROM users WHERE id = $1", user_id)
         return User(**row) if row else None
+
 
 # Service: Business logic
 class UserService:
@@ -147,6 +152,7 @@ class UserService:
         if user is None:
             raise UserNotFoundError(user_id)
         return user
+
 
 # Handler: HTTP concerns
 @app.get("/users/{user_id}")
@@ -168,6 +174,7 @@ class EmailNotificationService(NotificationService):
 
     def notify(self, user: User, message: str) -> None:
         self._smtp.send(user.email, message)
+
 
 # Composition: Flexible and testable
 class NotificationService:
@@ -200,6 +207,7 @@ class NotificationService:
         if "push" in channels and self._push and user.device_token:
             await self._push.send(user.device_token, message)
 
+
 # Easy to test with fakes
 service = NotificationService(
     email_sender=FakeEmailSender(),
@@ -212,7 +220,6 @@ service = NotificationService(
 Wait until you have three instances before abstracting.
 Duplication is often better than premature abstraction.
 
-
 ```python
 # Two similar functions? Don't abstract yet
 def process_orders(orders: Sequence[Order]) -> Sequence[Result]:
@@ -223,6 +230,7 @@ def process_orders(orders: Sequence[Order]) -> Sequence[Result]:
         results.append(result)
     return results
 
+
 def process_returns(returns: Sequence[Return]) -> Sequence[Result]:
     results = []
     for ret in returns:
@@ -230,6 +238,7 @@ def process_returns(returns: Sequence[Return]) -> Sequence[Result]:
         result = process_validated_return(validated)
         results.append(result)
     return results
+
 
 # These look similar, but wait! Are they actually the same?
 # Different validation, different processing, different errors...
@@ -256,6 +265,7 @@ def process_order(order: Order) -> Result:
     # 20 lines of notification...
     pass
 
+
 # Better: Composed from focused functions
 def process_order(order: Order) -> Result:
     """Process a customer order through the complete workflow."""
@@ -273,13 +283,16 @@ Pass dependencies through constructors for testability.
 ```python
 from typing import Protocol
 
+
 class Logger(Protocol):
     def info(self, msg: str, **kwargs) -> None: ...
     def error(self, msg: str, **kwargs) -> None: ...
 
+
 class Cache(Protocol):
     async def get(self, key: str) -> str | None: ...
     async def set(self, key: str, value: str, ttl: int) -> None: ...
+
 
 class UserService:
     """Service with injected dependencies."""
@@ -308,6 +321,7 @@ class UserService:
 
         return user
 
+
 # Production
 service = UserService(
     repository=PostgresUserRepository(db),
@@ -333,6 +347,7 @@ service = UserService(
 def get_user(id: str) -> UserModel:  # SQLAlchemy model
     return db.query(UserModel).get(id)
 
+
 # GOOD: Use response schemas
 @app.get("/users/{id}")
 def get_user(id: str) -> UserResponse:
@@ -349,6 +364,7 @@ def calculate_discount(user_id: str) -> float:
     orders = db.query("SELECT * FROM orders WHERE user_id = ?", user_id)
     # Business logic mixed with data access
 
+
 # GOOD: Repository pattern
 def calculate_discount(user: User, order_history: list[Order]) -> float:
     # Pure business logic, easily testable
@@ -356,4 +372,3 @@ def calculate_discount(user: User, order_history: list[Order]) -> float:
         return 0.15
     return 0.0
 ```
-

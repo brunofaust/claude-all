@@ -187,6 +187,7 @@ tests/unit/features/pii_detection/test_service.py
 ```python
 # integrations/jira/__init__.py
 from .client import JiraClient
+
 __all__ = ["JiraClient"]
 ```
 

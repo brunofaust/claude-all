@@ -1,17 +1,6 @@
----
-name: adversarial-verification
-description: >-
-  Evidence-first verification discipline. Use BEFORE claiming work complete,
-  before opening a PR, after applying a fix, before saying "tests pass" / "it
-  works" / "the bug is fixed". The rule: no success word without a fresh
-  command run quoted verbatim. Tries to BREAK the change instead of confirming
-  it. Pairs with `test-runner` (executor) and `e2e-scenario-runner` (multi-
-  service probe). Synthesized from obra/superpowers `verification-before-
-  completion`, alirezarezvani/claude-skills `adversarial-reviewer`,
-  robertoecf/adversarial-review.
-disable-model-invocation: false
-user-invocable: true
----
+______________________________________________________________________
+
+## name: adversarial-verification description: >- Evidence-first verification discipline. Use BEFORE claiming work complete, before opening a PR, after applying a fix, before saying "tests pass" / "it works" / "the bug is fixed". The rule: no success word without a fresh command run quoted verbatim. Tries to BREAK the change instead of confirming it. Pairs with `test-runner` (executor) and `e2e-scenario-runner` (multi- service probe). Synthesized from obra/superpowers `verification-before-   completion`, alirezarezvani/claude-skills `adversarial-reviewer`, robertoecf/adversarial-review. disable-model-invocation: false user-invocable: true
 
 # Adversarial verification
 
@@ -24,6 +13,7 @@ Default mode for any agent (or human) about to claim a task is done. Refuse to e
 **No success word without a fresh command run quoted verbatim.**
 
 Forbidden phrases until step 5 is complete:
+
 - "should work" / "should be fine"
 - "looks good"
 - "seems to" / "appears to"
@@ -73,6 +63,7 @@ Skip steps 3-5 only if you have a written reason. "I don't want to revert" isn't
 ## Try-to-break-it probe (one per claim)
 
 Before claiming PASS, run at least ONE failure-case probe:
+
 - Edge input (empty string, `None`, max int, unicode)
 - Concurrent caller (race the operation)
 - Missing dependency (env var unset, service down)
@@ -91,11 +82,16 @@ After step 5:
 
 **Evidence (verbatim):**
 ```
+
 $ pytest tests/test_auth.py::test_token_expiry -x --tb=short
-============================== test session ==============================
+
+=== =========================== test session ==============================
+
 collected 1 item
-tests/test_auth.py::test_token_expiry PASSED                        [100%]
-======================== 1 passed in 0.42s =======================
+tests/test_auth.py::test_token_expiry PASSED [100%]
+
+=== ===================== 1 passed in 0.42s =======================
+
 ```
 
 **Tried-to-break with:**
@@ -112,12 +108,12 @@ For `PARTIAL`: list what passed + what's untested + what would need to change to
 
 ## Severity escalation
 
-| Verdict | When |
-|---|---|
-| PASS | All steps run, evidence quoted, try-to-break probes ran, regression check ran (if bug fix) |
-| PARTIAL | Some claims verified, others can't be tested in this environment (note WHY) |
-| FAIL | Evidence contradicts claim, OR verification couldn't run at all |
-| BLOCKED | Pre-condition missing (auth, env, deps) — name the precondition, do not claim PASS |
+| Verdict | When                                                                                       |
+| ------- | ------------------------------------------------------------------------------------------ |
+| PASS    | All steps run, evidence quoted, try-to-break probes ran, regression check ran (if bug fix) |
+| PARTIAL | Some claims verified, others can't be tested in this environment (note WHY)                |
+| FAIL    | Evidence contradicts claim, OR verification couldn't run at all                            |
+| BLOCKED | Pre-condition missing (auth, env, deps) — name the precondition, do not claim PASS         |
 
 ## Red flags — restart the gate if any of these fire
 

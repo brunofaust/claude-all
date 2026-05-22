@@ -54,6 +54,7 @@ rg -n "^_[a-z]" src --type py
 ```
 
 For each match, decide:
+
 - If it's actually used outside the module → drop the `_`, add to `__all__`
 - If it's module-internal helper → drop the `_`, omit from `__all__` (still visible to dead-code tools)
 - If it's truly unused → delete it

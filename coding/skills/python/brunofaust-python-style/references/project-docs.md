@@ -115,26 +115,31 @@ All notable changes to this project will be documented in this file.
 ### Enforcement layers
 
 1. **Local (prek):**
-   - `scripts/precommit_changelog.sh` — fails if src/ changed but CHANGELOG.md not.
-   - `scripts/precommit_docs.sh` — fails if code changed but no .md updated.
-   - `scripts/precommit_resource_docs.sh` — fails if aws_resources/<name>/ changed but its CLAUDE.md not.
 
-2. **Commit message (prek):**
-   - Commitizen `commit-msg` hook for conventional commits.
+    - `scripts/precommit_changelog.sh` — fails if src/ changed but CHANGELOG.md not.
+    - `scripts/precommit_docs.sh` — fails if code changed but no .md updated.
+    - `scripts/precommit_resource_docs.sh` — fails if aws_resources/<name>/ changed but its CLAUDE.md not.
 
-3. **PR (GitHub Actions):**
-   - `dangoslen/changelog-enforcer@v3.7.0` for CHANGELOG gate.
-   - Custom workflow with `tj-actions/changed-files` for docs gate.
-   - Skip via labels: `skip-changelog`, `skip-docs`, `dependencies`.
+1. **Commit message (prek):**
 
-4. **Branch protection:**
-   - Require status checks: Changelog Check, Docs Discipline.
+    - Commitizen `commit-msg` hook for conventional commits.
+
+1. **PR (GitHub Actions):**
+
+    - `dangoslen/changelog-enforcer@v3.7.0` for CHANGELOG gate.
+    - Custom workflow with `tj-actions/changed-files` for docs gate.
+    - Skip via labels: `skip-changelog`, `skip-docs`, `dependencies`.
+
+1. **Branch protection:**
+
+    - Require status checks: Changelog Check, Docs Discipline.
 
 **Anti-circumvention:** Never bypass docs hooks with `--no-verify` unless explicitly authorized. The hooks exist because past PRs broke prod due to stale CLAUDE.md trigger maps.
 
 ### Example prek hook scripts
 
 `scripts/precommit_changelog.sh`:
+
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
@@ -147,6 +152,7 @@ exit 1
 ```
 
 `scripts/precommit_docs.sh`:
+
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
@@ -161,6 +167,7 @@ exit 0
 ```
 
 `scripts/precommit_resource_docs.sh`:
+
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail

@@ -24,25 +24,31 @@ get_data_cache: TTLCache = TTLCache(maxsize=10, ttl=CACHE_1_HOURS)
 get_value_cache: TTLCache = TTLCache(maxsize=10, ttl=CACHE_1_HOURS)
 get_method_value_cache: TTLCache = TTLCache(maxsize=10, ttl=CACHE_1_HOURS)
 
+
 @cached_async(cache=get_configuration_cache)
 async def get_configuration(self, config_name: str) -> Mapping[str, Any]:
     """Retrieve application configuration with caching."""
     ...
+
 
 @cached(cache=get_data_cache, lock=ThreadLock())
 async def get_data(self, data_name: str) -> Mapping[str, Any]:
     """Retrieve application data with caching in a multithreaded application."""
     ...
 
+
 @cached(cache=get_value_cache, lock=AsyncLock())
 async def get_value(self, value_name: str) -> Mapping[str, Any]:
     """Retrieve application configuration with caching in an async application."""
     ...
 
+
 class something:
     """Handles something on application."""
 
-    @cachedmethod(cache=lambda self: get_method_value_cache, lock=lambda self: AsyncLock())
+    @cachedmethod(
+        cache=lambda self: get_method_value_cache, lock=lambda self: AsyncLock()
+    )
     async def get_method_value(self, method_value_name: str) -> Mapping[str, Any]:
         """Retrieve application configuration with caching in an async application."""
         ...
@@ -105,9 +111,7 @@ def cached_async(
             nonlocal _lock
             if _lock is None:
                 _lock = Lock()
-            filtered_args = tuple(
-                v for i, v in enumerate(args) if i not in _ignore
-            )
+            filtered_args = tuple(v for i, v in enumerate(args) if i not in _ignore)
             key = cache_key64((filtered_args, tuple(sorted(kwargs.items()))))
             async with _lock:
                 if key in cache:
@@ -115,7 +119,8 @@ def cached_async(
                 result = await func(*args, **kwargs)
                 cache[key] = result
             return result
+
         return wrapper
+
     return decorator
 ```
-

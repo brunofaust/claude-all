@@ -1,9 +1,6 @@
----
-title: Use flatMap to Map and Filter in One Pass
-impact: LOW-MEDIUM
-impactDescription: eliminates intermediate array
-tags: javascript, arrays, flatMap, filter, performance
----
+______________________________________________________________________
+
+## title: Use flatMap to Map and Filter in One Pass impact: LOW-MEDIUM impactDescription: eliminates intermediate array tags: javascript, arrays, flatMap, filter, performance
 
 ## Use flatMap to Map and Filter in One Pass
 
@@ -55,6 +52,7 @@ const numbers = strings.flatMap(s => {
 ```
 
 **When to use:**
+
 - Transforming items while filtering some out
 - Conditional mapping where some inputs produce no output
 - Parsing/validating where invalid inputs should be skipped

@@ -9,17 +9,22 @@
 ```python
 # BAD: direct httpx outside the connector
 import httpx
+
+
 async def get_ticket_status(key: str) -> str:
     r = await httpx.get(f"https://x.atlassian.net/rest/api/3/issue/{key}")
     ...
 
+
 # BAD: inline boto3 client
 import boto3
+
 s3 = boto3.client("s3")
 s3.put_object(...)
 
 # BAD: bypassing the connector with the SDK it wraps
 from atlassian import Jira
+
 jira = Jira(...)
 jira.issue(key)
 ```

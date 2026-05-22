@@ -18,18 +18,20 @@ Externalize configuration from code using environment variables and typed settin
 ### Core Concepts
 
 1. **Externalized Configuration**: All environment-specific values (URLs, secrets, feature flags) come from environment variables, not code.
-2. **Typed Settings**: Parse and validate the configuration into typed objects at startup, rather than scattering it throughout the code.
-3. **Fail Fast**: Validate all required configuration at application boot. Missing config should crash immediately with a clear message.
-4. **Sensible Defaults**: Provide reasonable defaults for local development while requiring explicit values for sensitive settings.
+1. **Typed Settings**: Parse and validate the configuration into typed objects at startup, rather than scattering it throughout the code.
+1. **Fail Fast**: Validate all required configuration at application boot. Missing config should crash immediately with a clear message.
+1. **Sensible Defaults**: Provide reasonable defaults for local development while requiring explicit values for sensitive settings.
 
 ```python
 from pydantic_settings import BaseSettings
 from pydantic import Field
 
+
 class Settings(BaseSettings):
     database_url: str = Field(alias="DATABASE_URL")
     api_key: str = Field(alias="API_KEY")
     debug: bool = Field(default=False, alias="DEBUG")
+
 
 settings = Settings()  # Loads from environment
 ```
@@ -37,15 +39,15 @@ settings = Settings()  # Loads from environment
 ### Best Practices Summary
 
 1. **Never hardcode config** - All environment-specific values from env vars
-2. **Use typed settings** - Pydantic-settings with validation
-3. **Fail fast** - Crash on missing required config at startup
-4. **Provide dev defaults** - Make local development easy
-5. **Never commit secrets** - Use `.env` files (gitignored) or secret managers
-6. **Namespace variables** - `DB_HOST`, `REDIS_URL` for clarity
-7. **Import settings singleton** - Don't call `os.getenv()` throughout code
-8. **Document all variables** - README should list required env vars
-9. **Validate early** - Check config correctness at boot time
-10. **Use secrets_dir** - Support mounted secrets in containers
+1. **Use typed settings** - Pydantic-settings with validation
+1. **Fail fast** - Crash on missing required config at startup
+1. **Provide dev defaults** - Make local development easy
+1. **Never commit secrets** - Use `.env` files (gitignored) or secret managers
+1. **Namespace variables** - `DB_HOST`, `REDIS_URL` for clarity
+1. **Import settings singleton** - Don't call `os.getenv()` throughout code
+1. **Document all variables** - README should list required env vars
+1. **Validate early** - Check config correctness at boot time
+1. **Use secrets_dir** - Support mounted secrets in containers
 
 ### Fundamental Patterns
 
@@ -57,6 +59,7 @@ Create a central settings class that loads and validates all configurations.
 from pydantic_settings import BaseSettings
 from pydantic import Field, PostgresDsn, ValidationError
 import sys
+
 
 class Settings(BaseSettings):
     """Application configuration loaded from environment variables."""
@@ -82,6 +85,7 @@ class Settings(BaseSettings):
         "env_file_encoding": "utf-8",
     }
 
+
 # Create singleton instance at module load (__init__.py)
 SETTINGS = Settings()
 ```
@@ -90,6 +94,7 @@ Import `SETTINGS` throughout your application:
 
 ```python
 from app import SETTINGS
+
 
 def get_database_connection():
     return connect(
@@ -191,6 +196,7 @@ Pydantic handles common conversions automatically.
 from pydantic_settings import BaseSettings
 from pydantic import Field, field_validator
 
+
 class Settings(BaseSettings):
     # Automatically converts "true", "1", "yes" to True
     debug: bool = False
@@ -226,10 +232,12 @@ from enum import Enum
 from pydantic_settings import BaseSettings
 from pydantic import Field, computed_field
 
+
 class Environment(str, Enum):
     LOCAL = "local"
     STAGING = "staging"
     PRODUCTION = "production"
+
 
 class Settings(BaseSettings):
     environment: Environment = Field(
@@ -250,6 +258,7 @@ class Settings(BaseSettings):
     def is_local(self) -> bool:
         return self.environment == Environment.LOCAL
 
+
 # Usage
 if settings.is_production:
     configure_production_logging()
@@ -265,6 +274,7 @@ Organize related settings into nested models.
 from pydantic import BaseModel
 from pydantic_settings import BaseSettings
 
+
 class DatabaseSettings(BaseModel):
     host: str = "localhost"
     port: int = 5432
@@ -272,9 +282,11 @@ class DatabaseSettings(BaseModel):
     user: str
     password: str
 
+
 class RedisSettings(BaseModel):
     url: str = "redis://localhost:6379"
     max_connections: int = 10
+
 
 class Settings(BaseSettings):
     database: DatabaseSettings
@@ -307,6 +319,7 @@ from pydantic_settings import BaseSettings
 from pydantic import Field
 from pathlib import Path
 
+
 class Settings(BaseSettings):
     # Read from environment variable or file
     db_password: str = Field(alias="DB_PASSWORD")
@@ -326,6 +339,7 @@ Add custom validation for complex requirements.
 from pydantic_settings import BaseSettings
 from pydantic import Field, model_validator
 
+
 class Settings(BaseSettings):
     db_host: str = Field(alias="DB_HOST")
     db_port: int = Field(alias="DB_PORT")
@@ -336,9 +350,6 @@ class Settings(BaseSettings):
     def validate_replica_settings(self):
         if self.read_replica_host and self.read_replica_port == self.db_port:
             if self.read_replica_host == self.db_host:
-                raise ValueError(
-                    "Read replica cannot be the same as primary database"
-                )
+                raise ValueError("Read replica cannot be the same as primary database")
         return self
 ```
-

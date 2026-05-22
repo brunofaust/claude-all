@@ -1,16 +1,6 @@
----
-name: aws-architecture
-description: >
-  AWS serverless + event-driven architecture patterns. Use when: designing
-  Lambda functions, picking between SQS/SNS/EventBridge, sizing DynamoDB
-  capacity, designing Step Functions workflows, choosing API Gateway flavour,
-  designing ECS / Fargate services, reviewing IaC (Terraform/CloudFormation)
-  for AWS architectural fitness, debugging Lambda cold starts, sizing visibility
-  timeouts, picking partition keys, designing DLQ + retry strategies, or
-  reviewing AWS cost / performance trade-offs.
-disable-model-invocation: false
-user-invocable: true
----
+______________________________________________________________________
+
+## name: aws-architecture description: > AWS serverless + event-driven architecture patterns. Use when: designing Lambda functions, picking between SQS/SNS/EventBridge, sizing DynamoDB capacity, designing Step Functions workflows, choosing API Gateway flavour, designing ECS / Fargate services, reviewing IaC (Terraform/CloudFormation) for AWS architectural fitness, debugging Lambda cold starts, sizing visibility timeouts, picking partition keys, designing DLQ + retry strategies, or reviewing AWS cost / performance trade-offs. disable-model-invocation: false user-invocable: true
 
 # AWS Architecture Skill
 
@@ -18,7 +8,7 @@ Anchored to **AWS Well-Architected Framework** (Reliability, Performance, Cost, 
 
 This skill encodes the "what to do" and the "why" — for execution of `terraform`/`aws` commands use the existing agents (`terraform-deployer`, `aws-lambda-deployer`, AWS read-only inspectors).
 
----
+______________________________________________________________________
 
 ## 1. Lambda
 
@@ -26,10 +16,10 @@ This skill encodes the "what to do" and the "why" — for execution of `terrafor
 
 - Memory is also CPU. Lambda allocates CPU proportional to memory. **Run the AWS Lambda Power Tuner** before guessing. Sweet spots are usually 1024–1769 MB (vCPU = 1) or 3008+ MB (vCPU ≥ 2).
 - Cold-start cost scales with:
-  - Package size (250 MB unzipped hard limit, 50 MB ZIP direct upload; **use S3 for anything > 50 MB**)
-  - Number of imported modules at top-level
-  - VPC attachment — **avoid VPC unless necessary**. VPC attachment now uses Hyperplane ENIs (fast) but still adds cold-start tax. Lambdas needing only AWS APIs should run outside VPC.
-  - SnapStart (Java / Python 3.13+ / .NET) reduces cold starts by 90%+. Use for latency-sensitive sync paths.
+    - Package size (250 MB unzipped hard limit, 50 MB ZIP direct upload; **use S3 for anything > 50 MB**)
+    - Number of imported modules at top-level
+    - VPC attachment — **avoid VPC unless necessary**. VPC attachment now uses Hyperplane ENIs (fast) but still adds cold-start tax. Lambdas needing only AWS APIs should run outside VPC.
+    - SnapStart (Java / Python 3.13+ / .NET) reduces cold starts by 90%+. Use for latency-sensitive sync paths.
 
 ### Idempotency
 
@@ -49,10 +39,11 @@ persistence_layer = DynamoDBPersistenceLayer(
 )
 
 config = IdempotencyConfig(
-    event_key_jmespath="ticket_key",   # uniquely identifies the request
-    expires_after_seconds=3600,         # 1h dedup window (also DDB TTL)
-    raise_on_no_idempotency_key=True,   # fail loud on missing key
+    event_key_jmespath="ticket_key",  # uniquely identifies the request
+    expires_after_seconds=3600,  # 1h dedup window (also DDB TTL)
+    raise_on_no_idempotency_key=True,  # fail loud on missing key
 )
+
 
 @idempotent(config=config, persistence_store=persistence_layer)
 def handler(event, context):
@@ -61,30 +52,31 @@ def handler(event, context):
 ```
 
 The idempotency table should have:
+
 - PK `id` (string), `expiration` attribute as DynamoDB TTL → free auto-cleanup.
 - On-demand billing (writes are spiky, one per invocation).
 
 **JMESPath decision matrix** — which key uniquely identifies the request:
 
-| Event shape | JMESPath | Why |
-|---|---|---|
-| API Gateway sync request with idempotency-key header | `headers."Idempotency-Key"` | Client-supplied, RFC-standard idempotency |
-| SQS message with explicit business key | `Records[0].body.<field>` | Use the business identifier (order_id, ticket_key) |
-| EventBridge event | `detail.<unique_field>` | The domain event ID, not `id` (which is the bus event ID, fine too) |
-| S3 ObjectCreated | `Records[0].s3.object.key` + `Records[0].s3.object.eTag` | Key alone repeats on overwrite — pair with ETag |
-| No natural key, full-event hash acceptable | omit `event_key_jmespath`, set `use_local_cache=False` | Powertools hashes the entire event |
-| Multiple fields jointly unique | `[customer_id, order_id]` | JMESPath returns a list; Powertools hashes it |
+| Event shape                                          | JMESPath                                                 | Why                                                                 |
+| ---------------------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------- |
+| API Gateway sync request with idempotency-key header | `headers."Idempotency-Key"`                              | Client-supplied, RFC-standard idempotency                           |
+| SQS message with explicit business key               | `Records[0].body.<field>`                                | Use the business identifier (order_id, ticket_key)                  |
+| EventBridge event                                    | `detail.<unique_field>`                                  | The domain event ID, not `id` (which is the bus event ID, fine too) |
+| S3 ObjectCreated                                     | `Records[0].s3.object.key` + `Records[0].s3.object.eTag` | Key alone repeats on overwrite — pair with ETag                     |
+| No natural key, full-event hash acceptable           | omit `event_key_jmespath`, set `use_local_cache=False`   | Powertools hashes the entire event                                  |
+| Multiple fields jointly unique                       | `[customer_id, order_id]`                                | JMESPath returns a list; Powertools hashes it                       |
 
 If `raise_on_no_idempotency_key=True` and the JMESPath returns `None`, the
 Lambda fails — preferable to silently dedup nothing.
 
 ### Error handling per invocation type
 
-| Invoke mode | Retry behaviour | DLQ |
-|---|---|---|
-| Sync (API GW, ALB) | Caller retries | n/a |
-| Async (S3, SNS, EventBridge → Lambda) | 2 retries with exponential backoff | Configure `DeadLetterConfig` (SQS or SNS) — required for production |
-| Poll (SQS, Kinesis, DynamoDB Streams) | Re-receive until visibility timeout × max receives | Configure redrive policy on the source queue |
+| Invoke mode                           | Retry behaviour                                    | DLQ                                                                 |
+| ------------------------------------- | -------------------------------------------------- | ------------------------------------------------------------------- |
+| Sync (API GW, ALB)                    | Caller retries                                     | n/a                                                                 |
+| Async (S3, SNS, EventBridge → Lambda) | 2 retries with exponential backoff                 | Configure `DeadLetterConfig` (SQS or SNS) — required for production |
+| Poll (SQS, Kinesis, DynamoDB Streams) | Re-receive until visibility timeout × max receives | Configure redrive policy on the source queue                        |
 
 ### Concurrency
 
@@ -99,18 +91,18 @@ Lambda fails — preferable to silently dedup nothing.
 - Lambda with VPC + no NAT/VPC endpoint for AWS APIs — silent hang on first SDK call.
 - Mutating ENV vars at runtime — they're set at init, not per invocation.
 
----
+______________________________________________________________________
 
 ## 2. SQS
 
 ### Standard vs FIFO
 
-| | Standard | FIFO |
-|---|---|---|
-| Order | Best-effort | Strict, per `MessageGroupId` |
-| Delivery | At-least-once | Exactly-once (with dedup ID, 5-min window) |
-| Throughput | ~unlimited | 300 msg/s (3000/s with high-throughput mode, per-group) |
-| Use when | High throughput, order doesn't matter | Ordered events per customer / aggregate |
+|            | Standard                              | FIFO                                                    |
+| ---------- | ------------------------------------- | ------------------------------------------------------- |
+| Order      | Best-effort                           | Strict, per `MessageGroupId`                            |
+| Delivery   | At-least-once                         | Exactly-once (with dedup ID, 5-min window)              |
+| Throughput | ~unlimited                            | 300 msg/s (3000/s with high-throughput mode, per-group) |
+| Use when   | High throughput, order doesn't matter | Ordered events per customer / aggregate                 |
 
 ### Visibility timeout
 
@@ -134,7 +126,7 @@ Always configure a DLQ. Set `maxReceiveCount` = 3–5. Build a dashboard alarm o
 - Forgetting `MessageGroupId` on FIFO — every message in one group serializes.
 - Polling SQS with long-running consumer — use Lambda SQS event source (managed long-poll) or `WaitTimeSeconds=20`.
 
----
+______________________________________________________________________
 
 ## 3. SNS
 
@@ -155,38 +147,38 @@ Same FIFO guarantees as FIFO SQS, but only FIFO SQS can subscribe. Use only if y
 - SNS → Lambda directly for production fanout — no DLQ at the SNS level (only Lambda async retries). Use SNS → SQS → Lambda for retry isolation.
 - Cross-region SNS publish — possible but expensive + slow. Replicate via EventBridge cross-region routing instead.
 
----
+______________________________________________________________________
 
 ## 4. EventBridge vs SNS vs SQS
 
 Decision matrix:
 
-| Need | Use |
-|---|---|
-| Pub/sub, multiple known subscribers | **SNS → SQS** (per subscriber) |
-| Pub/sub with rich JSON filtering rules | **EventBridge** (default bus or custom bus) |
-| Producer wants to forget, one consumer, work queue semantics | **SQS** directly |
-| Schema versioning + replay | **EventBridge** (archives + replay) |
-| Cross-account routing | **EventBridge** (rule-based, no policy gymnastics) |
-| Scheduled/cron triggers | **EventBridge Scheduler** (replaces CloudWatch Events rules — better quotas, retries, DLQ) |
-| Throughput > 10k events/s, simple routing | SNS (cheaper) |
-| Low volume, complex routing logic | EventBridge |
+| Need                                                         | Use                                                                                        |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
+| Pub/sub, multiple known subscribers                          | **SNS → SQS** (per subscriber)                                                             |
+| Pub/sub with rich JSON filtering rules                       | **EventBridge** (default bus or custom bus)                                                |
+| Producer wants to forget, one consumer, work queue semantics | **SQS** directly                                                                           |
+| Schema versioning + replay                                   | **EventBridge** (archives + replay)                                                        |
+| Cross-account routing                                        | **EventBridge** (rule-based, no policy gymnastics)                                         |
+| Scheduled/cron triggers                                      | **EventBridge Scheduler** (replaces CloudWatch Events rules — better quotas, retries, DLQ) |
+| Throughput > 10k events/s, simple routing                    | SNS (cheaper)                                                                              |
+| Low volume, complex routing logic                            | EventBridge                                                                                |
 
 EventBridge costs: $1.00/million for custom bus events, free for default bus + most AWS service events. SNS: $0.50/million publishes + delivery cost per protocol. For < 1M events/month either is cheap.
 
----
+______________________________________________________________________
 
 ## 5. ECS
 
 ### Fargate vs EC2
 
-| | Fargate | EC2 |
-|---|---|---|
-| Ops burden | None (serverless) | You patch + autoscale ASG |
-| Cost (steady-state) | ~20–30% more than equivalent EC2 | Cheaper |
-| Cost (bursty) | Wins (no idle nodes) | Loses (over-provisioned) |
-| GPU | No (use ECS GPU + EC2) | Yes |
-| Default choice | Fargate | Only for steady fleet > 50 vCPU |
+|                     | Fargate                          | EC2                             |
+| ------------------- | -------------------------------- | ------------------------------- |
+| Ops burden          | None (serverless)                | You patch + autoscale ASG       |
+| Cost (steady-state) | ~20–30% more than equivalent EC2 | Cheaper                         |
+| Cost (bursty)       | Wins (no idle nodes)             | Loses (over-provisioned)        |
+| GPU                 | No (use ECS GPU + EC2)           | Yes                             |
+| Default choice      | Fargate                          | Only for steady fleet > 50 vCPU |
 
 Use **Fargate Spot** for batch + retry-tolerant workloads — up to 70% cheaper.
 
@@ -201,7 +193,7 @@ Use **Fargate Spot** for batch + retry-tolerant workloads — up to 70% cheaper.
 - For consumer services backed by SQS: target tracking on `ApproximateNumberOfMessagesVisible` per task — much more responsive than CPU.
 - Always set `min_capacity ≥ 2` in prod for HA. Single-task services have downtime on every deploy.
 
----
+______________________________________________________________________
 
 ## 6. DynamoDB
 
@@ -210,6 +202,7 @@ Use **Fargate Spot** for batch + retry-tolerant workloads — up to 70% cheaper.
 The single most important decision. Bad PK = throttled hotspots that no amount of capacity fixes.
 
 Rules:
+
 - High-cardinality values (user_id, order_id), NOT timestamps or status enums.
 - For time-series, **prefix with a high-cardinality value**: `org_id#YYYY-MM-DD` not `YYYY-MM-DD`.
 - Sort keys give 1:N access patterns within a PK. Sparse SKs unlock common composite queries cheaply.
@@ -243,24 +236,25 @@ Set TTL attribute (epoch seconds) on items you want auto-deleted. Free, async (~
 - Storing > 400KB items — hard limit. Offload blob to S3, keep pointer in DDB.
 - Eventually consistent read of own write within < 1s — use strongly-consistent read on the main table, never a GSI.
 
----
+______________________________________________________________________
 
 ## 7. Step Functions
 
 ### Express vs Standard
 
-| | Standard | Express |
-|---|---|---|
-| Duration | 1 year | 5 minutes |
-| Pricing | Per state transition | Per duration + memory |
-| Use when | Long-running workflows, audit trail | High-volume event processing (replace orchestrator Lambdas) |
-| At-least-once or exactly-once | Exactly-once | At-least-once |
+|                               | Standard                            | Express                                                     |
+| ----------------------------- | ----------------------------------- | ----------------------------------------------------------- |
+| Duration                      | 1 year                              | 5 minutes                                                   |
+| Pricing                       | Per state transition                | Per duration + memory                                       |
+| Use when                      | Long-running workflows, audit trail | High-volume event processing (replace orchestrator Lambdas) |
+| At-least-once or exactly-once | Exactly-once                        | At-least-once                                               |
 
 Rule of thumb: if your workflow is < 5 min AND fires > 100k times/day, Express is dramatically cheaper. Otherwise Standard.
 
 ### Error handling
 
 Build retries into the state machine, not the Lambdas:
+
 - `Retry` with `IntervalSeconds`, `MaxAttempts`, `BackoffRate`
 - `Catch` to a failure-handling branch
 - Use **Step Functions intrinsic functions** instead of pass-through Lambdas (`States.ArrayContains`, `States.Format`, etc.) — free, no cold-start.
@@ -270,18 +264,18 @@ Build retries into the state machine, not the Lambdas:
 - Two Lambdas in sequence — just call one from the other (or chain via SQS). Step Functions overhead isn't worth it.
 - Synchronous user request paths — latency budget too tight.
 
----
+______________________________________________________________________
 
 ## 8. API Gateway
 
 ### REST vs HTTP API
 
-| | REST | HTTP |
-|---|---|---|
-| Cost | $3.50/M | $1.00/M (70% cheaper) |
-| Latency | Higher | Lower |
+|          | REST                                                    | HTTP                                          |
+| -------- | ------------------------------------------------------- | --------------------------------------------- |
+| Cost     | $3.50/M                                                 | $1.00/M (70% cheaper)                         |
+| Latency  | Higher                                                  | Lower                                         |
 | Features | Request validation, API keys, usage plans, X-Ray native | JWT auth (Cognito or external), CORS built-in |
-| Use when | You need WAF / usage plans / SOAP / private APIs | Default for new APIs |
+| Use when | You need WAF / usage plans / SOAP / private APIs        | Default for new APIs                          |
 
 **Default to HTTP API** unless you need REST-only features.
 
@@ -293,36 +287,43 @@ Set per-stage or per-method throttling. Default is 10,000 RPS per region — req
 
 Only REST APIs have built-in caching. For HTTP APIs: cache at CloudFront in front. CloudFront has free 1TB egress tier + cheaper bandwidth than direct API GW.
 
----
+______________________________________________________________________
 
 ## 9. Cost gotchas (the items that surprise you on the bill)
 
 1. **NAT Gateway** — $0.045/hour ($32/mo) per NAT + $0.045/GB processed. **VPC endpoints** (interface for AWS services, gateway for S3/DynamoDB) bypass NAT entirely. Use them for any high-traffic AWS API call.
 
-   **VPC endpoint vs NAT Gateway decision table:**
+    **VPC endpoint vs NAT Gateway decision table:**
 
-   | Use case | NAT Gateway | VPC Endpoint (Interface) | VPC Endpoint (Gateway) |
-   |---|---|---|---|
-   | Lambda → S3 | $0.045/hr + $0.045/GB | n/a | **Free** — use this |
-   | Lambda → DynamoDB | $0.045/hr + $0.045/GB | n/a | **Free** — use this |
-   | Lambda → Secrets Manager | $0.045/hr + $0.045/GB | $0.01/hr per AZ + $0.01/GB | n/a |
-   | Lambda → Lambda (cross-region) | $0.045/hr + $0.045/GB | $0.01/hr per AZ + $0.01/GB | n/a |
-   | Lambda → public internet | NAT GW required | n/a | n/a |
-   | Lambda outside VPC | nothing | not applicable | not applicable |
+    | Use case                       | NAT Gateway           | VPC Endpoint (Interface)   | VPC Endpoint (Gateway) |
+    | ------------------------------ | --------------------- | -------------------------- | ---------------------- |
+    | Lambda → S3                    | $0.045/hr + $0.045/GB | n/a                        | **Free** — use this    |
+    | Lambda → DynamoDB              | $0.045/hr + $0.045/GB | n/a                        | **Free** — use this    |
+    | Lambda → Secrets Manager       | $0.045/hr + $0.045/GB | $0.01/hr per AZ + $0.01/GB | n/a                    |
+    | Lambda → Lambda (cross-region) | $0.045/hr + $0.045/GB | $0.01/hr per AZ + $0.01/GB | n/a                    |
+    | Lambda → public internet       | NAT GW required       | n/a                        | n/a                    |
+    | Lambda outside VPC             | nothing               | not applicable             | not applicable         |
 
-   **Rule:** Default to Lambda OUTSIDE the VPC. If it MUST be in a VPC (e.g.
-   talking to RDS in a private subnet), add S3 + DynamoDB Gateway endpoints
-   (free) plus Interface endpoints for any high-traffic AWS service (Secrets
-   Manager, KMS, SQS, SNS) — cheaper than NAT once traffic > ~10 GB/month.
-2. **CloudWatch Logs ingest** — $0.50/GB. Verbose Lambda logs (every event JSON dump) add up. Set `LOG_LEVEL=INFO` minimum in prod; ship debug to S3 if needed for retention.
-3. **CloudWatch Logs storage** — $0.03/GB-month. Set log group retention; default is "Never expire".
-4. **Lambda < 100ms** — billed in 1ms increments since 2020. Still, cold-start + init is a fixed cost. Don't optimize sub-ms; optimize architectural call patterns.
-5. **DynamoDB Scan** — full table read. Always. Even with FilterExpression, you pay for every scanned item.
-6. **Cross-AZ data transfer** — $0.01/GB each way. RDS Multi-AZ replication is free, but your app talking to a Multi-AZ DB across AZs is not.
-7. **S3 LIST** — $0.005 per 1k. Fine until you list 100M-object buckets in a Lambda loop.
-8. **Provisioned concurrency** — billed even when idle. Only on user-facing sync paths.
+    **Rule:** Default to Lambda OUTSIDE the VPC. If it MUST be in a VPC (e.g.
+    talking to RDS in a private subnet), add S3 + DynamoDB Gateway endpoints
+    (free) plus Interface endpoints for any high-traffic AWS service (Secrets
+    Manager, KMS, SQS, SNS) — cheaper than NAT once traffic > ~10 GB/month.
 
----
+1. **CloudWatch Logs ingest** — $0.50/GB. Verbose Lambda logs (every event JSON dump) add up. Set `LOG_LEVEL=INFO` minimum in prod; ship debug to S3 if needed for retention.
+
+1. **CloudWatch Logs storage** — $0.03/GB-month. Set log group retention; default is "Never expire".
+
+1. **Lambda < 100ms** — billed in 1ms increments since 2020. Still, cold-start + init is a fixed cost. Don't optimize sub-ms; optimize architectural call patterns.
+
+1. **DynamoDB Scan** — full table read. Always. Even with FilterExpression, you pay for every scanned item.
+
+1. **Cross-AZ data transfer** — $0.01/GB each way. RDS Multi-AZ replication is free, but your app talking to a Multi-AZ DB across AZs is not.
+
+1. **S3 LIST** — $0.005 per 1k. Fine until you list 100M-object buckets in a Lambda loop.
+
+1. **Provisioned concurrency** — billed even when idle. Only on user-facing sync paths.
+
+______________________________________________________________________
 
 ## 10. Security baseline
 
@@ -332,7 +333,7 @@ Only REST APIs have built-in caching. For HTTP APIs: cache at CloudFront in fron
 - SQS / SNS / DDB: server-side encryption (SSE-KMS) for anything customer-related.
 - IAM roles for service accounts (IRSA in EKS / Task roles in ECS) — never bake credentials in containers.
 
----
+______________________________________________________________________
 
 ## Decision tree — "what should I use?"
 
@@ -359,7 +360,7 @@ Need an API?
 └── HTTP API + JWT auth (default). REST only if you need its features.
 ```
 
----
+______________________________________________________________________
 
 ## References
 
