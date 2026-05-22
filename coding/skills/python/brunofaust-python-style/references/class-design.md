@@ -90,4 +90,3 @@ class something:
     _not_change: Final[str] = “this is an immutable string"
     _keys: Sequence[str] = [“this", "is", "an", "immutable", “list"]
 ```
-

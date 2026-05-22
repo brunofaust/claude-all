@@ -196,7 +196,7 @@ function cycleSort() {
 ))}
 ```
 
----
+______________________________________________________________________
 
 ## View Transition Events
 
@@ -220,18 +220,18 @@ The `instance` object: `instance.old`, `instance.new`, `instance.group`, `instan
 
 The `types` array (second argument) lets you vary animation based on transition type.
 
----
+______________________________________________________________________
 
 ## Animation Timing
 
-| Interaction | Duration |
-|------------|----------|
-| Direct toggle (expand/collapse) | 100–200ms |
-| Route transition (slide) | 150–250ms |
+| Interaction                          | Duration  |
+| ------------------------------------ | --------- |
+| Direct toggle (expand/collapse)      | 100–200ms |
+| Route transition (slide)             | 150–250ms |
 | Suspense reveal (skeleton → content) | 200–400ms |
-| Shared element morph | 300–500ms |
+| Shared element morph                 | 300–500ms |
 
----
+______________________________________________________________________
 
 ## Troubleshooting
 

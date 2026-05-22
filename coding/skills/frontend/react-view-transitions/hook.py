@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Reminder hook for vercel-react-view-transitions skill — fires when transition APIs appear."""
+
 from __future__ import annotations
 
 import json
@@ -34,8 +35,22 @@ def main() -> int:
     if not any(marker in new_string for marker in TRANSITION_MARKERS):
         return 0
 
+    import os
+    import tempfile
+
+    session_id = data.get("session_id") or "no-session"
+    flag = os.path.join(
+        tempfile.gettempdir(), f"claude-all-view-transitions-{session_id}.flag"
+    )
+    if os.path.exists(flag):
+        return 0
+    try:
+        open(flag, "w").write(file_path)
+    except OSError:
+        pass
+
     print(
-        "Reminder (vercel-react-view-transitions): "
+        "Reminder (vercel-react-view-transitions, first transition-touching edit this session): "
         "use native React View Transitions API — <ViewTransition>, addTransitionType, CSS ::view-transition pseudo-elements — "
         "BEFORE pulling in framer-motion / react-spring / any third-party animation lib. "
         "Cheaper, smoother, fewer deps.",

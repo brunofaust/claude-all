@@ -16,7 +16,7 @@ This wraps every `<Link>` navigation in `document.startViewTransition`. Any VT w
 
 Do **not** install `react@canary` — see SKILL.md "Availability" for details.
 
----
+______________________________________________________________________
 
 ## Next.js Implementation Additions
 
@@ -28,7 +28,7 @@ When following `implementation.md`, apply these additions:
 
 **After Step 6:** For same-route dynamic segments (e.g., `/collection/[slug]`), use the `key` + `name` + `share` pattern — see Same-Route Dynamic Segment Transitions below.
 
----
+______________________________________________________________________
 
 ## Layout-Level ViewTransition
 
@@ -38,7 +38,7 @@ A bare `<ViewTransition>` in layout works only if pages have **no** VTs of their
 
 **Layouts persist across navigations** — `enter`/`exit` only fire on initial mount, not on route changes. Don't use type-keyed maps in layouts.
 
----
+______________________________________________________________________
 
 ## The `transitionTypes` Prop on `next/link`
 
@@ -52,7 +52,7 @@ Replaces the manual pattern of `onNavigate` + `startTransition` + `addTransition
 
 **Availability:** `transitionTypes` requires `experimental.viewTransition: true` and is available in Next.js 15+ canary builds and Next.js 16+. If unavailable, use `startTransition` + `addTransitionType` + `router.push()` (see Programmatic Navigation below). To check: `grep -r "transitionTypes" node_modules/next/dist/` — if no results, fall back to programmatic navigation.
 
----
+______________________________________________________________________
 
 ## Programmatic Navigation
 
@@ -71,7 +71,7 @@ function handleNavigate(href: string) {
 }
 ```
 
----
+______________________________________________________________________
 
 ## Server-Side Filtering with `router.replace`
 
@@ -93,7 +93,7 @@ function handleSort(sort: string) {
 
 List items wrapped in `<ViewTransition key={item.id}>` will animate reorder. This is the server-component alternative to the client-side `useDeferredValue` pattern in `patterns.md`.
 
----
+______________________________________________________________________
 
 ## Two-Layer Pattern (Directional + Suspense)
 
@@ -113,7 +113,7 @@ Directional slides + Suspense reveals coexist because they fire at different mom
 </ViewTransition>
 ```
 
----
+______________________________________________________________________
 
 ## `loading.tsx` as Suspense Boundary
 
@@ -129,7 +129,7 @@ Next.js `loading.tsx` is an implicit `<Suspense>` boundary. Wrap the skeleton in
 
 Same rules as explicit `<Suspense>`: use simple string props (not type maps) since Suspense reveals fire without transition types.
 
----
+______________________________________________________________________
 
 ## Shared Elements Across Routes
 
@@ -149,7 +149,7 @@ Same rules as explicit `<Suspense>`: use simple string props (not type maps) sin
 </ViewTransition>
 ```
 
----
+______________________________________________________________________
 
 ## Same-Route Dynamic Segment Transitions
 
@@ -167,7 +167,7 @@ When navigating between dynamic segments of the same route (e.g., `/collection/[
 - `name` + `share="auto"` creates a shared element crossfade
 - VT inside `<Suspense>` (without keying Suspense) keeps old content visible during loading
 
----
+______________________________________________________________________
 
 ## Server Components
 

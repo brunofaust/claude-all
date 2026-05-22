@@ -1,9 +1,6 @@
----
-title: Use useTransition Over Manual Loading States
-impact: LOW
-impactDescription: reduces re-renders and improves code clarity
-tags: rendering, transitions, useTransition, loading, state
----
+______________________________________________________________________
+
+## title: Use useTransition Over Manual Loading States impact: LOW impactDescription: reduces re-renders and improves code clarity tags: rendering, transitions, useTransition, loading, state
 
 ## Use useTransition Over Manual Loading States
 
@@ -47,7 +44,7 @@ function SearchResults() {
 
   const handleSearch = (value: string) => {
     setQuery(value) // Update input immediately
-    
+
     startTransition(async () => {
       // Fetch and update results
       const data = await fetchResults(value)

@@ -1,0 +1,11 @@
+{
+  "name": "rtk",
+  "github": "https://github.com/rtk-ai/rtk",
+  "type": "brew",
+  "package": "rtk",
+  "post_install": [
+    ["rtk", "init", "-g"]
+  ],
+  "post_install_message": "RTK installed + initialized globally. `rtk init -g` registers a PreToolUse hook in ~/.claude/settings.json that auto-rewrites Bash commands (git/grep/cat/aws/etc.) to their rtk equivalents. RESTART Claude Code so the hook activates. Then check savings with `rtk gain` (real wrapped executions) — NOT `rtk discover` (transcript intent, may mislead).",
+  "description": "Rust Token Killer — wraps common commands (git, grep, cat, find, ls, aws, make, terraform, pytest, gh, npm, eslint, playwright, psql, wc) to cut output token cost 60-90%. `rtk init -g` installs its own PreToolUse hook for transparent rewriting."
+}

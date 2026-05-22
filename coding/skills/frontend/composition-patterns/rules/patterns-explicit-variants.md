@@ -1,9 +1,6 @@
----
-title: Create Explicit Component Variants
-impact: MEDIUM
-impactDescription: self-documenting code, no hidden conditionals
-tags: composition, variants, architecture
----
+______________________________________________________________________
+
+## title: Create Explicit Component Variants impact: MEDIUM impactDescription: self-documenting code, no hidden conditionals tags: composition, variants, architecture
 
 ## Create Explicit Component Variants
 

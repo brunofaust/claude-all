@@ -2,7 +2,7 @@
 
 Ready-to-use CSS for `<ViewTransition>` props. Copy into your global stylesheet.
 
----
+______________________________________________________________________
 
 ## Timing Variables
 
@@ -33,7 +33,7 @@ Ready-to-use CSS for `<ViewTransition>` props. Copy into your global stylesheet.
 }
 ```
 
----
+______________________________________________________________________
 
 ## Fade
 
@@ -48,7 +48,7 @@ Ready-to-use CSS for `<ViewTransition>` props. Copy into your global stylesheet.
 
 Usage: `<ViewTransition enter="fade-in" exit="fade-out" />`
 
----
+______________________________________________________________________
 
 ## Slide (Vertical)
 
@@ -66,13 +66,14 @@ Usage: `<ViewTransition enter="fade-in" exit="fade-out" />`
 ```
 
 Usage:
+
 ```jsx
 <Suspense fallback={<ViewTransition exit="slide-down"><Skeleton /></ViewTransition>}>
   <ViewTransition default="none" enter="slide-up"><Content /></ViewTransition>
 </Suspense>
 ```
 
----
+______________________________________________________________________
 
 ## Directional Navigation
 
@@ -136,7 +137,7 @@ Usage:
 }
 ```
 
----
+______________________________________________________________________
 
 ## Shared Element Morph
 
@@ -178,7 +179,7 @@ Avoids raster scaling artifacts on text by hiding the old snapshot and showing t
 
 Usage: `<ViewTransition name={`title-${id}`} share="text-morph" />`
 
----
+______________________________________________________________________
 
 ## Scale
 
@@ -202,7 +203,7 @@ Usage: `<ViewTransition name={`title-${id}`} share="text-morph" />`
 
 Usage: `<ViewTransition enter="scale-in" exit="scale-out" />`
 
----
+______________________________________________________________________
 
 ## Persistent Element Isolation
 
@@ -226,7 +227,7 @@ For elements with `backdrop-filter`, hide the old snapshot to avoid flash:
 }
 ```
 
----
+______________________________________________________________________
 
 ## Reduced Motion
 

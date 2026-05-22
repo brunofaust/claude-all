@@ -20,4 +20,3 @@ result = client.process(data)
 ## Configuration
 
 Document environment variables and configuration options.
-
