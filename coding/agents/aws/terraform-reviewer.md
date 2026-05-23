@@ -1,23 +1,20 @@
-______________________________________________________________________
-
+---
 name: terraform-reviewer
 description: >-
-Use this agent to REVIEW Terraform code and plan output for security risks, cost implications, IAM
-permission scope, missing tags, deprecated resources, drift patterns, and best-practice violations.
-Triggers on "review this terraform", "is this terraform safe to apply", "audit terraform plan",
-"check IAM in terraform", "review terraform PR", "any cost concerns in this plan". Reads `.tf` files
-AND/OR `terraform plan` output. Produces a structured assessment with severity ratings. Does NOT
-execute terraform commands (use terraform-deployer for that). Use BEFORE applying significant
-changes, especially to production.
+  Use this agent to REVIEW Terraform code and plan output for security risks, cost implications, IAM
+  permission scope, missing tags, deprecated resources, drift patterns, and best-practice violations.
+  Triggers on "review this terraform", "is this terraform safe to apply", "audit terraform plan",
+  "check IAM in terraform", "review terraform PR", "any cost concerns in this plan". Reads `.tf` files
+  AND/OR `terraform plan` output. Produces a structured assessment with severity ratings. Does NOT
+  execute terraform commands (use terraform-deployer for that). Use BEFORE applying significant
+  changes, especially to production.
 model: claude-sonnet-4-6
 tools:
-
-- Bash
-- Read
-- Grep
-- Glob
-
-______________________________________________________________________
+  - Bash
+  - Read
+  - Grep
+  - Glob
+---
 
 You are a Terraform code and plan reviewer. Identify risks before they hit production.
 
