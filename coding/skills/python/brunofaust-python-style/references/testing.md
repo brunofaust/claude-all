@@ -26,6 +26,26 @@ Detailed testing conventions for async-first Python projects using pytest.
 1. **Test edge cases** and error conditions
 1. **Measure coverage** but focus on quality
 
+### Anti-patterns — what NOT to do
+
+Common pytest patterns Claude will default to that **violate this skill**. Each
+has a specific replacement — use it.
+
+| ❌ Don't do this                                             | ✅ Do this instead                                                                       | Why                                                                            |
+| ------------------------------------------------------------ | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `@pytest.mark.asyncio` on every async test                   | `asyncio_mode = "auto"` in pytest.ini + `pytest_collection_modifyitems` hook in conftest | One source of truth; never forget to mark a test                               |
+| `unittest.mock.patch` / `mocker.patch` on a module attribute | Dependency injection — pass the dependency into the constructor                          | `mock.patch` is race-prone under `pytest-xdist`; DI is thread-safe and obvious |
+| `mod._client = mock` (module-global assignment in test)      | Inject the client via fixture / factory                                                  | Race-prone under parallel test runs; banned by AST hook                        |
+| `Mock()` / `MagicMock()` for typed objects                   | `polyfactory` / `factory_boy` factory for the concrete type                              | Real types catch contract drift; mocks happily accept anything                 |
+| `scope="session"` for app / AWS clients                      | `scope="function"` (or `scope="module"` only when safe)                                  | Session-scoped state leaks between tests; LocalStack needs per-test isolation  |
+| `monkeypatch.setattr(...)` without `MonkeyPatch.context()`   | `with MonkeyPatch.context() as mp: mp.setattr(...)`                                      | Explicit teardown; safe under parallel collection                              |
+| `@pytest.fixture` with side-effects but no `yield` cleanup   | Always `yield` + cleanup, even for "harmless" fixtures                                   | Resource leaks compound under `-n auto`                                        |
+| Mocking AWS with `moto` / `boto-mock` for integration tests  | LocalStack (Docker, managed by the project's pytest plugin)                              | Higher fidelity; catches real boto serialization bugs                          |
+| `import unittest.mock` anywhere in `tests/`                  | `pytest-mock` (`mocker` fixture) only when DI is genuinely impossible                    | Plugin gives auto-cleanup; stdlib `mock` is easy to forget to stop             |
+| `assert x` with no message on complex objects                | `assert x, f"context: {x!r}"` or `pytest.fail(...)`                                      | Failure logs are unreadable otherwise                                          |
+| `time.sleep(N)` to wait for an async event                   | `await asyncio.wait_for(...)` / `pytest-asyncio` + polling helper                        | sleeps make tests flaky and slow                                               |
+| Catching `Exception` in tests to "be safe"                   | Let exceptions propagate; use `pytest.raises(SpecificError)`                             | Silently swallowing errors hides real bugs                                     |
+
 ### Test Types
 
 - **Unit Tests**: Test individual functions/classes in isolation
@@ -85,6 +105,49 @@ markers =
     localstack: tests that expect Localstack environment (S3, DynamoDB, SQS, SNS, etc.)
 ```
 
+#### Coverage threshold (pyproject.toml)
+
+Coverage is a CI gate, not a vanity metric — fail the build below threshold so
+PRs can't merge with uncovered new code.
+
+```toml
+[tool.pytest.ini_options]
+addopts = """
+    --cov=src
+    --cov-report=term-missing
+    --cov-report=html
+    --cov-branch
+    --cov-fail-under=80
+"""
+
+[tool.coverage.report]
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "@abstractmethod",
+    "if __name__ == .__main__.:",
+]
+```
+
+Run with: `uv run pytest --cov` — exits non-zero if coverage < 80%.
+
+#### Selective marker runs
+
+```bash
+# Local fast loop — skip slow + localstack tests
+uv run pytest -m "not slow and not localstack"
+
+# Run only unit tests (fast CI lane)
+uv run pytest -m unit
+
+# Run integration + data layer (slow CI lane)
+uv run pytest -m "integration or data or localstack"
+
+# CI matrix example: split fast/slow into separate jobs
+# job-fast:  pytest -m "not slow and not localstack" --cov-fail-under=80
+# job-slow:  pytest -m "slow or localstack"
+```
+
 ### Test Organization
 
 #### File Layout
@@ -132,11 +195,13 @@ def test_api_returns_404_for_missing_resource():
 ### Pytest Markers
 
 ```python
-@pytest.mark.localstack# Tests requiring LocalStack (S3, DynamoDB, SQS, SNS, etc.)
-@pytest.mark.data # Full data pipeline tests (probably uses LocalStack)
-@pytest.mark.slow # Slow-running tests
-@pytest.mark.timeout(5) # Override per-test timeout
-@pytest.mark.no_leaks_local(threads=False) # Leak detection (exclude thread checks)
+@pytest.mark.localstack  # Tests requiring LocalStack (S3, DynamoDB, SQS, SNS, etc.)
+@pytest.mark.data  # Full data pipeline tests (probably uses LocalStack)
+@pytest.mark.slow  # Slow-running tests
+@pytest.mark.timeout(5)  # Override per-test timeout
+@pytest.mark.no_leaks_local(threads=False)  # Leak detection (exclude thread checks)
+def example_test() -> None: ...
+
 
 # NEVER use @pytest.mark.asyncio — conftest must auto-adds it via pytest_collection_modifyitems
 ```
@@ -177,8 +242,10 @@ Every class must have tests for these structural properties. This prevents accid
 import inspect
 from something import Client
 
+
 class BaseClient:
     name: str
+
 
 class Client(BaseClient):
     last_name: str
@@ -186,21 +253,26 @@ class Client(BaseClient):
     async def get_full_name(self):
         return self.name + self.last_name
 
+
 client = Client()
+
 
 async def test_client_instance_creation() -> None:
     """Verify instance is of the expected class."""
     assert isinstance(client, Client)
 
+
 async def test_client_inherits_base() -> None:
     """Verify inheritance from base_client."""
     assert issubclass(Client, BaseClient)
 
+
 async def test_client_has_attributes() -> None:
-    “""Verify all declared attributes exist."""
+    """Verify all declared attributes exist."""
     attributes = ["get_full_name"]
     for attribute_name in attributes:
         assert hasattr(client, attribute_name)
+
 
 async def test_client_methods_are_async() -> None:
     """Verify public methods are async."""
@@ -282,6 +354,7 @@ For global mocks that apply across all tests (e.g., replacing config loading wit
 
 MONKEYPATCH = pytest.MonkeyPatch()
 
+
 async def _mock_get_configuration(cls, config_name: str) -> Any:
     """Replace remote config loading with local JSON files."""
     file = f"{os.path.dirname(__file__)}/configuration/{config_name}.json"
@@ -289,8 +362,9 @@ async def _mock_get_configuration(cls, config_name: str) -> Any:
         content = await fp.read()
     return orjson.loads(content)
 
+
 MONKEYPATCH.setattr(
-    “some_class.get_configuration",
+    "some_class.get_configuration",
     _mock_get_configuration,
 )
 ```
@@ -338,30 +412,35 @@ async def test_get_files_pagination_and_filters() -> None:
 
     with MonkeyPatch.context() as monkeypatch:
         monkeypatch.setattr(
-            storage._client, "list_objects_v2",
-            AsyncMock(side_effect=[
-                {
-                    "Contents": [
-                        {"Key": "prefix/file1.csv"},
-                        {"Key": "prefix/file2.parquet"},
-                    ],
-                    "IsTruncated": True,
-                    "NextContinuationToken": "tok",
-                },
-                {
-                    "Contents": [{"Key": "prefix/file3.parquet"}],
-                    "IsTruncated": False,
-                },
-            ]),
+            storage._client,
+            "list_objects_v2",
+            AsyncMock(
+                side_effect=[
+                    {
+                        "Contents": [
+                            {"Key": "prefix/file1.csv"},
+                            {"Key": "prefix/file2.parquet"},
+                        ],
+                        "IsTruncated": True,
+                        "NextContinuationToken": "tok",
+                    },
+                    {
+                        "Contents": [{"Key": "prefix/file3.parquet"}],
+                        "IsTruncated": False,
+                    },
+                ]
+            ),
         )
         res = await storage.get_files(
-            bucket="my-bucket", prefix="prefix/", suffix=".parquet",
+            bucket="my-bucket",
+            prefix="prefix/",
+            suffix=".parquet",
         )
         keys = [file["Key"] for file in res]
 
-        assert "prefix/file2.parquet” in keys
-        assert "prefix/file3.parquet” in keys
-        assert "prefix/file1.csv” not in keys
+        assert "prefix/file2.parquet" in keys
+        assert "prefix/file3.parquet" in keys
+        assert "prefix/file1.csv" not in keys
 ```
 
 ### LocalStack Resource Setup
@@ -521,6 +600,7 @@ def test_division_by_zero():
 import pytest
 from typing import Generator
 
+
 class Database:
     """Simple database class."""
 
@@ -542,6 +622,7 @@ class Database:
             raise RuntimeError("Not connected")
         return [{"id": 1, "name": "Test"}]
 
+
 @pytest.fixture
 def db() -> Generator[Database, None, None]:
     """Fixture that provides connected database."""
@@ -555,14 +636,15 @@ def db() -> Generator[Database, None, None]:
     # Teardown
     database.disconnect()
 
-@pytest.fixture(scope=“session”, params=[{
-    "database_url": "postgresql://localhost/test",
-    "api_key": "test-key",
-    "debug": True
-}])
+
+@pytest.fixture(
+    scope="session",
+    params=[{"database_url": "postgresql://localhost/test", "api_key": "test-key", "debug": True}],
+)
 def app_config(request):
     """Session-scoped fixture - created once per test session."""
     return request.param
+
 
 @pytest.fixture(scope="module")
 def api_client(app_config):
@@ -869,11 +951,13 @@ Use `polyfactory` for Pydantic, `factory_boy` for dataclasses.
 ```python
 # tests/factories/ticket.py
 from polyfactory.factories.pydantic_factory import ModelFactory
-from <project>.domain.models.ticket import Ticket
+from myproject.domain.models.ticket import Ticket
+
 
 class TicketFactory(ModelFactory[Ticket]):
     __model__ = Ticket
     summary = "Default ticket summary"
+
 
 # Usage in test
 def test_extract():
@@ -886,7 +970,7 @@ def test_extract():
 ```python
 # BAD
 def _make_task(**overrides):
-    defaults = {"key": "PROJ-1", "summary": "...", "comments": [], ...}
+    defaults = {"key": "PROJ-1", "summary": "...", "comments": []}  # ... etc.
     defaults.update(overrides)
     return defaults
 ```
@@ -896,7 +980,8 @@ def _make_task(**overrides):
 ```python
 # BAD: poking module globals in tests (races under parallel pytest-xdist)
 def test_pii():
-    from <project>.features.pii_detection import service
+    from myproject.features.pii_detection import service
+
     service._comprehend_client = mock_client  # racy, fragile
 ```
 
@@ -918,7 +1003,7 @@ def test_pii():
 Mirror `src/`:
 
 ```
-src/<project>/features/pii_detection/service.py
+src/myproject/features/pii_detection/service.py
 tests/unit/features/pii_detection/test_service.py
 ```
 
@@ -930,7 +1015,7 @@ tests/unit/features/pii_detection/test_service.py
 
 ### Rules
 
-1. Every new file in `src/<project>/features/` must have a matching test file.
+1. Every new file in `src/myproject/features/` must have a matching test file.
 1. No `_mod._client = mock` patterns.
 1. Use `pytest-randomly` to detect order-dependent tests.
 1. `--dist worksteal` is fine if tests are properly isolated.

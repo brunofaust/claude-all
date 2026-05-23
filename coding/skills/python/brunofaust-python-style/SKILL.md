@@ -38,6 +38,8 @@ Read the matching file BEFORE deep work in that area. Each is a focused referenc
 | Choosing between Pydantic / dataclass / TypedDict — trust boundaries, internal contracts, test fixtures                                                                                        | [`references/data-modeling.md`](references/data-modeling.md)                         |
 | Owner-class pattern for external systems (Jira, AWS, OpenAI…), ruff `banned-api` config, audit recipe                                                                                          | [`references/external-system-ownership.md`](references/external-system-ownership.md) |
 | Module-level visibility — `__all__` over `_` prefix, vulture/ruff blind-spot fix                                                                                                               | [`references/visibility.md`](references/visibility.md)                               |
+| Debugging AWS dev environments — full-run → isolate → hotfix vs deploy → parallel pieces → SF splitting → verify                                                                               | [`aws-debug-loop` skill](../../aws/aws-debug-loop/SKILL.md)                          |
+| Pre-PR verification — 6-phase gate with formal PASS/FAIL report (lint → types → tests → coverage → security → diff)                                                                            | [`verification-loop` skill](../../generic/verification-loop/SKILL.md)                |
 | Project folder layout — `domain/features/integrations/aws_resources/api/db`, per-resource files, `import-linter` contracts                                                                     | [`references/project-structure.md`](references/project-structure.md)                 |
 | Enforcement matrix — every rule → ruff code / `skill_enforcer.py` rule / prek hook / GH Action                                                                                                 | [`references/enforcement.md`](references/enforcement.md)                             |
 
@@ -139,6 +141,7 @@ Section headers for long files:
 1. **Visibility.** Module-level names never start with `_` — use `__all__`. Class-scope `self._x` is fine. The `_`-prefix blinds vulture, ruff, pyright to dead-code at module scope. → `references/visibility.md`
 1. **Project structure.** `domain/` (pure logic) → `features/` (vertical slices) → `integrations/` + `aws_resources/` + `db/` (horizontal). Entry points (`api/`, `cli/`, lambdas) stay thin. Enforce direction with `import-linter`. → `references/project-structure.md`
 1. **Documentation discipline.** Every code change ships with doc update. Mandatory files: README, CLAUDE.md (root + per resource), ARCHITECTURE, CHANGELOG, TODO. Prek hooks + GH Actions block merge if docs stale. → `references/project-docs.md`
+1. **No hardcoded config values.** Nothing that could change between environments, deployments, or over time may be hardcoded at module or class level. LLM model names, Jira/workflow statuses, S3/SQS/SNS resource names, API endpoints, timeouts, batch sizes, feature flags → all go in `Settings`. The only exception: *function/method parameter defaults* (they're explicit call-site overrides, not hidden globals). `os.getenv()` outside `Settings` is also banned. → `references/config.md`
 1. **Enforcement.** Every rule maps to ruff code / vulture / `import-linter` / `skill_enforcer.py` AST rule / prek hook / GH Action. No aspirational rules. → `references/enforcement.md`
 
 ## Quick rules — What NOT to do
@@ -159,7 +162,8 @@ Section headers for long files:
 
 - ❌ Scattered retry / timeout logic — centralise in decorators / client wrappers.
 - ❌ Retry at multiple layers (app + client lib) — pick ONE.
-- ❌ Hard-coded config or secrets — typed Pydantic Settings (or AWS Secrets Manager).
+- ❌ **Hardcoded config at module or class level** — any value that could differ between environments or change over time must live in `Settings`, env var, or be passed as a parameter. Covers: LLM model names, Jira/workflow statuses, S3/SQS/SNS resource names, API endpoints, timeouts, batch sizes, feature flags. Function/method *parameter defaults* are the one allowed exception. → `references/config.md`
+- ❌ `os.getenv()` scattered across modules — all env var access must go through the `Settings` singleton.
 - ❌ Internal types in public APIs — use TypedDicts / DTOs.
 - ❌ Mixed I/O + business logic in one function.
 - ❌ `except Exception: pass` — catch specific, log context, re-raise as needed.
@@ -181,7 +185,7 @@ Before finalising code:
 - [ ] Collections have type parameters
 - [ ] Resources use context managers or explicit cleanup
 - [ ] No double retry (app + infrastructure)
-- [ ] No hard-coded config / secrets
+- [ ] No hardcoded config at module/class level (model names, statuses, resource names, endpoints, timeouts → Settings)
 - [ ] No exposed internal types in APIs
 - [ ] Input validated at boundaries
 - [ ] Thread-safe
