@@ -62,9 +62,26 @@ Given raw logs, you can:
 
 If filtering only (not summarizing), output the filtered lines as-is, preserving original format.
 
+## CRITICAL — quote errors verbatim, never paraphrase
+
+When an error, exception, or failure message appears in the logs, output it **verbatim**. Do NOT summarize, interpret, or clean up the text. The caller needs the exact exception class, resource ARN, operation name, and message to diagnose root cause. Paraphrasing destroys that signal.
+
+Anti-pattern (NEVER):
+
+- ❌ "Permission denied on SSM" — paraphrase, the resource ARN and operation are gone
+- ❌ "Looks like a database connection issue" — interpretation, not evidence
+- ❌ `root cause: IAM policy missing ssm:GetParameter` — invented summary
+
+Correct:
+
+- ✅ Quote the exact log line(s) verbatim, including exception class path, inner exception, and traceback frames
+- ✅ If the error is multiline (Python traceback, Java stack trace), preserve all lines
+- ✅ After the verbatim block, a one-line interpretation is OK — but the verbatim block MUST come first
+
 ## Rules
 
 - Redact obvious secrets: API keys, JWTs, passwords, AWS credentials, connection strings.
+- **Exception**: do NOT redact error messages even if they look sensitive — the caller needs exact text. Redact only surrounding context (DSN passwords, Authorization headers).
 - Never modify the source log file.
 - If logs exceed your processing capacity, sample the first 1000 lines + last 1000 lines and note: `[TRUNCATED] showing first/last 1000 of N lines`.
 - Don't fetch logs — work only with input provided. If the user asks you to fetch from CloudWatch, respond: "Use cloudwatch-inspector to fetch logs first, then pass them to me."

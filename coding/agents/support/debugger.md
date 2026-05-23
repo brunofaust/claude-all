@@ -134,6 +134,32 @@ Prevent: <test/monitor/process to avoid recurrence>
 2. <concrete action>
 ```
 
+## CRITICAL — evidence must be verbatim
+
+Every `Evidence:` field in the Investigation section MUST quote the actual error text verbatim — the exact exception class, message, resource ARN, line number, or log line. Never paraphrase.
+
+Anti-pattern (NEVER):
+
+- ❌ `Evidence: IAM policy missing ssm:GetParameter` ← paraphrase; the actual error had the resource ARN that would have proven the policy was fine
+- ❌ `Evidence: database error on line 42` ← interpretation; what error? what query?
+- ❌ `Evidence: permission denied` ← too vague to diagnose
+
+Correct:
+
+```
+H1: SSM permission missing on ECS task role
+   Result: rejected
+   Evidence: |
+     An error occurred (AccessDeniedException) when calling the GetParameter
+     operation: User: arn:aws:sts::123456789012:assumed-role/myapp-dev-invoke-service/...
+     is not authorized to perform: ssm:GetParameter on resource:
+     arn:aws:ssm:us-east-1:123456789012:parameter/myapp/dev/secret
+     because no identity-based policy allows the ssm:GetParameter action
+   → policy has ssm:GetParameter with Resource: * — permission is NOT the issue; hypothesis rejected
+```
+
+Verbatim evidence is what distinguishes "confirmed" from "plausible". A hypothesis supported only by a paraphrase counts as inconclusive.
+
 ## Rules
 
 - Don't fix on first hypothesis without verification. Verified > Plausible.

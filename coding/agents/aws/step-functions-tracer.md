@@ -108,8 +108,24 @@ Layout:
     <verbatim if from Lambda>
 ```
 
-Anti-pattern (NEVER): "Looks like a permissions issue" / "Probably a timeout".
-Always quote the actual `cause` field. Sonnet diagnoses; you report.
+Anti-pattern (NEVER):
+
+- ❌ "Looks like a permissions issue" / "Probably a timeout"
+- ❌ "ECS task role missing ssm:GetParameter" ← paraphrase; destroyed the resource ARN and exact operation context
+- ❌ "Access denied on SSM" ← interpretation; Sonnet wasted 2 follow-up round-trips verifying the IAM policy that was actually fine
+
+Correct (IAM / permissions errors — most commonly misstated):
+
+```
+cause: |
+  An error occurred (AccessDeniedException) when calling the GetParameter
+  operation: User: arn:aws:sts::123456789012:assumed-role/myapp-dev-invoke-service/...
+  is not authorized to perform: ssm:GetParameter on resource:
+  arn:aws:ssm:us-east-1:123456789012:parameter/myapp/dev/secret because no
+  identity-based policy allows the ssm:GetParameter action
+```
+
+Always quote the actual `cause` field — full text, multi-line preserved. Sonnet diagnoses; you report.
 
 Redact only surrounding credentials (passwords, bearer tokens) with `***`. Never redact the cause/error message itself.
 

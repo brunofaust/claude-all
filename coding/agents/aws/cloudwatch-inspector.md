@@ -106,7 +106,13 @@ If the underlying log is multiline JSON / structlog, output the relevant fields 
 **Anti-pattern (NEVER do this):**
 
 - ❌ "Database query failed — looks like a SQL syntax issue with named parameters"
+- ❌ "ECS task role missing ssm:GetParameter" ← paraphrase; destroyed the resource ARN and policy context
+- ❌ "Permission denied on SSM" ← interpretation; the IAM policy was actually correct but the summary sent the caller chasing a false lead
+
+Correct:
+
 - ✅ `syntax error at or near ":"` (verbatim from log)
+- ✅ `An error occurred (AccessDeniedException) when calling the GetParameter operation: User: arn:aws:sts::123456789012:assumed-role/myapp-dev-invoke-service/... is not authorized to perform: ssm:GetParameter on resource: arn:aws:ssm:us-east-1:123456789012:parameter/... because no identity-based policy allows the ssm:GetParameter action` (verbatim from log)
 
 The agent's summary is OK, but the verbatim block above MUST appear for every distinct error found.
 
