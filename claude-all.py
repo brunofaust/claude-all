@@ -521,11 +521,13 @@ def inject_hook(item: Item, level: str) -> str | None:
     # Dedup by command path
     cmd_str = str(dest)
     target_block["hooks"] = [h for h in target_block["hooks"] if h.get("command") != cmd_str]
-    target_block["hooks"].append({
-        "type": "command",
-        "command": cmd_str,
-        "timeout": timeout,
-    })
+    target_block["hooks"].append(
+        {
+            "type": "command",
+            "command": cmd_str,
+            "timeout": timeout,
+        }
+    )
 
     settings_file.write_text(json.dumps(settings, indent=2) + "\n")
     return f"hook installed → {dest}, registered in {settings_file}"
