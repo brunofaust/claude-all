@@ -12,21 +12,11 @@ concurrency:
 
 jobs:
   prek:
-    name: prek (lint + format + typos + secrets)
+    name: prek
     runs-on: ubuntu-latest
-
+    env:
+      SKIP: no-commit-to-branch
     steps:
       - uses: actions/checkout@v4
-
-      - name: set up python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: install prek
-        run: pip install prek
-
-      - name: run prek hooks
-        run: prek run --all-files
-        env:
-          SKIP: no-commit-to-branch
+      - uses: astral-sh/setup-uv@v3
+      - run: uv run --only-dev prek run --all-files
