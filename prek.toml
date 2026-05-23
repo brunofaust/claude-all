@@ -70,7 +70,7 @@ hooks = [
 # Enforces Conventional Commits format: feat/fix/chore/docs/refactor/test/etc.
 # Only runs on commit-msg stage so it doesn't block --amend or WIP pushes.
 [[repos]]
-repo = "http://github.com/commitizen-tools/commitizen"
+repo = "https://github.com/commitizen-tools/commitizen"
 rev = "v3.29.0"
 hooks = [
   {
@@ -81,7 +81,7 @@ hooks = [
 ]
 
 [[repos]]
-repo = "http://github.com/Lucas-C/pre-commit-hooks"
+repo = "https://github.com/Lucas-C/pre-commit-hooks"
 rev = "v1.5.6"
 hooks = [
   {
@@ -95,7 +95,7 @@ hooks = [
 ]
 
 [[repos]]
-repo = "http://github.com/igorshubovych/markdownlint-cli"
+repo = "https://github.com/igorshubovych/markdownlint-cli"
 rev = "v0.48.0"
 hooks = [
   {
@@ -109,7 +109,7 @@ hooks = [
 ]
 
 [[repos]]
-repo = "http://github.com/hukkin/mdformat"
+repo = "https://github.com/hukkin/mdformat"
 rev = "1.0.0"
 hooks = [
   {
@@ -125,18 +125,18 @@ hooks = [
 ]
 
 [[repos]]
-repo = "http://github.com/asottile/pyupgrade"
+repo = "https://github.com/asottile/pyupgrade"
 rev = "v3.21.2"
 hooks = [
   {
     id = "pyupgrade",
-    name = "🐍 python · Upgrade version 3.14+",
+    name = "🐍 python · Upgrade version 3.11+",
     args = ["--py311-plus"]
   }
 ]
 
 [[repos]]
-repo = "http://github.com/astral-sh/ruff-pre-commit"
+repo = "https://github.com/astral-sh/ruff-pre-commit"
 rev = "v0.15.14"
 hooks = [
   {
@@ -159,7 +159,7 @@ hooks = [
 ]
 
 [[repos]]
-repo = "http://github.com/crate-ci/typos"
+repo = "https://github.com/crate-ci/typos"
 rev = "v1.46.2"
 hooks = [
   {
@@ -169,7 +169,7 @@ hooks = [
 ]
 
 [[repos]]
-repo = "http://github.com/gitleaks/gitleaks"
+repo = "https://github.com/gitleaks/gitleaks"
 rev = "v8.30.1"
 hooks = [
   {
