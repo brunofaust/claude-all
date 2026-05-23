@@ -1,0 +1,64 @@
+[project]
+name = "claude-all"
+version = "0.1.0"
+description = "Claude skills, agents and everything else to improve coding with Claude"
+readme = "README.md"
+keywords = [ "claude", "agent", "mcp", "plugin", "skill", "tool" ]
+license = { file = "LICENSE" }
+authors = [ { name = "Bruno Faust" } ]
+requires-python = ">=3.11"
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+]
+dependencies = []
+urls.Homepage = "https://github.com/brunofaust/claude-all"
+urls.Issues = "https://github.com/brunofaust/claude-all/issues"
+urls.Repository = "https://github.com/brunofaust/claude-all"
+
+[dependency-groups]
+dev = [
+  "prek>=0.4.1",
+]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+exclude = [ ".claude/", ".venv/", ".worktrees/" ]
+format.indent-style = "space"
+format.quote-style = "double"
+lint.select = [
+  "B",   # flake8-bugbear
+  "C4",  # flake8-comprehensions
+  "E",   # pycodestyle errors
+  "F",   # pyflakes
+  "I",   # isort
+  "RUF", # ruff-specific rules
+  "SIM", # flake8-simplify
+  "UP",  # pyupgrade
+  "W",   # pycodestyle warnings
+]
+lint.ignore = [
+  "RUF001", # ambiguous unicode — skill content intentionally uses special chars
+]
+lint.isort.known-first-party = [ "claude-all" ]
+
+[tool.typos]
+
+[tool.markdownlint]
+default = true
+MD003 = { style = "atx" }
+MD007 = { indent = 4 }
+no-hard-tabs = true
+whitespace = true
+files = [ "**/*.md" ]
+MD013 = false
+MD040 = false
+MD025 = false

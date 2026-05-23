@@ -1,0 +1,10 @@
+{
+  "name": "terraform",
+  "github": "https://github.com/hashicorp/terraform-mcp-server",
+  "package": "@hashicorp/terraform-mcp-server",
+  "command": "npx",
+  "args": ["-y", "@hashicorp/terraform-mcp-server"],
+  "env": {},
+  "transport": "stdio",
+  "description": "Terraform MCP server — Terraform Registry lookups, provider docs, module discovery, schema introspection."
+}
