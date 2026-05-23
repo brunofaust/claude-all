@@ -39,7 +39,11 @@ DEV_SERVER_PATTERNS: list[re.Pattern[str]] = [
 
 
 def strip_heredoc(command: str) -> str:
-    """Remove heredoc body (<<'EOF' ... EOF) to avoid matching content inside strings."""
+    """Remove heredoc body (<<'EOF' ... EOF) to avoid matching content inside strings.
+
+    Args:
+        command: The shell command string to strip heredoc content from.
+    """
     import re
 
     return re.sub(r"<<['\"]?\w+['\"]?.*", "", command, flags=re.DOTALL)
