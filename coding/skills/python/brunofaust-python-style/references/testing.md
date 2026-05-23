@@ -195,11 +195,13 @@ def test_api_returns_404_for_missing_resource():
 ### Pytest Markers
 
 ```python
-@pytest.mark.localstack# Tests requiring LocalStack (S3, DynamoDB, SQS, SNS, etc.)
-@pytest.mark.data # Full data pipeline tests (probably uses LocalStack)
-@pytest.mark.slow # Slow-running tests
-@pytest.mark.timeout(5) # Override per-test timeout
-@pytest.mark.no_leaks_local(threads=False) # Leak detection (exclude thread checks)
+@pytest.mark.localstack  # Tests requiring LocalStack (S3, DynamoDB, SQS, SNS, etc.)
+@pytest.mark.data  # Full data pipeline tests (probably uses LocalStack)
+@pytest.mark.slow  # Slow-running tests
+@pytest.mark.timeout(5)  # Override per-test timeout
+@pytest.mark.no_leaks_local(threads=False)  # Leak detection (exclude thread checks)
+def example_test() -> None: ...
+
 
 # NEVER use @pytest.mark.asyncio — conftest must auto-adds it via pytest_collection_modifyitems
 ```
@@ -240,8 +242,10 @@ Every class must have tests for these structural properties. This prevents accid
 import inspect
 from something import Client
 
+
 class BaseClient:
     name: str
+
 
 class Client(BaseClient):
     last_name: str
@@ -249,21 +253,26 @@ class Client(BaseClient):
     async def get_full_name(self):
         return self.name + self.last_name
 
+
 client = Client()
+
 
 async def test_client_instance_creation() -> None:
     """Verify instance is of the expected class."""
     assert isinstance(client, Client)
 
+
 async def test_client_inherits_base() -> None:
     """Verify inheritance from base_client."""
     assert issubclass(Client, BaseClient)
 
+
 async def test_client_has_attributes() -> None:
-    “""Verify all declared attributes exist."""
+    """Verify all declared attributes exist."""
     attributes = ["get_full_name"]
     for attribute_name in attributes:
         assert hasattr(client, attribute_name)
+
 
 async def test_client_methods_are_async() -> None:
     """Verify public methods are async."""
@@ -345,6 +354,7 @@ For global mocks that apply across all tests (e.g., replacing config loading wit
 
 MONKEYPATCH = pytest.MonkeyPatch()
 
+
 async def _mock_get_configuration(cls, config_name: str) -> Any:
     """Replace remote config loading with local JSON files."""
     file = f"{os.path.dirname(__file__)}/configuration/{config_name}.json"
@@ -352,8 +362,9 @@ async def _mock_get_configuration(cls, config_name: str) -> Any:
         content = await fp.read()
     return orjson.loads(content)
 
+
 MONKEYPATCH.setattr(
-    “some_class.get_configuration",
+    "some_class.get_configuration",
     _mock_get_configuration,
 )
 ```
@@ -401,30 +412,35 @@ async def test_get_files_pagination_and_filters() -> None:
 
     with MonkeyPatch.context() as monkeypatch:
         monkeypatch.setattr(
-            storage._client, "list_objects_v2",
-            AsyncMock(side_effect=[
-                {
-                    "Contents": [
-                        {"Key": "prefix/file1.csv"},
-                        {"Key": "prefix/file2.parquet"},
-                    ],
-                    "IsTruncated": True,
-                    "NextContinuationToken": "tok",
-                },
-                {
-                    "Contents": [{"Key": "prefix/file3.parquet"}],
-                    "IsTruncated": False,
-                },
-            ]),
+            storage._client,
+            "list_objects_v2",
+            AsyncMock(
+                side_effect=[
+                    {
+                        "Contents": [
+                            {"Key": "prefix/file1.csv"},
+                            {"Key": "prefix/file2.parquet"},
+                        ],
+                        "IsTruncated": True,
+                        "NextContinuationToken": "tok",
+                    },
+                    {
+                        "Contents": [{"Key": "prefix/file3.parquet"}],
+                        "IsTruncated": False,
+                    },
+                ]
+            ),
         )
         res = await storage.get_files(
-            bucket="my-bucket", prefix="prefix/", suffix=".parquet",
+            bucket="my-bucket",
+            prefix="prefix/",
+            suffix=".parquet",
         )
         keys = [file["Key"] for file in res]
 
-        assert "prefix/file2.parquet” in keys
-        assert "prefix/file3.parquet” in keys
-        assert "prefix/file1.csv” not in keys
+        assert "prefix/file2.parquet" in keys
+        assert "prefix/file3.parquet" in keys
+        assert "prefix/file1.csv" not in keys
 ```
 
 ### LocalStack Resource Setup
@@ -584,6 +600,7 @@ def test_division_by_zero():
 import pytest
 from typing import Generator
 
+
 class Database:
     """Simple database class."""
 
@@ -605,6 +622,7 @@ class Database:
             raise RuntimeError("Not connected")
         return [{"id": 1, "name": "Test"}]
 
+
 @pytest.fixture
 def db() -> Generator[Database, None, None]:
     """Fixture that provides connected database."""
@@ -618,14 +636,15 @@ def db() -> Generator[Database, None, None]:
     # Teardown
     database.disconnect()
 
-@pytest.fixture(scope=“session”, params=[{
-    "database_url": "postgresql://localhost/test",
-    "api_key": "test-key",
-    "debug": True
-}])
+
+@pytest.fixture(
+    scope="session",
+    params=[{"database_url": "postgresql://localhost/test", "api_key": "test-key", "debug": True}],
+)
 def app_config(request):
     """Session-scoped fixture - created once per test session."""
     return request.param
+
 
 @pytest.fixture(scope="module")
 def api_client(app_config):
@@ -932,11 +951,13 @@ Use `polyfactory` for Pydantic, `factory_boy` for dataclasses.
 ```python
 # tests/factories/ticket.py
 from polyfactory.factories.pydantic_factory import ModelFactory
-from <project>.domain.models.ticket import Ticket
+from myproject.domain.models.ticket import Ticket
+
 
 class TicketFactory(ModelFactory[Ticket]):
     __model__ = Ticket
     summary = "Default ticket summary"
+
 
 # Usage in test
 def test_extract():
@@ -949,7 +970,7 @@ def test_extract():
 ```python
 # BAD
 def _make_task(**overrides):
-    defaults = {"key": "PROJ-1", "summary": "...", "comments": [], ...}
+    defaults = {"key": "PROJ-1", "summary": "...", "comments": []}  # ... etc.
     defaults.update(overrides)
     return defaults
 ```
@@ -959,7 +980,8 @@ def _make_task(**overrides):
 ```python
 # BAD: poking module globals in tests (races under parallel pytest-xdist)
 def test_pii():
-    from <project>.features.pii_detection import service
+    from myproject.features.pii_detection import service
+
     service._comprehend_client = mock_client  # racy, fragile
 ```
 
@@ -981,7 +1003,7 @@ def test_pii():
 Mirror `src/`:
 
 ```
-src/<project>/features/pii_detection/service.py
+src/myproject/features/pii_detection/service.py
 tests/unit/features/pii_detection/test_service.py
 ```
 
@@ -993,7 +1015,7 @@ tests/unit/features/pii_detection/test_service.py
 
 ### Rules
 
-1. Every new file in `src/<project>/features/` must have a matching test file.
+1. Every new file in `src/myproject/features/` must have a matching test file.
 1. No `_mod._client = mock` patterns.
 1. Use `pytest-randomly` to detect order-dependent tests.
 1. `--dist worksteal` is fine if tests are properly isolated.
