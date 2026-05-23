@@ -1,10 +1,16 @@
 #!/usr/bin/env python3
-"""Reminder hook for aws-architecture skill — fires on Terraform / CloudFormation / Lambda handler files."""
+"""Reminder hook for aws-architecture skill.
+
+Fires on Terraform / CloudFormation / Lambda handler files.
+"""
 
 from __future__ import annotations
 
+import contextlib
 import json
+import os
 import sys
+import tempfile
 
 IAC_EXTS = (".tf", ".tf.json", ".yaml", ".yml")
 CFN_HINTS = ("AWSTemplateFormatVersion", "Resources:", "Type: AWS::")
@@ -45,11 +51,11 @@ def main() -> int:
     fires = False
     if file_path.endswith(IAC_EXTS):
         # Terraform .tf or CloudFormation YAML — fire only if it touches AWS resources
-        if any(h in new_string for h in TF_HINTS) or any(
-            h in new_string for h in CFN_HINTS
+        if (
+            any(h in new_string for h in TF_HINTS)
+            or any(h in new_string for h in CFN_HINTS)
+            or any(m in new_string for m in AWS_MARKERS)
         ):
-            fires = True
-        elif any(m in new_string for m in AWS_MARKERS):
             fires = True
     elif any(m in new_string for m in AWS_MARKERS):
         # Python / TS handlers using AWS service strings
@@ -58,21 +64,16 @@ def main() -> int:
     if not fires:
         return 0
 
-    import os
-    import tempfile
-
     session_id = data.get("session_id") or "no-session"
     flag = os.path.join(tempfile.gettempdir(), f"claude-all-aws-arch-{session_id}.flag")
     if os.path.exists(flag):
         return 0
-    try:
-        open(flag, "w").write(file_path)
-    except OSError:
-        pass
+    with contextlib.suppress(OSError), open(flag, "w", encoding="utf-8") as f:
+        f.write(file_path)
 
     print(
         "Reminder (aws-architecture, first AWS-touching edit this session): "
-        "Lambda idempotency on async invokes; SQS visibility ≥ 6× processing time + DLQ; "
+        "Lambda idempotency on async invokes; SQS visibility >= 6x processing time + DLQ; "
         "SNS→SQS fanout, EventBridge for filter/replay/cross-account; "
         "DynamoDB high-cardinality partition keys, never Scan in hot paths; "
         "HTTP API > REST API (70% cheaper); "

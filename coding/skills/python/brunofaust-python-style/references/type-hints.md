@@ -12,9 +12,7 @@ from collections.abc import Mapping, Sequence
 
 
 # Parameters: immutable types to prevent accidental mutation
-async def process(
-    items: Sequence[str], config: Mapping[str, Any]
-) -> Mapping[str, Any]: ...
+async def process(items: Sequence[str], config: Mapping[str, Any]) -> Mapping[str, Any]: ...
 
 
 # Return types: immutable types for cached functions/methods to prevent accidental mutation in cached results

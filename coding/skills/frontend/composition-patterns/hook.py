@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import sys
@@ -39,15 +40,11 @@ def main() -> int:
         return 0
 
     session_id = data.get("session_id") or "no-session"
-    flag = os.path.join(
-        tempfile.gettempdir(), f"claude-all-composition-{session_id}.flag"
-    )
+    flag = os.path.join(tempfile.gettempdir(), f"claude-all-composition-{session_id}.flag")
     if os.path.exists(flag):
         return 0
-    try:
-        open(flag, "w").write(file_path)
-    except OSError:
-        pass
+    with contextlib.suppress(OSError), open(flag, "w", encoding="utf-8") as f:
+        f.write(file_path)
 
     print(
         "Reminder (vercel-composition-patterns, first prop-touching edit this session): "

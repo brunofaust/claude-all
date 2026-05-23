@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""
-claude-all installer — interactive TUI for selecting and installing
+"""claude-all installer — interactive TUI for selecting and installing
 agents/skills/plugins/mcps to ~/.claude/ (user) or ./.claude/ (project).
 
 Usage:
@@ -23,6 +22,7 @@ Keys in TUI:
 from __future__ import annotations
 
 import argparse
+import contextlib
 import curses
 import json
 import os
@@ -30,7 +30,7 @@ import shutil
 import subprocess
 import sys
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent
@@ -67,7 +67,7 @@ def record_install(kind: str, name: str, target_path: Path | None) -> None:
         "kind": kind,
         "name": name,
         "target": str(target_path) if target_path else None,
-        "installed_at": datetime.now(timezone.utc).isoformat(),
+        "installed_at": datetime.now(UTC).isoformat(),
     }
     save_state(state)
 
@@ -208,9 +208,7 @@ def install_plugin(item: Item) -> str:
             return f"skipped plugin {item.name}: missing 'marketplace' or 'plugin'"
         if shutil.which("claude") is None:
             return f"skipped plugin {item.name}: 'claude' CLI not in PATH"
-        subprocess.run(
-            ["claude", "plugin", "marketplace", "add", marketplace], check=True
-        )
+        subprocess.run(["claude", "plugin", "marketplace", "add", marketplace], check=True)
         subprocess.run(["claude", "plugin", "install", plugin_ref], check=True)
         result_msg = f"installed plugin {item.name} ({plugin_ref})"
 
@@ -246,7 +244,8 @@ def install_plugin(item: Item) -> str:
             continue
         if shutil.which(cmd[0]) is None:
             print(
-                f"  ! {item.name}: post_install '{cmd[0]}' not on PATH — open a new shell and run: {' '.join(cmd)}",
+                f"  ! {item.name}: post_install '{cmd[0]}' not on PATH — "
+                f"open a new shell and run: {' '.join(cmd)}",
                 file=sys.stderr,
             )
             continue
@@ -255,7 +254,7 @@ def install_plugin(item: Item) -> str:
 
     msg = meta.get("post_install_message")
     if msg:
-        print(f"  ℹ  {item.name}: {msg}")
+        print(f"  (i) {item.name}: {msg}")
 
     # Record state (plugins are global — no target path)
     record_install(item.kind, item.name, None)
@@ -361,7 +360,7 @@ def install_mcp(item: Item, level: str) -> str:
 
     msg = meta.get("post_install_message")
     if msg:
-        print(f"  ℹ  {item.name}:\n{msg}")
+        print(f"  (i) {item.name}:\n{msg}")
 
     return f"added mcp {name} (scope: {scope})"
 
@@ -429,7 +428,7 @@ def install_tool(item: Item) -> str:
 
         msg = meta.get("post_install_message")
         if msg:
-            print(f"  ℹ  {item.name}:\n{msg}")
+            print(f"  (i) {item.name}:\n{msg}")
 
         return f"installed tool {item.name} via brew ({package})"
 
@@ -521,16 +520,12 @@ def inject_hook(item: Item, level: str) -> str | None:
     target_block.setdefault("hooks", [])
     # Dedup by command path
     cmd_str = str(dest)
-    target_block["hooks"] = [
-        h for h in target_block["hooks"] if h.get("command") != cmd_str
-    ]
-    target_block["hooks"].append(
-        {
-            "type": "command",
-            "command": cmd_str,
-            "timeout": timeout,
-        }
-    )
+    target_block["hooks"] = [h for h in target_block["hooks"] if h.get("command") != cmd_str]
+    target_block["hooks"].append({
+        "type": "command",
+        "command": cmd_str,
+        "timeout": timeout,
+    })
 
     settings_file.write_text(json.dumps(settings, indent=2) + "\n")
     return f"hook installed → {dest}, registered in {settings_file}"
@@ -552,9 +547,7 @@ def remove_hook(item: Item, level: str) -> str | None:
         for event_blocks in settings.get("hooks", {}).values():
             for block in event_blocks:
                 before = len(block.get("hooks", []))
-                block["hooks"] = [
-                    h for h in block.get("hooks", []) if h.get("command") != cmd_str
-                ]
+                block["hooks"] = [h for h in block.get("hooks", []) if h.get("command") != cmd_str]
                 if before != len(block.get("hooks", [])):
                     removed_any = True
             # Drop empty blocks
@@ -712,9 +705,7 @@ def install_item(item: Item, target_root: Path) -> str:
 # ---------------------- update ----------------------
 
 
-def update_item(
-    kind: str, name: str, install_record: dict, all_items: list[Item]
-) -> str:
+def update_item(kind: str, name: str, install_record: dict, all_items: list[Item]) -> str:
     """Update a single installed item. Looks up live meta from repo."""
     # Find matching item in current repo
     match = next((it for it in all_items if it.kind == kind and it.name == name), None)
@@ -737,9 +728,7 @@ def update_item(
         update_cmd = meta.get("update_command")
         if update_cmd and isinstance(update_cmd, list) and update_cmd:
             if shutil.which(update_cmd[0]) is None:
-                return (
-                    f"  ✗ plugins/{name}: update_command '{update_cmd[0]}' not on PATH"
-                )
+                return f"  ✗ plugins/{name}: update_command '{update_cmd[0]}' not on PATH"
             print(f"  → update: {' '.join(update_cmd)}")
             subprocess.run(update_cmd, check=True)
             return f"  ✓ updated plugins/{name}"
@@ -773,10 +762,7 @@ def update_item(
     if match is None:
         return f"  ✗ {kind}/{name}: not found in repo (removed?)"
 
-    if kind == "skills":
-        src = match.src.parent
-    else:
-        src = match.src
+    src = match.src.parent if kind == "skills" else match.src
 
     target_path.parent.mkdir(parents=True, exist_ok=True)
     if target_path.is_symlink() or target_path.exists():
@@ -845,9 +831,7 @@ class TuiState:
             self.visible = [
                 i
                 for i, it in enumerate(self.items)
-                if ft in it.name.lower()
-                or ft in it.subcategory.lower()
-                or ft in it.kind.lower()
+                if ft in it.name.lower() or ft in it.subcategory.lower() or ft in it.kind.lower()
             ]
         else:
             self.visible = list(range(len(self.items)))
@@ -862,7 +846,9 @@ def draw(stdscr, state: TuiState):
     title = " claude-all — select items to install "
     stdscr.addstr(0, 0, title.center(w, "─")[:w], curses.A_BOLD)
 
-    help_line = " ↑/↓ │ SPACE toggle │ a all │ n none │ / filter │ u update │ ENTER install │ q quit "
+    help_line = (
+        " ↑/↓ │ SPACE toggle │ a all │ n none │ / filter │ u update │ ENTER install │ q quit "
+    )
     stdscr.addstr(1, 0, help_line[:w], curses.A_DIM)
 
     if state.filter_mode:
@@ -875,8 +861,7 @@ def draw(stdscr, state: TuiState):
     list_bottom = h - 2
     page = max(1, list_bottom - list_top)
 
-    if state.cursor < state.offset:
-        state.offset = state.cursor
+    state.offset = min(state.offset, state.cursor)
     if state.cursor >= state.offset + page:
         state.offset = state.cursor - page + 1
 
@@ -892,10 +877,8 @@ def draw(stdscr, state: TuiState):
         attr = curses.A_REVERSE if is_cursor else curses.A_NORMAL
         if it.selected and not is_cursor:
             attr |= curses.A_BOLD
-        try:
+        with contextlib.suppress(curses.error):
             stdscr.addstr(row, 0, label[:w].ljust(min(w, len(label[:w]))), attr)
-        except curses.error:
-            pass
         row += 1
         if row >= list_bottom:
             break
@@ -905,11 +888,12 @@ def draw(stdscr, state: TuiState):
     total = len(state.items)
     shown = len(state.visible)
     scroll_info = f" {state.cursor + 1}/{shown}" if shown else " 0/0"
-    footer = f" selected {sel}/{total}  │  installed {inst}/{total}  │  shown {shown}/{total}  │ {scroll_info}"
-    try:
+    footer = (
+        f" selected {sel}/{total}  │  installed {inst}/{total}"
+        f"  │  shown {shown}/{total}  │{scroll_info}"
+    )
+    with contextlib.suppress(curses.error):
         stdscr.addstr(h - 1, 0, footer[:w].ljust(w), curses.A_REVERSE)
-    except curses.error:
-        pass
 
     stdscr.refresh()
 
@@ -995,7 +979,7 @@ def choose_level_tui() -> str | None:
         cursor = 0
         while True:
             stdscr.erase()
-            h, w = stdscr.getmaxyx()
+            _, w = stdscr.getmaxyx()
             stdscr.addstr(0, 0, " Where to install? ".center(w, "─")[:w], curses.A_BOLD)
             stdscr.addstr(1, 0, " ↑/↓ move │ ENTER confirm │ q cancel ", curses.A_DIM)
             for i, (_, label) in enumerate(choices):
@@ -1042,17 +1026,13 @@ def main(argv: list[str]) -> int:
     )
     ap.add_argument("--list", action="store_true", help="List items without installing")
     ap.add_argument("--all", action="store_true", help="Select everything (skip TUI)")
-    ap.add_argument(
-        "--user", action="store_true", help="Install to ~/.claude (skip level prompt)"
-    )
+    ap.add_argument("--user", action="store_true", help="Install to ~/.claude (skip level prompt)")
     ap.add_argument(
         "--project",
         action="store_true",
         help="Install to ./.claude (skip level prompt)",
     )
-    ap.add_argument(
-        "filters", nargs="*", help="Filter tokens (each must appear in path)"
-    )
+    ap.add_argument("filters", nargs="*", help="Filter tokens (each must appear in path)")
     args = ap.parse_args(argv)
 
     items = discover(args.filters)

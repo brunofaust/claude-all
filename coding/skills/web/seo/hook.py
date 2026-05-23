@@ -3,8 +3,11 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
+import os
 import sys
+import tempfile
 
 # File types where SEO-meaningful edits live
 WEB_EXTS = (
@@ -70,24 +73,21 @@ def main() -> int:
         if not any(m in new_string for m in SEO_MARKERS):
             return 0
 
-    import os
-    import tempfile
-
     session_id = data.get("session_id") or "no-session"
     flag = os.path.join(tempfile.gettempdir(), f"claude-all-seo-{session_id}.flag")
     if os.path.exists(flag):
         return 0
-    try:
-        open(flag, "w").write(file_path)
-    except OSError:
-        pass
+    with contextlib.suppress(OSError), open(flag, "w", encoding="utf-8") as f:
+        f.write(file_path)
 
     print(
         "Reminder (seo, first SEO-touching edit this session): "
         "title 50-60 chars; meta description 150-160; one <h1>; canonical on every indexable page; "
-        "JSON-LD (Article/BreadcrumbList/Organization/Product) — SKIP deprecated HowTo and non-authority FAQPage; "
+        "JSON-LD (Article/BreadcrumbList/Organization/Product) — "
+        "SKIP deprecated HowTo and non-authority FAQPage; "
         "Core Web Vitals: LCP ≤ 2.5s, INP ≤ 200ms (not FID), CLS ≤ 0.1; "
-        "robots.txt: DON'T accidentally block GPTBot/ClaudeBot/PerplexityBot/Google-Extended — costs AI citations.",
+        "robots.txt: don't block GPTBot/ClaudeBot/PerplexityBot/Google-Extended"
+        " — costs AI citations.",
         file=sys.stderr,
     )
     return 1
