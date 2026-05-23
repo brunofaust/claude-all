@@ -11,6 +11,7 @@ The goal: steer Claude to fix the CODE, not suppress the linting rule.
 from __future__ import annotations
 
 import json
+import os
 import sys
 
 # Files that are pure hook/lint config — hard-block edits.
@@ -43,6 +44,9 @@ WARNED: frozenset[str] = frozenset(
 
 
 def main() -> int:
+    if os.environ.get("CC_ALLOW_CONFIG_EDIT"):
+        return 0  # explicit bypass for intentional prek/hook setup changes
+
     try:
         data = json.load(sys.stdin)
     except (json.JSONDecodeError, ValueError):
