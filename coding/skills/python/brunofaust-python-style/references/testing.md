@@ -26,6 +26,26 @@ Detailed testing conventions for async-first Python projects using pytest.
 1. **Test edge cases** and error conditions
 1. **Measure coverage** but focus on quality
 
+### Anti-patterns — what NOT to do
+
+Common pytest patterns Claude will default to that **violate this skill**. Each
+has a specific replacement — use it.
+
+| ❌ Don't do this                                             | ✅ Do this instead                                                                       | Why                                                                            |
+| ------------------------------------------------------------ | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `@pytest.mark.asyncio` on every async test                   | `asyncio_mode = "auto"` in pytest.ini + `pytest_collection_modifyitems` hook in conftest | One source of truth; never forget to mark a test                               |
+| `unittest.mock.patch` / `mocker.patch` on a module attribute | Dependency injection — pass the dependency into the constructor                          | `mock.patch` is race-prone under `pytest-xdist`; DI is thread-safe and obvious |
+| `mod._client = mock` (module-global assignment in test)      | Inject the client via fixture / factory                                                  | Race-prone under parallel test runs; banned by AST hook                        |
+| `Mock()` / `MagicMock()` for typed objects                   | `polyfactory` / `factory_boy` factory for the concrete type                              | Real types catch contract drift; mocks happily accept anything                 |
+| `scope="session"` for app / AWS clients                      | `scope="function"` (or `scope="module"` only when safe)                                  | Session-scoped state leaks between tests; LocalStack needs per-test isolation  |
+| `monkeypatch.setattr(...)` without `MonkeyPatch.context()`   | `with MonkeyPatch.context() as mp: mp.setattr(...)`                                      | Explicit teardown; safe under parallel collection                              |
+| `@pytest.fixture` with side-effects but no `yield` cleanup   | Always `yield` + cleanup, even for "harmless" fixtures                                   | Resource leaks compound under `-n auto`                                        |
+| Mocking AWS with `moto` / `boto-mock` for integration tests  | LocalStack (Docker, managed by the project's pytest plugin)                              | Higher fidelity; catches real boto serialization bugs                          |
+| `import unittest.mock` anywhere in `tests/`                  | `pytest-mock` (`mocker` fixture) only when DI is genuinely impossible                    | Plugin gives auto-cleanup; stdlib `mock` is easy to forget to stop             |
+| `assert x` with no message on complex objects                | `assert x, f"context: {x!r}"` or `pytest.fail(...)`                                      | Failure logs are unreadable otherwise                                          |
+| `time.sleep(N)` to wait for an async event                   | `await asyncio.wait_for(...)` / `pytest-asyncio` + polling helper                        | sleeps make tests flaky and slow                                               |
+| Catching `Exception` in tests to "be safe"                   | Let exceptions propagate; use `pytest.raises(SpecificError)`                             | Silently swallowing errors hides real bugs                                     |
+
 ### Test Types
 
 - **Unit Tests**: Test individual functions/classes in isolation
@@ -83,6 +103,49 @@ markers =
     e2e: marks end-to-end tests
     slow: marks tests as slow
     localstack: tests that expect Localstack environment (S3, DynamoDB, SQS, SNS, etc.)
+```
+
+#### Coverage threshold (pyproject.toml)
+
+Coverage is a CI gate, not a vanity metric — fail the build below threshold so
+PRs can't merge with uncovered new code.
+
+```toml
+[tool.pytest.ini_options]
+addopts = """
+    --cov=src
+    --cov-report=term-missing
+    --cov-report=html
+    --cov-branch
+    --cov-fail-under=80
+"""
+
+[tool.coverage.report]
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "@abstractmethod",
+    "if __name__ == .__main__.:",
+]
+```
+
+Run with: `uv run pytest --cov` — exits non-zero if coverage < 80%.
+
+#### Selective marker runs
+
+```bash
+# Local fast loop — skip slow + localstack tests
+uv run pytest -m "not slow and not localstack"
+
+# Run only unit tests (fast CI lane)
+uv run pytest -m unit
+
+# Run integration + data layer (slow CI lane)
+uv run pytest -m "integration or data or localstack"
+
+# CI matrix example: split fast/slow into separate jobs
+# job-fast:  pytest -m "not slow and not localstack" --cov-fail-under=80
+# job-slow:  pytest -m "slow or localstack"
 ```
 
 ### Test Organization
