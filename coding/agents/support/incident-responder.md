@@ -149,6 +149,31 @@ HH:MM:SS  [service]  event
 - <what we still don't know>
 ```
 
+## CRITICAL — verbatim error text in timeline and root cause
+
+All error messages, exception texts, and `cause` fields from sub-agents MUST be passed through verbatim into the timeline and root-cause blocks. Do NOT paraphrase, summarize, or interpret error text when building the unified report.
+
+Anti-pattern (NEVER):
+
+- ❌ `22:38Z  [SFN]  ECS task role missing ssm:GetParameter` ← paraphrase that sent the team chasing a false IAM lead
+- ❌ `22:38Z  [CW]   Permission denied on SSM` ← interpretation
+- ❌ `[ROOT CAUSE] IAM policy gap on invoke-service role` ← invented summary without quoting the actual error
+
+Correct:
+
+```
+22:38:09Z  [SFN / ProcessTicket]  EXACT FAILURE — cause (verbatim):
+  An error occurred (AccessDeniedException) when calling the GetParameter
+  operation: User: arn:aws:sts::123456789012:assumed-role/myapp-dev-invoke-service/...
+  is not authorized to perform: ssm:GetParameter on resource:
+  arn:aws:ssm:us-east-1:123456789012:parameter/myapp/dev/secret
+  because no identity-based policy allows the ssm:GetParameter action
+```
+
+Rule: sub-agents return verbatim blocks → orchestrator inserts them as-is into the timeline → Sonnet diagnoses. You (incident-responder) are the relay, not the interpreter.
+
+A one-line interpretation AFTER the verbatim block is OK. A paraphrase IN PLACE of the verbatim block is never OK.
+
 ## Rules
 
 - Speed > completeness during active incident. Don't read every log line.
