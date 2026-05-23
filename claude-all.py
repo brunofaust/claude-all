@@ -272,17 +272,25 @@ def _keychain_subst(value: str) -> str:
 
 
 def _shell_quote(s: str) -> str:
-    """POSIX shell single-quote a literal. Preserves any inner $(...) only when not wrapped here."""
+    """POSIX shell single-quote a literal. Preserves any inner $(...) only when not wrapped here.
+
+    Args:
+        s: The string to quote.
+    """
     return "'" + s.replace("'", "'\\''") + "'"
 
 
 def install_mcp(item: Item, level: str) -> str:
-    """Install MCP via `claude mcp add`. level = 'user' or 'project'.
+    """Install MCP via `claude mcp add`.
 
     Secrets stay in macOS keychain. Any `keychain:NAME` in env or args is
     converted into a runtime `sh -c '...$(security find-generic-password ...)'`
     wrapper so the secret is resolved on every MCP launch — never stored
     plaintext in .claude.json / .mcp.json.
+
+    Args:
+        item: The MCP item to install (reads mcp.json for name, command, args, env).
+        level: Installation scope — ``'user'`` or ``'project'``.
     """
     meta = json.loads(item.src.read_text())
     name = meta.get("name") or item.name
@@ -371,6 +379,9 @@ def install_tool(item: Item) -> str:
     Tools are GLOBAL (user-machine-wide) — `--user` vs `--project` doesn't apply.
     The optional `claude_md.md` snippet still gets injected at the level the
     caller chose, so anti-pattern rules can be per-user or per-project.
+
+    Args:
+        item: The tool item to install (reads tool.json for type and install config).
     """
     meta = json.loads(item.src.read_text())
     ttype = meta.get("type", "brew")
@@ -439,7 +450,11 @@ def install_tool(item: Item) -> str:
 
 
 def _hook_files(item: Item) -> tuple[Path, Path] | None:
-    """Return (hook.json, hook.py) paths if both exist next to the resource."""
+    """Return (hook.json, hook.py) paths if both exist next to the resource.
+
+    Args:
+        item: The resource item whose sibling hook files to locate.
+    """
     if item.kind == "agents":
         base = item.src.parent
         json_path = base / f"{item.name}.hook.json"
@@ -471,6 +486,10 @@ def inject_hook(item: Item, level: str) -> str | None:
     """Install hook: symlink script to .claude/hooks/, merge into settings.json.
 
     Idempotent — re-install replaces the entry keyed by command path.
+
+    Args:
+        item: The resource item whose hook files to install.
+        level: Installation scope — ``'user'`` or ``'project'``.
     """
     files = _hook_files(item)
     if files is None:
@@ -534,7 +553,12 @@ def inject_hook(item: Item, level: str) -> str | None:
 
 
 def remove_hook(item: Item, level: str) -> str | None:
-    """Remove hook entry from settings.json + delete symlink. Idempotent."""
+    """Remove hook entry from settings.json + delete symlink. Idempotent.
+
+    Args:
+        item: The resource item whose hook to remove.
+        level: Installation scope — ``'user'`` or ``'project'``.
+    """
     dest = _hook_symlink_dest(level, item)
     settings_file = _settings_path(level)
 
@@ -572,10 +596,13 @@ def remove_hook(item: Item, level: str) -> str | None:
 
 
 def _claude_md_snippet_path(item: Item) -> Path | None:
-    """Optional `claude_md.md` next to the resource (agents/skills/plugins/mcps).
+    """Return path to the optional ``claude_md.md`` snippet next to the resource.
 
-    For agents (single-file): same dir as the agent .md, named `<agent>.claude_md.md`.
-    For skills/plugins/mcps (dir-based): `claude_md.md` inside the dir.
+    For agents (single-file): same dir as the agent .md, named ``<agent>.claude_md.md``.
+    For skills/plugins/mcps (dir-based): ``claude_md.md`` inside the dir.
+
+    Args:
+        item: The resource item whose claude_md snippet path to resolve.
     """
     if item.kind == "agents":
         candidate = item.src.with_name(f"{item.name}.claude_md.md")
@@ -603,6 +630,10 @@ def inject_claude_md(item: Item, level: str) -> str | None:
 
     Idempotent: re-install replaces the existing tagged block.
     Returns a short status string, or None if no snippet exists.
+
+    Args:
+        item: The resource item whose claude_md snippet to inject.
+        level: Target CLAUDE.md scope — ``'user'`` or ``'project'``.
     """
     snippet_path = _claude_md_snippet_path(item)
     if snippet_path is None:
@@ -632,7 +663,12 @@ def inject_claude_md(item: Item, level: str) -> str | None:
 
 
 def remove_claude_md(item: Item, level: str) -> str | None:
-    """Strip the resource's tagged block from the target CLAUDE.md."""
+    """Strip the resource's tagged block from the target CLAUDE.md.
+
+    Args:
+        item: The resource item whose tagged block to remove.
+        level: Target CLAUDE.md scope — ``'user'`` or ``'project'``.
+    """
     target = _claude_md_target(level)
     if not target.exists():
         return None
@@ -708,7 +744,14 @@ def install_item(item: Item, target_root: Path) -> str:
 
 
 def update_item(kind: str, name: str, install_record: dict, all_items: list[Item]) -> str:
-    """Update a single installed item. Looks up live meta from repo."""
+    """Update a single installed item. Looks up live meta from repo.
+
+    Args:
+        kind: Item category — ``'mcps'``, ``'plugins'``, ``'agents'``, ``'skills'``, or ``'tools'``.
+        name: Item name within its kind.
+        install_record: The entry from the install state file for this item.
+        all_items: Full list of available items from the current repo.
+    """
     # Find matching item in current repo
     match = next((it for it in all_items if it.kind == kind and it.name == name), None)
 
@@ -907,7 +950,11 @@ TUI_QUIT = "quit"
 
 
 def tui_select(items: list[Item]) -> str:
-    """Return TUI_INSTALL, TUI_UPDATE, or TUI_QUIT."""
+    """Return TUI_INSTALL, TUI_UPDATE, or TUI_QUIT.
+
+    Args:
+        items: All available items to display in the selection UI.
+    """
 
     def _run(stdscr):
         curses.curs_set(0)
