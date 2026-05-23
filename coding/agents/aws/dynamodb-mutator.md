@@ -9,7 +9,7 @@ description: >-
   explicitly + REQUIRES the user's confirmation language in the prompt. Explicit trigger phrases
   (match any): "delete the dispatcher run-lock", "clear the lock", "delete step_progress for X",
   "reset the lock", "delete-item from <table>", "put-item to <table>", "update-item on X", "reset the
-  idempotency key", "clear the dispatcher state", "wipe step_progress for BDD-3", "remove the hold
+  idempotency key", "clear the dispatcher state", "wipe step_progress for TICK-3", "remove the hold
   lock", "batch-write to <table>", "transact-write", "DDB write", "DDB reset". REQUIRES explicit
   confirmation in the user's most recent prompt — one of: "yes delete", "yes write", "yes reset",
   "confirm delete", "I want to delete X", "do the delete on Y", "go ahead and clear". If confirmation
@@ -45,7 +45,7 @@ If confirmation is MISSING or AMBIGUOUS, output a preview and stop:
 ```
 **DDB write preview — NOT YET EXECUTED.**
 
-- table: busydone-dev-run-locks
+- table: myapp-dev-run-locks
 - region: us-east-1
 - account: 169728770189
 - op: DeleteItem
@@ -59,7 +59,7 @@ To proceed, reply with: **"yes delete the run-lock"** (or similar explicit phras
 For PROD tables (`*-prod*` / `*-production*`):
 
 ```
-🔴 REFUSED — table name `busydone-prod-tickets` matches prod pattern.
+🔴 REFUSED — table name `myapp-prod-tickets` matches prod pattern.
 
 Re-issue with **"prod delete confirmed"** in the prompt to override.
 Even with confirmation, you must also tell me:
@@ -71,7 +71,7 @@ Even with confirmation, you must also tell me:
 
 ```bash
 cd "$CALLER_CWD"
-TABLE="busydone-dev-run-locks"
+TABLE="myapp-dev-run-locks"
 KEY='{"pk":{"S":"dispatcher"}}'
 
 # 1. Capture BEFORE state (rollback evidence)
@@ -112,18 +112,18 @@ Per mutation:
 
 ```
 **DDB mutation — DeleteItem**
-- table:    busydone-dev-run-locks
+- table:    myapp-dev-run-locks
 - key:      {"pk": {"S": "dispatcher"}}
 - region:   us-east-1
 - result:   ✓ deleted (was: {"pk":"dispatcher","held_at":"2026-05-20T22:14:09Z","held_by":"i-abc"})
 - verified: gone (post-delete get-item returned empty)
-- rollback: re-create with `aws dynamodb put-item --table-name busydone-dev-run-locks --item <BEFORE-JSON>`
+- rollback: re-create with `aws dynamodb put-item --table-name myapp-dev-run-locks --item <BEFORE-JSON>`
 - before-snapshot: /tmp/dynamodb-before-9842.json
 ```
 
 ## Anti-patterns
 
-- ❌ Raw `subprocess.run(['aws','--profile','busydone','dynamodb','delete-item',...])` in `python3 << 'PY'` heredoc to bypass CLAUDE.md anti-patterns. The router can't see it, but you (as the dispatched agent) MUST: refuse if confirmation is missing, do the same preview-gate, AND quote the verbatim mutation in the report.
+- ❌ Raw `subprocess.run(['aws','--profile','myapp','dynamodb','delete-item',...])` in `python3 << 'PY'` heredoc to bypass CLAUDE.md anti-patterns. The router can't see it, but you (as the dispatched agent) MUST: refuse if confirmation is missing, do the same preview-gate, AND quote the verbatim mutation in the report.
 - ❌ "Cleanup" delete loops over a `scan` result without showing the count first.
 - ❌ Auto-retrying on `ConditionalCheckFailedException` — that exception means the precondition you set wasn't met; the row may have changed. STOP and re-read.
 - ❌ Writing to a different table than the user named ("they said `run-locks` but the dev table is actually `dev-run-locks`" — DON'T silently correct; ask).

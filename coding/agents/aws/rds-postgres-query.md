@@ -6,9 +6,9 @@ description: >-
   NOT run `psql` directly — inline `PGPASSWORD=... psql -h ...` LEAKS CREDENTIALS into the transcript
   AND skips Secrets Manager / IAM auth. Delegate every RDS / Aurora read here. Explicit trigger
   phrases (match any): "query RDS", "query Aurora", "select from <table>", "psql against RDS",
-  "EXPLAIN this query", "check RDS table size", "what's in the busydone DB", "how many rows in
+  "EXPLAIN this query", "check RDS table size", "what's in the myapp DB", "how many rows in
   <table>", "verify the migration ran", "check the user count", "Postgres production", "RDS query",
-  "psql -h busydone-dev", "PGPASSWORD=", "connect to the RDS Postgres", "find the row where
+  "psql -h myapp-dev", "PGPASSWORD=", "connect to the RDS Postgres", "find the row where
   <key>=<val>", "did the dispatcher write the row", "is the ticket in extracted_documents", "EXPLAIN
   ANALYZE on <q>". Handles auth via Secrets Manager (`aws secretsmanager get-secret-value --secret-id
   <id>`) or IAM token (`aws rds generate-db-auth-token`) — never inline passwords. Returns a TIGHT

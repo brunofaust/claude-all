@@ -1,8 +1,8 @@
 ______________________________________________________________________
 
-## name: alembic-migration description: > Generate Alembic migrations following busydone patterns — naming, backfill safety, merge resolution, ENUM handling, asyncpg query syntax. Use when: creating a new alembic revision, adding/dropping/renaming columns, adding/altering ENUM types, backfilling data, merging divergent branches, resolving migration drift, running `alembic upgrade/downgrade`, debugging failed migrations, reviewing migration PRs. disable-model-invocation: false user-invocable: true
+## name: alembic-migration description: > Generate Alembic migrations following myapp patterns — naming, backfill safety, merge resolution, ENUM handling, asyncpg query syntax. Use when: creating a new alembic revision, adding/dropping/renaming columns, adding/altering ENUM types, backfilling data, merging divergent branches, resolving migration drift, running `alembic upgrade/downgrade`, debugging failed migrations, reviewing migration PRs. disable-model-invocation: false user-invocable: true
 
-# Alembic Migration Skill (busydone)
+# Alembic Migration Skill (myapp)
 
 PostgreSQL + asyncpg + Alembic. Production datalake — migrations run against
 live data with hundreds of millions of rows. Safety + reviewability matter
@@ -121,7 +121,7 @@ op.alter_column("orders", "old_name", new_column_name="new_name")
 op.rename_table("old_table", "new_table")
 ```
 
-Skip `op.batch_alter_table()` — that's a SQLite-compat shim. busydone is
+Skip `op.batch_alter_table()` — that's a SQLite-compat shim. myapp is
 postgres only. Adding it is noise and obscures the actual ALTER TABLE.
 
 ## Query syntax (asyncpg)
@@ -257,7 +257,7 @@ Notes:
 
 - `IF NOT EXISTS` makes the statement re-runnable (safe on partially-applied
     migrations).
-- Works with asyncpg-driven Alembic (busydone setup) — the autocommit block
+- Works with asyncpg-driven Alembic (myapp setup) — the autocommit block
     uses a separate connection state, no special async handling needed.
 - Don't mix DDL + data migration in the same autocommit block — if the data
     step fails, the ENUM value is already committed and can't be rolled back.

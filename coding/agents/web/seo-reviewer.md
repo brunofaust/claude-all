@@ -141,7 +141,7 @@ Check `index.html` for static SEO basics. For SPAs (React Router, Vue Router), w
 - 🟠 HIGH: content page (blog post, product, article) with NO `<script type="application/ld+json">` block or `generateStructuredData()` call.
 - 🔴 BLOCK: `@type: "HowTo"` — DEPRECATED 2023. Remove.
 - 🟠 HIGH: `@type: "FAQPage"` on a non-authority site (marketing site, SaaS landing). Restrict to government / health / official docs.
-- 🔴 BLOCK: JSON-LD with no `@type` field (the busydone.com bug found in live audit).
+- 🔴 BLOCK: JSON-LD with no `@type` field (the example.com bug found in live audit).
 - 🟡 MEDIUM: missing `BreadcrumbList` on non-home pages.
 - 🟡 MEDIUM: missing `Organization` at site root.
 
@@ -238,7 +238,7 @@ Same shape as `migration-reviewer` and `seo-runner`. File:line refs are non-nego
 
 ### 1. JSON-LD with no `@type` — app/page.tsx:42
 ```tsx
-<script type="application/ld+json">{JSON.stringify({ '@context': 'https://schema.org', name: 'BusyDone', url: '...' })}</script>
+<script type="application/ld+json">{JSON.stringify({ '@context': 'https://schema.org', name: 'MyApp', url: '...' })}</script>
 ````
 
 `@type` is required. Likely meant `Organization`.
@@ -249,7 +249,7 @@ Same shape as `migration-reviewer` and `seo-runner`. File:line refs are non-nego
 <script type="application/ld+json">{JSON.stringify({
   '@context': 'https://schema.org',
   '@type': 'Organization',
-  name: 'BusyDone',
+  name: 'MyApp',
   url: '...',
 })}</script>
 ```
@@ -272,7 +272,7 @@ The blog template renders `<article>` but never emits `<script type="application
 
 ### 5. Title length out of range — app/products/page.tsx:8
 
-Static title `"Products — BusyDone — Automate everything in your workflow today"` is 67 chars (target 50-60). Will truncate in SERP.
+Static title `"Products — MyApp — Automate everything in your workflow today"` is 67 chars (target 50-60). Will truncate in SERP.
 
 ### 6. `<img>` without alt — components/Hero.tsx:14, 22
 

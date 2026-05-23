@@ -40,8 +40,8 @@ For every `get-secret-value` request, return:
 Example output:
 
 ```
-**Secret:** busydone/dev/db-credentials
-**ARN:**    arn:aws:secretsmanager:us-east-1:169728770189:secret:busydone/dev/db-credentials-abc123
+**Secret:** myapp/dev/db-credentials
+**ARN:**    arn:aws:secretsmanager:us-east-1:169728770189:secret:myapp/dev/db-credentials-abc123
 **Version:** AWSCURRENT (id: 6e8d...)
 **Last rotated:** 2026-04-12T08:00:00Z  (next: 2026-07-12T08:00:00Z)
 **KMS key:**     arn:aws:kms:us-east-1:169728770189:key/...
@@ -56,7 +56,7 @@ If the user explicitly says "I need to use this secret to run X" (e.g. psql, lam
 
 ```bash
 eval "$(aws secretsmanager get-secret-value \
-  --secret-id busydone/dev/db-credentials \
+  --secret-id myapp/dev/db-credentials \
   --query SecretString --output text \
   | python3 -c 'import sys, json; d=json.load(sys.stdin); print(f"PGUSER={d[\"username\"]}\nPGPASSWORD={d[\"password\"]}\nPGHOST={d[\"host\"]}\nPGPORT={d[\"port\"]}\nPGDATABASE={d[\"dbname\"]}")')"
 psql -c "SELECT ..."

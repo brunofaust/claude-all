@@ -203,9 +203,9 @@ Use `--porcelain` for stable parsing, then summarize.
 
 ```
 **Worktrees:** 3
-- /Users/bfaust/repos/busydone                            (main)       *primary
-- /Users/bfaust/repos/busydone/.claude/worktrees/auth     (feature/auth-refresh)
-- /Users/bfaust/repos/busydone/.claude/worktrees/billing  (hotfix/billing-pdf)  [locked]
+- /Users/bfaust/repos/myapp                            (main)       *primary
+- /Users/bfaust/repos/myapp/.claude/worktrees/auth     (feature/auth-refresh)
+- /Users/bfaust/repos/myapp/.claude/worktrees/billing  (hotfix/billing-pdf)  [locked]
 *primary = the main checkout
 ```
 
@@ -221,7 +221,7 @@ If only one worktree (the main checkout): `Single worktree — no linked worktre
 - D  docs/lambdas/12-ensure-image.md
 - D  docs/lambdas/13-save-image-tag.md
 - D  docs/lambdas/14-collect-results.md
-- M  src/busydone/handlers/__init__.py
+- M  src/myapp/handlers/__init__.py
 - M  pyproject.toml
 - ... +10 more
 **Summary:** 12 deleted, 3 modified.

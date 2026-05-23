@@ -91,7 +91,7 @@ Detection patterns (verbatim from the actual error output):
 
 | Error fragment                                                           | Meaning                                | Recovery action                                 |
 | ------------------------------------------------------------------------ | -------------------------------------- | ----------------------------------------------- |
-| `Not authenticated with AWS` (busydone Makefile guard)                   | SSO session expired or never logged in | `aws sso login --profile <PROFILE>`             |
+| `Not authenticated with AWS` (myapp Makefile guard)                   | SSO session expired or never logged in | `aws sso login --profile <PROFILE>`             |
 | `Unable to locate credentials`                                           | No profile config or env vars          | `export AWS_PROFILE=<X>` OR `aws configure sso` |
 | `ExpiredToken` / `The security token included in the request is expired` | STS token timed out                    | `aws sso login --profile <PROFILE>`             |
 | `InvalidClientTokenId`                                                   | Bad creds or wrong account/region      | re-export credentials, check profile            |
@@ -140,7 +140,7 @@ Then proceed with plan/apply.
 
 ## Cheap reads — output / state list / state show
 
-Reads are quick (~1s) and don't need the file-capture ceremony of plan/apply. But the caller's main session shouldn't run them either — `terraform output -json` dumps everything in tfstate including secrets/ARNs, and `terraform state list` for a busydone-scale project returns 200+ lines. Use these recipes:
+Reads are quick (~1s) and don't need the file-capture ceremony of plan/apply. But the caller's main session shouldn't run them either — `terraform output -json` dumps everything in tfstate including secrets/ARNs, and `terraform state list` for a myapp-scale project returns 200+ lines. Use these recipes:
 
 ### Single output value
 
@@ -269,7 +269,7 @@ If you can't find a completion marker in the log: re-grep the file, NOT re-execu
 
 ## Rules
 
-- NEVER run `terraform apply` directly without `-out=tfplan.out` + explicit confirmation — EXCEPT when invoking a Makefile wrapper that's already opinionated about its own flags (e.g. `make tf-apply` in busydone uses `-auto-approve` deliberately). Treat the Makefile as the source of truth for its targets; you call it, you don't second-guess its flags.
+- NEVER run `terraform apply` directly without `-out=tfplan.out` + explicit confirmation — EXCEPT when invoking a Makefile wrapper that's already opinionated about its own flags (e.g. `make tf-apply` in myapp uses `-auto-approve` deliberately). Treat the Makefile as the source of truth for its targets; you call it, you don't second-guess its flags.
 - NEVER run `terraform destroy` (or `make tf-destroy`) without explicit confirmation in user's most recent message.
 - NEVER edit `.tf` files. Only execute commands.
 - Never run `terraform import` (state changes need oversight).

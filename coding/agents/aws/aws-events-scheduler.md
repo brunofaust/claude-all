@@ -69,10 +69,10 @@ Otherwise emit a preview:
 
 - op: PutRule
 - bus: default
-- name: busydone-dev-dispatcher-hourly
+- name: myapp-dev-dispatcher-hourly
 - schedule: cron(0 * * * ? *)
 - state: ENABLED
-- to confirm: reply "yes update rule busydone-dev-dispatcher-hourly"
+- to confirm: reply "yes update rule myapp-dev-dispatcher-hourly"
 ```
 
 ## Output format
@@ -80,14 +80,14 @@ Otherwise emit a preview:
 ### `list-rules` / `list-schedules`
 
 ```
-**EventBridge rules** (bus: default, prefix: busydone-dev-): 12
+**EventBridge rules** (bus: default, prefix: myapp-dev-): 12
 
 | name | state | trigger | targets |
 |---|---|---|---|
-| busydone-dev-dispatcher-hourly | ENABLED | cron(0 * * * ? *) | 1 (Lambda) |
-| busydone-dev-money-roller | ENABLED | rate(1 hour) | 1 (Lambda) |
-| busydone-dev-abuse-detection | ENABLED | rate(15 minutes) | 1 (StateMachine) |
-| busydone-dev-ticket-created | DISABLED | EventPattern (source: jira) | 2 (SQS + Lambda) |
+| myapp-dev-dispatcher-hourly | ENABLED | cron(0 * * * ? *) | 1 (Lambda) |
+| myapp-dev-money-roller | ENABLED | rate(1 hour) | 1 (Lambda) |
+| myapp-dev-abuse-detection | ENABLED | rate(15 minutes) | 1 (StateMachine) |
+| myapp-dev-ticket-created | DISABLED | EventPattern (source: jira) | 2 (SQS + Lambda) |
 | ... +8 more |
 ```
 
@@ -98,8 +98,8 @@ For schedules (Scheduler service):
 
 | name | state | cron/rate | flex window | target |
 |---|---|---|---|---|
-| busydone-dev-cleanup | ENABLED | rate(1 day) | 5 minutes | Lambda |
-| busydone-dev-log-export | ENABLED | cron(0 2 * * ? *) | OFF | Lambda |
+| myapp-dev-cleanup | ENABLED | rate(1 day) | 5 minutes | Lambda |
+| myapp-dev-log-export | ENABLED | cron(0 2 * * ? *) | OFF | Lambda |
 ```
 
 ### `describe-rule` — single rule detail
@@ -107,7 +107,7 @@ For schedules (Scheduler service):
 `EventPattern` arrives as STRINGIFIED JSON in the API response and `InputTransformer` arrives as `InputPathsMap` (variable→JSONPath map) + `InputTemplate` (stringified JSON-with-placeholders). Both are unreadable in raw form. Parse + indent both before surfacing. NEVER show raw stringified-JSON to the caller.
 
 ```
-**Rule:** busydone-dev-ticket-created
+**Rule:** myapp-dev-ticket-created
 - bus:        default
 - state:      ENABLED
 - schedule:   none
@@ -117,12 +117,12 @@ For schedules (Scheduler service):
   detail:
     fields.status.new.name: ["AI Analysis", "AI Coding"]
 **Targets (2):**
-  - Lambda  busydone-dev-dispatcher
+  - Lambda  myapp-dev-dispatcher
     InputTransformer:
       - $.detail.issue.key → ticket_key
       - $.detail.user.name → triggered_by
     Template: {"ticket_key": <ticket_key>, "triggered_by": <triggered_by>, "source": "eventbridge"}
-  - SQS busydone-dev-audit-queue (no InputTransformer)
+  - SQS myapp-dev-audit-queue (no InputTransformer)
 ```
 
 Recipe to parse the response inline:
@@ -161,7 +161,7 @@ Any `ResourceNotFoundException` / `NoSuchEntity` / `404` → flag as ORPHANED in
 
 ```
 **ORPHANED TARGETS** (target referenced but resource doesn't exist):
-- Lambda busydone-dev-legacy-handler — rule busydone-dev-ticket-created → 404
+- Lambda myapp-dev-legacy-handler — rule myapp-dev-ticket-created → 404
   Fix: terraform destroy/import or remove-targets
 ```
 
@@ -170,15 +170,15 @@ If the rule is Terraform-managed (see anti-patterns below), the FIX hint should 
 ### `describe-schedule` — single schedule detail
 
 ```
-**Schedule:** busydone-dev-cleanup (group: default)
+**Schedule:** myapp-dev-cleanup (group: default)
 - state:            ENABLED
 - cron/rate:        rate(1 day)
 - flex-window:      5 minutes
 - start/end:        2026-01-01T00:00:00Z / (no end)
 - timezone:         UTC
-- target:           Lambda arn:aws:lambda:us-east-1:...:function:busydone-dev-cleanup
+- target:           Lambda arn:aws:lambda:us-east-1:...:function:myapp-dev-cleanup
 - retry policy:     max-retry=3, max-event-age=1h
-- dead-letter:      arn:aws:sqs:...:busydone-dev-scheduler-dlq
+- dead-letter:      arn:aws:sqs:...:myapp-dev-scheduler-dlq
 ```
 
 ## Anti-patterns

@@ -71,7 +71,7 @@ aws ecr describe-image-scan-findings \
 Output augmentation per image:
 
 ```
-**Image:** busydone-dev-app:v2.3.1
+**Image:** myapp-dev-app:v2.3.1
 - size:       412 MB
 - pushed:     2026-05-20T08:00:00Z (2d ago)
 - CVE scan:   CRITICAL=0, HIGH=2, MEDIUM=8, LOW=14 (last scan: 2026-05-20T08:05Z)

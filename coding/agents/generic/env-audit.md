@@ -49,7 +49,7 @@ aws lambda list-functions \
   --output table 2>/dev/null
 ```
 
-Filter to functions matching the project/env prefix (e.g., `busydone-dev-`, `myapp-staging-`). For each relevant function, note if `LastModified` is BEFORE the most recent code commit that touches Lambda source.
+Filter to functions matching the project/env prefix (e.g., `myapp-dev-`, `myapp-staging-`). For each relevant function, note if `LastModified` is BEFORE the most recent code commit that touches Lambda source.
 
 ## Step 3 — Terraform drift (if terraform or make tf-drift exists)
 

@@ -224,10 +224,10 @@ All agents follow the same pattern: a detailed `description` so Claude Code's au
 
 #### 2.1 Python
 
-| Skill                   | Description                                                                                                                                                                        |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| brunofaust-python-style | Modern Python 3.14+ coding standards for async-first, type-safe production code.                                                                                                   |
-| alembic-migration       | Generate Alembic migrations following busydone patterns — naming, backfill safety, merge resolution, ENUM handling, asyncpg query syntax. Anti-patterns table for common mistakes. |
+| Skill                   | Description                                                                                                                                                                     |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| brunofaust-python-style | Modern Python 3.14+ coding standards for async-first, type-safe production code.                                                                                                |
+| alembic-migration       | Generate Alembic migrations following myapp patterns — naming, backfill safety, merge resolution, ENUM handling, asyncpg query syntax. Anti-patterns table for common mistakes. |
 
 #### 2.5 Generic (cross-cutting)
 

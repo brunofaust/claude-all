@@ -33,7 +33,7 @@ The rule knowledge lives in the `seo` skill — you don't need to repeat it. You
 
 ## Inputs
 
-A URL (or hostname). Examples: `https://www.busydone.com`, `busydone.com`, `example.com/blog/post`.
+A URL (or hostname). Examples: `https://www.example.com`, `example.com`, `example.com/blog/post`.
 
 Normalize before running:
 
@@ -184,10 +184,10 @@ Output:
 
 ```
 **Redirect chain:** 3 hops (2 too many)
-- http://busydone.com → 301 → https://busydone.com
-- https://busydone.com → 301 → https://www.busydone.com
-- https://www.busydone.com → 200
-🟠 HIGH: 2 hops collapse — link directly to https://www.busydone.com to drop a request.
+- http://example.com → 301 → https://example.com
+- https://example.com → 301 → https://www.example.com
+- https://www.example.com → 200
+🟠 HIGH: 2 hops collapse — link directly to https://www.example.com to drop a request.
 ```
 
 ### 4c. Canonical-mismatch on final URL
@@ -196,8 +196,8 @@ Compare the meta-canonical to the final URL after redirects:
 
 ```
 **Canonical match:** ✗ MISMATCH
-- canonical tag: https://www.busydone.com/
-- final URL:     https://www.busydone.com/?utm_source=email
+- canonical tag: https://www.example.com/
+- final URL:     https://www.example.com/?utm_source=email
 🟠 HIGH: canonical doesn't match final URL after query params — strip UTM in canonical.
 ```
 
@@ -240,7 +240,7 @@ echo "--- llms.txt (status only) ---"
 curl -sI -L "$ORIGIN/llms.txt" | head -1
 ```
 
-Where `$ORIGIN = scheme + host` (e.g. `https://www.busydone.com`).
+Where `$ORIGIN = scheme + host` (e.g. `https://www.example.com`).
 
 ### 6. Security / SEO headers (HEAD request)
 

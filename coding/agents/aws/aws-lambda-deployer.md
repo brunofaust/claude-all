@@ -103,7 +103,7 @@ Everywhere this agent's examples below use placeholders like `<deploy-target>`, 
 
 Common project shapes:
 
-- **Per-Lambda ZIPs** (busydone style) — one ZIP per function, built from a uv dependency group, uploaded to S3, then `aws lambda update-function-code --s3-bucket ... --s3-key ...`.
+- **Per-Lambda ZIPs** (myapp style) — one ZIP per function, built from a uv dependency group, uploaded to S3, then `aws lambda update-function-code --s3-bucket ... --s3-key ...`.
 - **Shared ZIP across N functions** — one ZIP, multiple `update-function-code` calls reusing the same S3 key.
 - **Container image** — `docker buildx build --push` to ECR, then `aws lambda update-function-code --image-uri ...`.
 - **SAM / Serverless Framework / CDK** — outside this agent's scope; flag and stop unless user said to use them.
@@ -158,10 +158,10 @@ Combined flow:
 
 ```bash
 cd "$CALLER_CWD"
-PROFILE="${AWS_PROFILE:-busydone}"
+PROFILE="${AWS_PROFILE:-myapp}"
 REGION="${AWS_REGION:-us-east-1}"
 FN="$1"
-PAYLOAD="${2:-{\"busydone_test\": true}}"
+PAYLOAD="${2:-{\"myapp_test\": true}}"
 
 eval "$(aws configure export-credentials --profile "$PROFILE" --format env 2>/dev/null)"
 
@@ -208,13 +208,13 @@ fi
 Return a combined report:
 
 ```
-✓ invoke busydone-dev-dispatcher  (StatusCode 200, RequestId abc-123, ~340ms)
+✓ invoke myapp-dev-dispatcher  (StatusCode 200, RequestId abc-123, ~340ms)
 **Response body:** {"statusCode":200,"body":"\"OK\""}
 **Last 4KB CW logs (from invoke --log-type Tail):**
 ```
 
 2026-05-22T12:14:09Z INIT_START Runtime ...
-2026-05-22T12:14:10Z {"event":"dispatcher.handler","ticket":"BDD-1","status":"queued"}
+2026-05-22T12:14:10Z {"event":"dispatcher.handler","ticket":"TICK-1","status":"queued"}
 2026-05-22T12:14:10Z REPORT RequestId: abc-123 Duration: 340ms ...
 
 ```
@@ -224,7 +224,7 @@ Return a combined report:
 For failures:
 
 ```
-✗ invoke busydone-dev-doc-dispatcher  (FunctionError: Unhandled)
+✗ invoke myapp-dev-doc-dispatcher  (FunctionError: Unhandled)
 **Response body:** {"errorType":"ProgrammingError", "errorMessage":"syntax error at or near \":\"", ...}
 **Last 4KB CW logs:**
 ```
@@ -283,8 +283,8 @@ PY
 Pass `FN`, `PAYLOAD`, `OUT`, `META` via env:
 
 ```bash
-export FN="busydone-dev-doc-dispatcher"
-export PAYLOAD='{"busydone_test": true}'
+export FN="myapp-dev-doc-dispatcher"
+export PAYLOAD='{"myapp_test": true}'
 ```
 
 Critical flags + why:
@@ -531,17 +531,17 @@ Failures:
 **test-lambdas:** ⚠ 36/40 ok, 4 failed (~1m25s)
 
 **Failed:**
-- busydone-dev-feature-pii-detection
+- myapp-dev-feature-pii-detection
   StatusCode: 200, FunctionError: Unhandled
   body: `ImportError: cannot import name 'X' from 'Y'`
   **Likely cause:** missing dep in lambda-feature-pii-detection uv group.
 
-- busydone-dev-onboarding-worker
+- myapp-dev-onboarding-worker
   StatusCode: 200, FunctionError: Unhandled
   body: `KMS_AccessDeniedException: not authorized to decrypt env var`
   **Likely cause:** Lambda role missing kms:Decrypt — check Terraform.
 
-- busydone-dev-notices-sender (× 2 similar)
+- myapp-dev-notices-sender (× 2 similar)
   body: `ModuleNotFoundError: No module named 'aiosmtplib'`
   **Likely cause:** notices shared-ZIP build excluded aiosmtplib. Rebuild lambda-notices.
 ```
@@ -558,21 +558,21 @@ Group identical failures across functions when N > 3:
 Success:
 
 ```
-✓ invoke busydone-dev-api — StatusCode 200, ~340ms
+✓ invoke myapp-dev-api — StatusCode 200, ~340ms
 **Response:** {"statusCode":200,"body":"\"OK\""}
 ```
 
 Failure:
 
 ```
-**Invoke:** ✗ busydone-dev-dispatcher — FunctionError: Unhandled
+**Invoke:** ✗ myapp-dev-dispatcher — FunctionError: Unhandled
 **Response (first useful lines):**
 ```
 
 {
 "errorType": "KeyError",
 "errorMessage": "'org_id'",
-"trace": ["File "/var/task/busydone/handlers/dispatcher.py", line 42, in handler"]
+"trace": ["File "/var/task/myapp/handlers/dispatcher.py", line 42, in handler"]
 }
 
 ```
@@ -582,10 +582,10 @@ Failure:
 
 ```
 **Lambdas (12):**
-- busydone-dev-api                Active     python3.14    updated 2h ago
-- busydone-dev-dispatcher         Active     python3.14    updated 2h ago
-- busydone-dev-log-export         Active     Image         updated 1d ago
-- busydone-dev-feature-pii-detection  Failed (build pending)  python3.14  updated 14m ago
+- myapp-dev-api                Active     python3.14    updated 2h ago
+- myapp-dev-dispatcher         Active     python3.14    updated 2h ago
+- myapp-dev-log-export         Active     Image         updated 1d ago
+- myapp-dev-feature-pii-detection  Failed (build pending)  python3.14  updated 14m ago
 - ... +8 more
 ```
 
@@ -594,11 +594,11 @@ Mark anything with `LastUpdateStatus != Successful` so the caller notices.
 ### `aws lambda get-function-configuration`
 
 ```
-**Function:** busydone-dev-api
+**Function:** myapp-dev-api
 **State:** Active  •  **LastUpdateStatus:** Successful  •  **Updated:** 12m ago
 **Runtime:** python3.14  •  **Arch:** arm64  •  **Memory:** 512 MB  •  **Timeout:** 30s
 **CodeSize:** 142 MB  •  **Image:** —
-**Role:** arn:aws:iam::...:role/busydone-dev-api-role
+**Role:** arn:aws:iam::...:role/myapp-dev-api-role
 **Env vars:** 14 (don't dump values)
 **VPC:** none (runs outside VPC)
 **Layers:** 0
@@ -689,7 +689,7 @@ Layout:
 
 ```
 **INVOKE FAILURE** (1 of N)
-- function:    busydone-dev-doc-dispatcher
+- function:    myapp-dev-doc-dispatcher
 - status_code: 200
 - error_type:  Unhandled
 - errorType:   ProgrammingError

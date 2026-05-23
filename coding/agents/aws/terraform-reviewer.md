@@ -89,7 +89,7 @@ The 5 failure modes:
 **Terraform review — <module/PR>**
 
 ## 🆔 Identity churn
-- Role X gains `s3:*` on `arn:aws:s3:::busydone-prod-*` (was previously `s3:GetObject` only). Severity: HIGH.
+- Role X gains `s3:*` on `arn:aws:s3:::myapp-prod-*` (was previously `s3:GetObject` only). Severity: HIGH.
 
 ## 🔑 Secret exposure
 - (none found)

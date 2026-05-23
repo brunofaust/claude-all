@@ -27,7 +27,7 @@ Fill in EVERY field before sending. Skip one → dispatch usually misfires.
 ```
 1. GOAL
    One sentence, imperative, testable.
-   ✓ "List the top 10 slowest pytest tests in the busydone repo and their durations."
+   ✓ "List the top 10 slowest pytest tests in the myapp repo and their durations."
    ✗ "Look into pytest performance."
 
 2. INPUTS
@@ -109,13 +109,13 @@ This stops the subagent from narrating intermediate work in the final return.
 
 ❌ "Review the codebase for issues."
 
-✅ "Read `src/busydone/handlers/dispatcher.py` and identify the top 5 functions exceeding 50 lines. Return a Markdown table: function name, line count, recommended refactor (extract / split / leave). ≤ 200 words."
+✅ "Read `src/myapp/handlers/dispatcher.py` and identify the top 5 functions exceeding 50 lines. Return a Markdown table: function name, line count, recommended refactor (extract / split / leave). ≤ 200 words."
 
 ### Anti-pattern 2 — Assumed context
 
 ❌ "Apply the changes we discussed to the auth module."
 
-✅ "In `src/busydone/auth/jwt.py`, replace the `os.getenv('SECRET_KEY')` call on line 42 with `settings.jwt_secret_key` (already imported from `.settings`). Run `uv run ruff check src/busydone/auth/jwt.py` after the edit and report the diff + ruff status."
+✅ "In `src/myapp/auth/jwt.py`, replace the `os.getenv('SECRET_KEY')` call on line 42 with `settings.jwt_secret_key` (already imported from `.settings`). Run `uv run ruff check src/myapp/auth/jwt.py` after the edit and report the diff + ruff status."
 
 ### Anti-pattern 3 — Multiple writers to same file in parallel
 

@@ -86,12 +86,12 @@ Layout:
 ```
 **EXACT ERROR** (1 of N)
 - ts: 2026-05-20T22:38:09.847Z
-- op: Query on busydone-dev-tickets
+- op: Query on myapp-dev-tickets
 - code: ValidationException
 - msg: |
     <verbatim error message>
 - request_id: ABCDE-12345-...
-- key: {"org_id": "BDD#tenant-1", "ticket_key": "BDD-7"}
+- key: {"org_id": "BDD#tenant-1", "ticket_key": "TICK-7"}
 ```
 
 Anti-pattern (NEVER): "looks like a permission issue" / "probably wrong key shape".
@@ -112,7 +112,7 @@ Projection types:
 Output format augmentation (replaces / extends the `GSIs:` line in the schema block):
 
 ```
-**Table:** busydone-dev-tickets
+**Table:** myapp-dev-tickets
 **GSIs (2):**
 - ByOrgStatus      pk=org_id, sk=status      projection=KEYS_ONLY  ⚠ queries need follow-up GetItem
 - ByCreatedAt      pk=org_id, sk=created_at  projection=INCLUDE [ticket_key, assignee]

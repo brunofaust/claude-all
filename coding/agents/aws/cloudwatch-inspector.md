@@ -139,7 +139,7 @@ Use the alarm's CONFIGURED `Period` and `Statistic` — not hardcoded defaults �
 Output layout (inline, after the alarm state line):
 
 ```
-**Alarm:** busydone-dev-embed-dlq-depth   STATE: ALARM
+**Alarm:** myapp-dev-embed-dlq-depth   STATE: ALARM
 **Reason (verbatim):** Threshold Crossed: 2 of 3 datapoints >= 1.0
 **Recent datapoints (last 6 × 5min, statistic=Maximum):**
   00:05  5.0

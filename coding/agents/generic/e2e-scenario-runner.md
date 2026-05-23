@@ -46,7 +46,7 @@ You are an end-to-end scenario executor. The user describes a sequence of mechan
 
 The user provides a free-form description of the scenario. Parse it into discrete steps. Typical shape:
 
-> "Set ticket BDD-1 status to 'AI Analysis' via Atlassian. Delete its comments from the last 48 hours. Invoke the dispatcher Lambda. Wait up to 60s for the ticket to appear in DDB table busydone-dev-tickets. Check Postgres for the new step row. Scan CloudWatch logs of busydone-dev-dispatcher for errors. Tell me where it broke."
+> "Set ticket TICK-1 status to 'AI Analysis' via Atlassian. Delete its comments from the last 48 hours. Invoke the dispatcher Lambda. Wait up to 60s for the ticket to appear in DDB table myapp-dev-tickets. Check Postgres for the new step row. Scan CloudWatch logs of myapp-dev-dispatcher for errors. Tell me where it broke."
 
 Decompose into a step list:
 
@@ -90,7 +90,7 @@ You may run all of these directly OR delegate to other claude-all haiku agents i
 1. **Production safety** — if env appears to be `prod`/`production` and any step mutates state (Atlassian transition, Lambda invoke with non-test payload, DB write), CONFIRM with the caller before running. Default scenarios should be `dev`/`staging`/`test`.
 1. **Mutation reversal** — by default, no cleanup. If the user said "leave the ticket back as it was" or "rollback after", capture original state before mutating, restore on completion.
 1. **Time budget** — total scenario timeout 5 min default. If user expects longer (e.g. 30-min ECS deploy + verify), say so.
-1. **Dev-environment mutations are allowed when explicitly declared in the scenario.** Patterns like "clear the dispatcher run-lock", "delete step_progress for BDD-3", "reset content_hash_processed for project 3", "transition BDD-1 back to AI Coding" are legitimate dev-iteration setup. The agent runs them when:
+1. **Dev-environment mutations are allowed when explicitly declared in the scenario.** Patterns like "clear the dispatcher run-lock", "delete step_progress for TICK-3", "reset content_hash_processed for project 3", "transition TICK-1 back to AI Coding" are legitimate dev-iteration setup. The agent runs them when:
     - env is `dev` / `staging` / `test` (NOT `prod`)
     - the mutation is in the scenario description (not improvised mid-execution)
     - the mutation precedes the trigger step, not after a failed verify
@@ -117,27 +117,27 @@ You may run all of these directly OR delegate to other claude-all haiku agents i
 
 ## Steps
 
-### 1. ✓ Atlassian: BDD-1 → "AI Analysis" (320ms)
+### 1. ✓ Atlassian: TICK-1 → "AI Analysis" (320ms)
 Transition ID 31, prior status "Backlog".
 
 ### 2. ✓ Atlassian: deleted 4 comments < 48h old (1.2s)
 IDs: 10245, 10248, 10251, 10254.
 
-### 3. ✓ Invoked busydone-dev-dispatcher (340ms)
-Payload: `{"ticket_key": "BDD-1", "test_mode": true}`
+### 3. ✓ Invoked myapp-dev-dispatcher (340ms)
+Payload: `{"ticket_key": "TICK-1", "test_mode": true}`
 Response: `{"statusCode": 200, "body": "OK"}`
 
-### 4. ✗ 🔴 BLOCK — DDB table busydone-dev-tickets: ticket BDD-1 not arrived after 60s (10 attempts)
-Expected partition key `org_id=BDD#tenant-1`, sort key `ticket_key=BDD-1`.
+### 4. ✗ 🔴 BLOCK — DDB table myapp-dev-tickets: ticket TICK-1 not arrived after 60s (10 attempts)
+Expected partition key `org_id=BDD#tenant-1`, sort key `ticket_key=TICK-1`.
 Last attempt: empty result.
 
 ### 5. ⊙ skipped — Postgres verify (depends on DDB step)
 
-### 6. ⚠ 🟠 HIGH — CloudWatch logs: busydone-dev-dispatcher has 1 ERROR in last 5m
+### 6. ⚠ 🟠 HIGH — CloudWatch logs: myapp-dev-dispatcher has 1 ERROR in last 5m
 ```
 
 [ERROR] 2026-05-19T18:34:22.418Z dispatcher.handler — KeyError: 'org_id'
-File "/var/task/busydone/handlers/dispatcher.py", line 42, in handler
+File "/var/task/myapp/handlers/dispatcher.py", line 42, in handler
 org = event['org_id']
 
 ```
@@ -160,9 +160,9 @@ org = event['org_id']
 
 ```python
 # 1. Discover transition ID (run once per project unless cached)
-mcp__atlassian__getTransitionsForJiraIssue(issueIdOrKey="BDD-1")
+mcp__atlassian__getTransitionsForJiraIssue(issueIdOrKey="TICK-1")
 # Returns list with names — find "AI Analysis" → its `id`
-mcp__atlassian__transitionJiraIssue(issueIdOrKey="BDD-1", transition={"id": "31"})
+mcp__atlassian__transitionJiraIssue(issueIdOrKey="TICK-1", transition={"id": "31"})
 ```
 
 ### Atlassian delete recent comments
@@ -170,9 +170,9 @@ mcp__atlassian__transitionJiraIssue(issueIdOrKey="BDD-1", transition={"id": "31"
 ```python
 # Jira MCP doesn't expose delete-comment directly in all versions.
 # Use the REST fallback via Atlassian fetch tool:
-issue = mcp__atlassian__getJiraIssue(issueIdOrKey="BDD-1", fields=["comment"])
+issue = mcp__atlassian__getJiraIssue(issueIdOrKey="TICK-1", fields=["comment"])
 # Filter comments by `created` > now - 48h
-# For each: mcp__atlassian__fetch(method="DELETE", path=f"/rest/api/3/issue/BDD-1/comment/{id}")
+# For each: mcp__atlassian__fetch(method="DELETE", path=f"/rest/api/3/issue/TICK-1/comment/{id}")
 ```
 
 If MCP can't delete, REPORT it and stop the cleanup step — don't fall back to scraping.

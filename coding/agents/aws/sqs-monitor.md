@@ -82,7 +82,7 @@ Layout:
 
 ```
 **DLQ MESSAGE** (1 of N)
-- queue:           busydone-dev-X-dlq
+- queue:           myapp-dev-X-dlq
 - message_id:      abc-123
 - sent:            2026-05-20T22:38:09.847Z
 - receive_count:   3

@@ -79,7 +79,7 @@ aws s3api get-bucket-acl --bucket "$BUCKET" --query 'Grants[?Grantee.URI==`http:
 Output augmentation per bucket:
 
 ```
-**Bucket:** busydone-dev-assets
+**Bucket:** myapp-dev-assets
 - public-access-block: ALL_PUBLIC_ACCESS_BLOCKED ✓
 - bucket-policy:       not public ✓
 - ACL grants to AllUsers: none ✓

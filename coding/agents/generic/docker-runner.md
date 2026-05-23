@@ -87,7 +87,7 @@ Then list what it would do so they can confirm intent.
 Success:
 
 ```
-✓ docker build — tagged `busydone:latest` (412 MB, 18 layers, ~42s).
+✓ docker build — tagged `myapp:latest` (412 MB, 18 layers, ~42s).
 **Cache:** 14/18 layers from cache. New: dep install, copy src, entrypoint, healthcheck.
 ```
 
@@ -108,7 +108,7 @@ caused by: linker `cc` failed
 ### `docker run` (one-shot, `--rm`)
 
 ```
-✓ docker run --rm busydone:latest sh -c "python -V"
+✓ docker run --rm myapp:latest sh -c "python -V"
 **Exit:** 0
 **Output:** Python 3.14.4
 ```
@@ -116,7 +116,7 @@ caused by: linker `cc` failed
 ### `docker run` (detached)
 
 ```
-✓ started container `busydone-xyz123` (image busydone:latest)
+✓ started container `myapp-xyz123` (image myapp:latest)
 **Ports:** 8080→8080, 5432→5432
 **Status:** running
 ```
@@ -124,7 +124,7 @@ caused by: linker `cc` failed
 ### `docker logs <container>`
 
 ```
-**Container:** busydone-xyz123  •  last 50 lines  •  status: running
+**Container:** myapp-xyz123  •  last 50 lines  •  status: running
 ```
 
 \<3-5 relevant lines if there's error/warning, OR>
@@ -136,9 +136,9 @@ If user said "errors only": filter for ERROR/WARN/FATAL/CRITICAL lines.
 
 ```
 **Running:** 3 containers
-- busydone-app    (Up 12m)   ports 8080→8080
-- busydone-pg     (Up 12m)   ports 5432→5432
-- busydone-redis  (Up 12m)   ports 6379→6379
+- myapp-app    (Up 12m)   ports 8080→8080
+- myapp-pg     (Up 12m)   ports 5432→5432
+- myapp-redis  (Up 12m)   ports 6379→6379
 ```
 
 If nothing running: `No running containers. Run \`docker compose up -d\` to start.\`

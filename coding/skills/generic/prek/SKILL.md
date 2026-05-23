@@ -128,7 +128,7 @@ ______________________________________________________________________
 
 ## Full annotated prek.toml — merged pattern
 
-Merge of busydone, codecongruence, datalake, claude-all, and my_banking_transactions.
+Merge of multiple projects. Pick the sections relevant to your project and remove the rest.
 Pick the sections relevant to your project and remove the rest.
 
 ````toml
@@ -418,14 +418,6 @@ rev = "v2.16"
 hooks = [
   { id = "vulture", name = "🐍 python · Detect unused code" }
   # requires vulture_whitelist.py at repo root for intentional unused symbols
-]
-
-# ── codecongruence (semantic consistency) ────────────────────────────────────
-[[repos]]
-repo = "https://github.com/brunofaust/codecongruence"
-rev = "v0.1.0"
-hooks = [
-  { id = "codecongruence", name = "🧠 semantic · codecongruence" }
 ]
 
 # ── Optional: Makefile linting ───────────────────────────────────────────────

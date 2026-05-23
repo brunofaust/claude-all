@@ -78,7 +78,7 @@ Refused — gh-runner is read-only. Use the main session for mutations (gh pr cr
 ### `gh pr list`
 
 ```
-**Repo:** brunofaust/busydone  •  **Open PRs:** 7
+**Repo:** brunofaust/myapp  •  **Open PRs:** 7
 
 - #287  feat(admin): bulk invite UI                       Bruno     2d ago   ✓ checks
 - #285  fix(billing): tax calc rounding                   Juan      4h ago   ✗ 1/12 failed
@@ -194,14 +194,14 @@ Cross-repo search:
 **Search:** "admin invite" • prs • is:open  •  matches: 4
 
 - octocat/foo#23   feat: bulk admin invite           5d ago
-- busydone/main#287  feat(admin): bulk invite UI     2d ago
+- myapp/main#287  feat(admin): bulk invite UI     2d ago
 - ...
 ```
 
 ### `gh repo view`
 
 ```
-**Repo:** brunofaust/busydone  •  default branch: main  •  stars: 12  •  forks: 0
+**Repo:** brunofaust/myapp  •  default branch: main  •  stars: 12  •  forks: 0
 **Description:** Near-real-time CDC datalake for Baxter Planning.
 **Topics:** aws, python, cdc, parquet, delta-lake
 **Visibility:** private  •  License: none

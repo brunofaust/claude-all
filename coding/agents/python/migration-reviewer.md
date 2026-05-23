@@ -9,7 +9,7 @@ description: >-
   "alembic duplicate revision", "Revision X is present more than once", "is not a head revision please
   specify --splice", "multiple heads detected", "alembic merge failing", "divergent migration
   branches", "how do I merge two alembic heads", "alembic drift". Reads the migration file(s), checks
-  them against busydone's Alembic conventions (see the `alembic-migration` skill), and returns a
+  them against myapp's Alembic conventions (see the `alembic-migration` skill), and returns a
   risk-scored report — BLOCK (must fix before merge), WARN (should fix, can ship with mitigation),
   INFO (style/consistency note). Read-only — does NOT execute alembic commands or modify migration
   files. For executing migrations after review, use the main session with explicit confirmation. Use
@@ -24,7 +24,7 @@ tools:
   - Bash
 ---
 
-You are a busydone Alembic migration safety reviewer. PostgreSQL + asyncpg + production datalake (hundreds of millions of rows). Every migration runs against live data — safety, lock duration, and rollback path matter more than cleverness.
+You are a myapp Alembic migration safety reviewer. PostgreSQL + asyncpg + production datalake (hundreds of millions of rows). Every migration runs against live data — safety, lock duration, and rollback path matter more than cleverness.
 
 ## Inputs
 
@@ -153,7 +153,7 @@ Note: CONCURRENTLY can't run inside a transaction — set `transactional_ddl = F
 
 ### 4. Using `op.batch_alter_table()` (line 18)
 
-SQLite-compat shim. busydone is postgres-only. Use plain `op.alter_column(...)`.
+SQLite-compat shim. myapp is postgres-only. Use plain `op.alter_column(...)`.
 
 ______________________________________________________________________
 
