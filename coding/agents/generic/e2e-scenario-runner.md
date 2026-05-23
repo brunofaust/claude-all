@@ -3,38 +3,43 @@ ______________________________________________________________________
 name: e2e-scenario-runner
 description: >-
 Use this agent FIRST whenever the user wants to RUN an end-to-end scenario / smoke test / workflow
-probe against a deployed environment — describe a sequence of mechanical steps (set state
-somewhere, trigger something, verify downstream effects, scan logs, compare DB state) and the
-agent executes each step + returns a structured pass/fail report. The main session must NOT run
-these multi-step probes directly — running through Atlassian / Slack MCPs, AWS Lambda invokes,
-DynamoDB / Postgres queries, CloudWatch log scans, plus polling loops sequentially burns thousands
-of tokens. Delegate every "run an e2e test", "smoke test the X workflow", "test the ticket flow
-end-to-end", "execute this scenario", "reproduce the bug in dev", "kick off a probe and verify it
-lands", "run scenario X then check Y, Z, W", "trigger the dispatcher then verify DDB + Postgres +
-CW logs", "drive a request through the system and tell me where it broke" request here. Explicit
-trigger phrases (match any): "run e2e", "e2e test", "scenario test", "smoke test the flow", "smoke
-test the pipeline", "run a probe", "trigger and verify", "drive a test through", "reproduce in
-dev", "kick off a test scenario", "run scenario", "execute scenario", "verify the workflow
-end-to-end", "test pipeline end-to-end", "run a full test", "full test", "run the dispatcher and
-check", "trigger X and check Y", "trigger X then verify", "follow ticket X", "follow that ticket",
-"follow this through", "let's go" (when paired with a workflow / ticket / Lambda reference), "test
-this flow", "test the change end-to-end", "run a test on \<ticket/lambda/workflow>", "run a probe
-on <X>", "fire a test scenario", "kick the pipeline", "push a test through", "send a test ticket",
-"trigger and watch", "trigger and follow", "run + verify". Also fire when the user describes 3+
-sequential mechanical steps (set state somewhere → trigger something → verify downstream effects)
-even without these phrases — the SHAPE of the request matches. The agent executes the described
-steps in order, captures evidence at each step (status code, command output excerpt, log line, DB
-row, message body), STOPS execution after first 🔴 BLOCK failure (or continues if user said "run
-all steps regardless"), and returns a tight Markdown report — what worked, what failed, the FIRST
-useful error per failure, and which downstream steps were skipped. NEVER attempts to fix any
-failure — that's the main session's job after reading the report. NEVER assumes hard-coded service
-names, table names, Lambda names — everything is provided by the user's scenario description. Read
+probe against a deployed environment — describe a sequence of mechanical steps (set state somewhere,
+trigger something, verify downstream effects, scan logs, compare DB state) and the agent executes
+each step + returns a structured pass/fail report. The main session must NOT run these multi-step
+probes directly — running through Atlassian / Slack MCPs, AWS Lambda invokes, DynamoDB / Postgres
+queries, CloudWatch log scans, plus polling loops sequentially burns thousands of tokens. Delegate
+every "run an e2e test", "smoke test the X workflow", "test the ticket flow end-to-end", "execute
+this scenario", "reproduce the bug in dev", "kick off a probe and verify it lands", "run scenario X
+then check Y, Z, W", "trigger the dispatcher then verify DDB + Postgres + CW logs", "drive a request
+through the system and tell me where it broke" request here. Explicit trigger phrases (match any):
+"run e2e", "e2e test", "scenario test", "smoke test the flow", "smoke test the pipeline", "run a
+probe", "trigger and verify", "drive a test through", "reproduce in dev", "kick off a test
+scenario", "run scenario", "execute scenario", "verify the workflow end-to-end", "test pipeline
+end-to-end", "run a full test", "full test", "run the dispatcher and check", "trigger X and check
+Y", "trigger X then verify", "follow ticket X", "follow that ticket", "follow this through", "let's
+go" (when paired with a workflow / ticket / Lambda reference), "test this flow", "test the change
+end-to-end", "run a test on \<ticket/lambda/workflow>", "run a probe on <X>", "fire a test
+scenario", "kick the pipeline", "push a test through", "send a test ticket", "trigger and watch",
+"trigger and follow", "run + verify". Also fire when the user describes 3+ sequential mechanical
+steps (set state somewhere → trigger something → verify downstream effects) even without these
+phrases — the SHAPE of the request matches. The agent executes the described steps in order,
+captures evidence at each step (status code, command output excerpt, log line, DB row, message
+body), STOPS execution after first 🔴 BLOCK failure (or continues if user said "run all steps
+regardless"), and returns a tight Markdown report — what worked, what failed, the FIRST useful error
+per failure, and which downstream steps were skipped. NEVER attempts to fix any failure — that's the
+main session's job after reading the report. NEVER assumes hard-coded service names, table names,
+Lambda names — everything is provided by the user's scenario description. Read - invoke + poll only.
+Do NOT use for: writing test code (use Sonnet), fixing the issues the report surfaces (main
+session), unit-test execution (use test-runner), or live production audits where the steps mutate
+prod data — confirm prod intent explicitly first.
+model: claude-haiku-4-5
+tools:
 
-- invoke + poll only. Do NOT use for: writing test code (use Sonnet), fixing the issues the report
-    surfaces (main session), unit-test execution (use test-runner), or live production audits where
-    the steps mutate prod data — confirm prod intent explicitly first.
-    model: claude-haiku-4-5
-    tools: Bash, Read, Glob, Grep, WebFetch
+- Bash
+- Read
+- Glob
+- Grep
+- WebFetch
 
 ______________________________________________________________________
 
