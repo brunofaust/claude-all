@@ -79,14 +79,16 @@ from threading import RLock
 from typing import Any
 
 
+__all__ = ["wrap_loop_close", "register_cleanup", "on_event_loop_close"]
+
 # Track which loops have been wrapped (prevent double-wrapping)
-_wrapped_loops: weakref.WeakSet[asyncio.AbstractEventLoop] = weakref.WeakSet()
+wrapped_loops: weakref.WeakSet[asyncio.AbstractEventLoop] = weakref.WeakSet()
 
 # Cleanup callbacks per loop: dict[loop_id, list[async_callable]]
-_cleanup_callbacks: dict[int, list[Callable[[], Coroutine[Any, Any, None]]]] = {}
+cleanup_callbacks: dict[int, list[Callable[[], Coroutine[Any, Any, None]]]] = {}
 
 # Thread-safe lock for modifying shared state
-_lock = RLock()
+cleanup_lock = RLock()
 
 
 def wrap_loop_close(loop: asyncio.AbstractEventLoop) -> bool:
