@@ -44,15 +44,11 @@ class SkillChecker(ast.NodeVisitor):
         if "integrations/" not in str(self.path):
             for arg in node.args.args:
                 if self._is_dict_any(arg.annotation):
-                    self.errors.append(
-                        f"{self.path}:{node.lineno} dict[str, Any] in signature"
-                    )
+                    self.errors.append(f"{self.path}:{node.lineno} dict[str, Any] in signature")
         # Rule: no business logic in lambda handlers
         if "aws_resources/lambdas/" in str(self.path) and node.name == "lambda_handler":
             stmt_count = sum(1 for n in ast.walk(node) if isinstance(n, ast.stmt))
-            if stmt_count > self.rules.get("thin_lambda_handlers", {}).get(
-                "max_statements", 20
-            ):
+            if stmt_count > self.rules.get("thin_lambda_handlers", {}).get("max_statements", 20):
                 self.errors.append(
                     f"{self.path}:{node.lineno} handler too thick ({stmt_count} stmts)"
                 )
@@ -61,14 +57,8 @@ class SkillChecker(ast.NodeVisitor):
     def visit_Assign(self, node):
         # Rule: ban module-level underscore-prefixed names
         for t in node.targets:
-            if (
-                isinstance(t, ast.Name)
-                and t.id.startswith("_")
-                and not t.id.startswith("__")
-            ):
-                self.errors.append(
-                    f"{self.path}:{node.lineno} module-level _{t.id} — use __all__"
-                )
+            if isinstance(t, ast.Name) and t.id.startswith("_") and not t.id.startswith("__"):
+                self.errors.append(f"{self.path}:{node.lineno} module-level _{t.id} — use __all__")
 
     def visit_ImportFrom(self, node):
         # Rule: no raw SDK imports outside owner folders
@@ -76,11 +66,7 @@ class SkillChecker(ast.NodeVisitor):
         for sdk, owner_glob in banned.items():
             if sdk == "enabled":
                 continue
-            if (
-                node.module
-                and node.module.startswith(sdk)
-                and owner_glob not in str(self.path)
-            ):
+            if node.module and node.module.startswith(sdk) and owner_glob not in str(self.path):
                 self.errors.append(
                     f"{self.path}:{node.lineno} import {sdk} only allowed in {owner_glob}"
                 )

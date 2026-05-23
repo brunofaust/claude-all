@@ -12,6 +12,7 @@ edits in the same session see the flag and exit silently.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import sys
@@ -33,11 +34,8 @@ def main() -> int:
     flag = os.path.join(tempfile.gettempdir(), f"claude-all-bruno-py-{session_id}.flag")
     if os.path.exists(flag):
         return 0  # already reminded this session
-    try:
-        with open(flag, "w") as f:
-            f.write(file_path)
-    except OSError:
-        pass  # if we can't write the flag, just don't dedupe — still emit once
+    with contextlib.suppress(OSError), open(flag, "w", encoding="utf-8") as f:
+        f.write(file_path)
 
     print(
         "Reminder (brunofaust-python-style, first Python edit this session): "
@@ -46,7 +44,8 @@ def main() -> int:
         "structured logging via structlog; "
         "settings singleton (Pydantic) — don't sprinkle os.getenv across code; "
         "NEVER block the event loop in async — use run_in_thread(). "
-        "Read references/<topic>.md for deep coverage on type-hints, error-handling, async-patterns, class-design, config, testing.",
+        "Read references/<topic>.md for deep coverage on: "
+        "type-hints, error-handling, async-patterns, class-design, config, testing.",
         file=sys.stderr,
     )
     return 1  # non-blocking warning, but only fires once per session

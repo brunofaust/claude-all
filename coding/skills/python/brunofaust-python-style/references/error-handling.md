@@ -192,9 +192,7 @@ import structlog
 logger = structlog.get_logger()
 
 # Structured — each field is a searchable key-value pair
-logger.info(
-    "file_processed", file_name="orders.parquet", row_count=1500, duration_ms=230
-)
+logger.info("file_processed", file_name="orders.parquet", row_count=1500, duration_ms=230)
 logger.warning("retry_triggered", operation="put_item", attempt=3, error="throttled")
 logger.error("pipeline_failed", entity="users", stage="transform", error=str(e))
 

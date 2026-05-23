@@ -46,9 +46,7 @@ async def get_value(self, value_name: str) -> Mapping[str, Any]:
 class something:
     """Handles something on application."""
 
-    @cachedmethod(
-        cache=lambda self: get_method_value_cache, lock=lambda self: AsyncLock()
-    )
+    @cachedmethod(cache=lambda self: get_method_value_cache, lock=lambda self: AsyncLock())
     async def get_method_value(self, method_value_name: str) -> Mapping[str, Any]:
         """Retrieve application configuration with caching in an async application."""
         ...

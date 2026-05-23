@@ -514,9 +514,7 @@ async def validate_items(
 
     async with asyncio.TaskGroup() as tg:
         for item in items:
-            tasks.append(
-                tg.create_task(_validate_item_do(parallel_semaphore, item, db))
-            )
+            tasks.append(tg.create_task(_validate_item_do(parallel_semaphore, item, db)))
 
     # Collect results after TaskGroup completes (all tasks are done here)
     valid_items: list[item_dtype] = []
@@ -587,9 +585,7 @@ async def run_pipeline(event: dict[str, Any]) -> None:
             parallel_semaphore = asyncio.Semaphore(10)
             async with asyncio.TaskGroup() as tg:
                 for entity_name, info in rollback_info.items():
-                    tg.create_task(
-                        _rollback_entity_do(parallel_semaphore, entity_name, info)
-                    )
+                    tg.create_task(_rollback_entity_do(parallel_semaphore, entity_name, info))
         raise
 
 
