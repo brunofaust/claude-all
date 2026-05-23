@@ -116,11 +116,9 @@ hooks = [
     id = "mdformat",
     name = "📝 markdown · Format markdown",
     additional_dependencies = [
-      "mdformat-ruff",
-      "ruff",
       "mdformat-mkdocs"
     ],
-    exclude = { glob = [".claude/**"] }
+    exclude = { glob = [".claude/**", "coding/agents/**"] }
   }
 ]
 
