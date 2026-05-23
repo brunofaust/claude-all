@@ -203,3 +203,14 @@ hooks = [
     name = "🐍 python · Forbid UTF-8 Unicode replacement character"
   }
 ]
+
+
+[[repos]]
+repo = "https://github.com/brunofaust/codecongruence"
+rev = "v0.1.0"
+hooks = [
+  {
+    id = "codecongruence",
+    name = "🧠 semantic · codecongruence"
+  }
+]
