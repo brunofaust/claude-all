@@ -136,7 +136,7 @@ Section headers for long files:
 
 1. **Data modeling.** Pydantic at trust boundaries, frozen dataclasses internally, TypedDict only for static test data. Never pass `dict[str, Any]` between modules. → `references/data-modeling.md`
 1. **External system ownership.** One owner class per external system (Jira, S3, OpenAI, …). All SDK / HTTP calls flow through it; ruff `banned-api` blocks raw imports outside owner folders. → `references/external-system-ownership.md`
-1. **Error handling discipline.** No silent except. No `log.debug` inside `except`. Catch narrowest class, log at `warning`/`error` with structured context, `raise ... from e` when converting. → `references/error-handling.md`
+1. **Error handling discipline.** No silent except. No `log.debug` inside `except`. Catch narrowest class, log at `warning`/`error` with structured context, `raise ... from e` when converting. **`contextlib.suppress(Exception)` is strictly prohibited** — it silences all exceptions including bugs and OOM; `suppress(SpecificError)` requires explicit justification. → `references/error-handling.md`
 1. **Test patterns.** Use factories (polyfactory / factory_boy). Never `mod._client = mock` (race-prone under xdist) — inject the dependency. Tests mirror `src/` 1:1. → `references/testing.md`
 1. **Visibility.** Module-level names never start with `_` — use `__all__`. Class-scope `self._x` is fine. The `_`-prefix blinds vulture, ruff, pyright to dead-code at module scope. → `references/visibility.md`
 1. **Project structure.** `domain/` (pure logic) → `features/` (vertical slices) → `integrations/` + `aws_resources/` + `db/` (horizontal). Entry points (`api/`, `cli/`, lambdas) stay thin. Enforce direction with `import-linter`. → `references/project-structure.md`
@@ -167,6 +167,7 @@ Section headers for long files:
 - ❌ Internal types in public APIs — use TypedDicts / DTOs.
 - ❌ Mixed I/O + business logic in one function.
 - ❌ `except Exception: pass` — catch specific, log context, re-raise as needed.
+- ❌ **`contextlib.suppress(Exception)` — strictly prohibited.** Silences all exceptions including bugs, OOM, and `KeyboardInterrupt`. `suppress(SpecificError)` is allowed only with an inline comment explaining why swallowing that specific error is intentional and safe.
 - ❌ Ignoring partial failures in batch ops — return successes + failures.
 - ❌ Skipping input validation at API/function boundaries.
 - ❌ Blocking calls in async — use `run_in_thread()` (see `references/async-patterns.md`).
@@ -180,7 +181,8 @@ Before finalising code:
 - [ ] All functions: Google-style docstrings
 - [ ] No scattered timeout / retry logic
 - [ ] No mixed I/O + business logic
-- [ ] No bare `except Exception: pass` (unless intentional)
+- [ ] No bare `except Exception: pass`
+- [ ] No `contextlib.suppress(Exception)` — use narrow `suppress(SpecificError)` with justification comment only
 - [ ] Batch ops handle partial failures
 - [ ] Collections have type parameters
 - [ ] Resources use context managers or explicit cleanup
