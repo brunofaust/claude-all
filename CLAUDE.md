@@ -52,6 +52,49 @@ allowed in `prek.toml` because that file is functional config, not documentation
 But their names must not appear in skill documentation examples — use
 `myorg/myhook` as the placeholder in SKILL.md files.
 
+## Agent error reporting — verbatim by default
+
+Agents exist to absorb large output so the main session stays clean. But when
+an error needs to be **fixed**, the main session needs the full error text — a
+summary is not enough.
+
+### Rule
+
+**Return errors verbatim unless the main session cannot act on the detail.**
+
+| Error type                                                 | Return                                             |
+| ---------------------------------------------------------- | -------------------------------------------------- |
+| Test failures (pytest, jest, vitest)                       | Verbatim — full traceback + assertion diff         |
+| Linter / type-checker errors (ruff, mypy, eslint, tsc)     | Verbatim — file:line + message                     |
+| Pre-commit / hook failures                                 | Verbatim — full hook output                        |
+| Log entries with exceptions                                | Verbatim — timestamp + exception class + traceback |
+| AWS errors (Lambda FunctionError, DDB ValidationException) | Verbatim — error code + message + request ID       |
+| SQL errors                                                 | Verbatim — SQLSTATE + message                      |
+| Simple bash failure the caller can't act on                | Summary OK — e.g. "exit 1: file not found"         |
+| Infra/deploy success confirmation                          | Summary OK — e.g. "✓ deployed, ARN: ..."           |
+
+### What "verbatim" means
+
+Quote the exact output — do not paraphrase, truncate error messages, or replace
+specifics with "looks like a permission issue" / "probably a type error". The
+main session reads the raw text to locate the file, line, and cause.
+
+Summaries are acceptable only when:
+
+- The output is a success / no-op (counts, durations, resource names).
+- The error is a system/infra issue the caller cannot fix from text alone
+    (e.g., network timeout, missing AWS credentials) — in that case return the
+    exact error code + message but skip surrounding noise.
+
+### Never
+
+- Paraphrase error messages ("the import failed" instead of the full
+    `ImportError: cannot import name 'X' from 'Y (path)'`).
+- Truncate stack traces to "top frame only" — return at least the 3 frames
+    closest to the call site.
+- Omit file paths and line numbers from lint/type errors.
+- Summarise a failing test as "2 tests failed" without the failure bodies.
+
 ## CLAUDE.md injection — never edit `~/.claude/CLAUDE.md` directly
 
 `~/.claude/CLAUDE.md` is the user's global Claude config. It is managed by
