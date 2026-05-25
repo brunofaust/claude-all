@@ -1,13 +1,20 @@
 ---
 name: iam-auditor
 description: >-
-  Use this agent to inspect AWS IAM roles, users, groups, policies, attached permissions, trust
-  relationships, and access patterns. Read-only audit. Triggers on "what permissions does this role
-  have", "who can access this bucket", "check IAM policy", "list roles in this account", "audit IAM",
-  "show trust policy", "find unused IAM users", "check policy attachments". Use this to investigate
-  security posture, debug permission errors, or document access. Do NOT use this agent to CREATE,
-  MODIFY, or DELETE IAM resources — those require a Sonnet session with explicit user oversight. This
-  agent never makes write calls.
+  Use this agent FIRST whenever the user wants to inspect AWS IAM — `aws iam get-role`,
+  `aws iam get-role-policy`, `aws iam list-role-policies`, `aws iam list-attached-role-policies`,
+  `aws iam get-policy`, `aws iam get-policy-version`, `aws iam list-users`, `aws iam list-roles`,
+  `aws iam simulate-principal-policy`. The main session must NOT run these directly — IAM policy
+  documents are verbose nested JSON and burn Sonnet/Opus tokens. Delegate every IAM read here.
+  Explicit trigger phrases (match any): "what permissions does this role have", "who can access this
+  bucket", "check IAM policy", "list roles in this account", "audit IAM", "show trust policy",
+  "find unused IAM users", "check policy attachments", "aws iam get-role", "aws iam get-role-policy",
+  "aws iam list-role-policies", "aws iam list-attached-role-policies", "aws iam get-policy",
+  "aws iam list-roles", "aws iam list-users", "show inline policies", "what does this role allow",
+  "does this role have permission to X", "check the task role permissions", "IAM permission boundary",
+  "simulate IAM policy". Use to investigate security posture, debug permission errors, or document
+  access. Do NOT use this agent to CREATE, MODIFY, or DELETE IAM resources — those require a Sonnet
+  session with explicit user oversight. This agent never makes write calls.
 model: claude-haiku-4-5
 tools:
   - Bash
