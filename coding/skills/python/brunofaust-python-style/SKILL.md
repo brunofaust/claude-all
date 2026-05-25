@@ -21,27 +21,28 @@ Production-grade async Python. Async-first, strict types, immutable parameter ty
 
 Read the matching file BEFORE deep work in that area. Each is a focused reference, not a full re-implementation of the rules.
 
-| If you are…                                                                                                                                                                                    | Read                                                                                 |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| Writing docstrings, public APIs, package docs                                                                                                                                                  | [`references/docstrings.md`](references/docstrings.md)                               |
-| Adding generics, Protocols, type aliases, TYPE_CHECKING decisions                                                                                                                              | [`references/type-hints.md`](references/type-hints.md)                               |
-| Touching `try/except`, designing exception hierarchies, using `suppress()`, handling AWS / boto errors                                                                                         | [`references/error-handling.md`](references/error-handling.md)                       |
-| Designing classes — inheritance for service wrappers, DI, class attributes                                                                                                                     | [`references/class-design.md`](references/class-design.md)                           |
-| Implementing caching, TTL caches, cache invalidation                                                                                                                                           | [`references/caching.md`](references/caching.md)                                     |
-| Setting up `pyproject.toml`, project bootstrap, ruff/mypy config                                                                                                                               | [`references/pyproject-toml.md`](references/pyproject-toml.md)                       |
-| Bootstrapping a new project                                                                                                                                                                    | [`references/installation.md`](references/installation.md)                           |
-| Writing README, CHANGELOG, project docs                                                                                                                                                        | [`references/project-docs.md`](references/project-docs.md)                           |
-| Architectural decisions — KISS, SRP, Separation of Concerns, Composition>Inheritance, Rule of Three, function size, DI, anti-patterns                                                          | [`references/architecture.md`](references/architecture.md)                           |
-| Writing/optimizing async code — TaskGroup, ExceptionGroup, `run_in_thread`, semaphores, rollback, FIFO, pagination                                                                             | [`references/async-patterns.md`](references/async-patterns.md)                       |
-| Configuration management — Pydantic Settings, env var coercion, nested configs, secrets from files                                                                                             | [`references/config.md`](references/config.md)                                       |
-| Writing tests — pytest, fixtures, parametrize, mocks, LocalStack, time freezing, snapshot, **factory pattern (polyfactory/factory_boy), DI over module-global mocks, mirrored src/ structure** | [`references/testing.md`](references/testing.md)                                     |
-| Choosing between Pydantic / dataclass / TypedDict — trust boundaries, internal contracts, test fixtures                                                                                        | [`references/data-modeling.md`](references/data-modeling.md)                         |
-| Owner-class pattern for external systems (Jira, AWS, OpenAI…), ruff `banned-api` config, audit recipe                                                                                          | [`references/external-system-ownership.md`](references/external-system-ownership.md) |
-| Module-level visibility — `__all__` over `_` prefix, vulture/ruff blind-spot fix                                                                                                               | [`references/visibility.md`](references/visibility.md)                               |
-| Debugging AWS dev environments — full-run → isolate → hotfix vs deploy → parallel pieces → SF splitting → verify                                                                               | [`aws-debug-loop` skill](../../aws/aws-debug-loop/SKILL.md)                          |
-| Pre-PR verification — 6-phase gate with formal PASS/FAIL report (lint → types → tests → coverage → security → diff)                                                                            | [`verification-loop` skill](../../generic/verification-loop/SKILL.md)                |
-| Project folder layout — `domain/features/integrations/aws_resources/api/db`, per-resource files, `import-linter` contracts                                                                     | [`references/project-structure.md`](references/project-structure.md)                 |
-| Enforcement matrix — every rule → ruff code / `skill_enforcer.py` rule / prek hook / GH Action                                                                                                 | [`references/enforcement.md`](references/enforcement.md)                             |
+| If you are…                                                                                                                                                                                    | Read                                                                                                    |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| Writing docstrings, public APIs, package docs                                                                                                                                                  | [`references/docstrings.md`](references/docstrings.md)                                                  |
+| Adding generics, Protocols, type aliases, TYPE_CHECKING decisions                                                                                                                              | [`references/type-hints.md`](references/type-hints.md)                                                  |
+| Touching `try/except`, designing exception hierarchies, using `suppress()`, handling AWS / boto errors                                                                                         | [`references/error-handling.md`](references/error-handling.md)                                          |
+| Designing classes — inheritance for service wrappers, DI, class attributes                                                                                                                     | [`references/class-design.md`](references/class-design.md)                                              |
+| Implementing caching, TTL caches, cache invalidation                                                                                                                                           | [`references/caching.md`](references/caching.md)                                                        |
+| Setting up `pyproject.toml`, project bootstrap, ruff/mypy config                                                                                                                               | [`references/pyproject-toml.md`](references/pyproject-toml.md)                                          |
+| Bootstrapping a new project                                                                                                                                                                    | [`references/installation.md`](references/installation.md)                                              |
+| Writing README, CHANGELOG, project docs                                                                                                                                                        | [`references/project-docs.md`](references/project-docs.md)                                              |
+| Architectural decisions — KISS, SRP, Separation of Concerns, Composition>Inheritance, Rule of Three, function size, DI, anti-patterns                                                          | [`references/architecture.md`](references/architecture.md)                                              |
+| Writing/optimizing async code — TaskGroup, ExceptionGroup, `run_in_thread`, semaphores, rollback, FIFO, pagination                                                                             | [`references/async-patterns.md`](references/async-patterns.md)                                          |
+| Writing AWS Lambda handlers — async entry point with `uvloop.run()`, `main()` pattern                                                                                                          | See `## Lambda handlers` section above + [`references/async-patterns.md`](references/async-patterns.md) |
+| Configuration management — Pydantic Settings, env var coercion, nested configs, secrets from files                                                                                             | [`references/config.md`](references/config.md)                                                          |
+| Writing tests — pytest, fixtures, parametrize, mocks, LocalStack, time freezing, snapshot, **factory pattern (polyfactory/factory_boy), DI over module-global mocks, mirrored src/ structure** | [`references/testing.md`](references/testing.md)                                                        |
+| Choosing between Pydantic / dataclass / TypedDict — trust boundaries, internal contracts, test fixtures                                                                                        | [`references/data-modeling.md`](references/data-modeling.md)                                            |
+| Owner-class pattern for external systems (Jira, AWS, OpenAI…), ruff `banned-api` config, audit recipe                                                                                          | [`references/external-system-ownership.md`](references/external-system-ownership.md)                    |
+| Module-level visibility — `__all__` over `_` prefix, vulture/ruff blind-spot fix                                                                                                               | [`references/visibility.md`](references/visibility.md)                                                  |
+| Debugging AWS dev environments — full-run → isolate → hotfix vs deploy → parallel pieces → SF splitting → verify                                                                               | [`aws-debug-loop` skill](../../aws/aws-debug-loop/SKILL.md)                                             |
+| Pre-PR verification — 6-phase gate with formal PASS/FAIL report (lint → types → tests → coverage → security → diff)                                                                            | [`verification-loop` skill](../../generic/verification-loop/SKILL.md)                                   |
+| Project folder layout — `domain/features/integrations/aws_resources/api/db`, per-resource files, `import-linter` contracts                                                                     | [`references/project-structure.md`](references/project-structure.md)                                    |
+| Enforcement matrix — every rule → ruff code / `skill_enforcer.py` rule / prek hook / GH Action                                                                                                 | [`references/enforcement.md`](references/enforcement.md)                                                |
 
 ## Naming conventions
 
@@ -116,6 +117,34 @@ Multi-exception in one except (PEP 758, 3.14+): `except ValueError, TypeError:` 
 | Logging              | **structlog**   | stdlib logging with f-strings |
 | Dependencies         | **uv**          | pip                           |
 
+## Lambda handlers
+
+Every Lambda handler must be **async-first**. The sync `handler` is a one-line wrapper that calls `uvloop.run()` — never `asyncio.run()`, never business logic inside.
+
+```python
+import uvloop
+from typing import Any
+
+
+def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
+    """AWS Lambda entry point — sync shell, async body."""
+    return uvloop.run(main(event))
+
+
+async def main(event: dict[str, Any]) -> dict[str, Any]:
+    """Async implementation — all logic lives here."""
+    ...
+```
+
+Rules:
+
+- `lambda_handler` is **sync** (AWS requirement) — one line only: `return uvloop.run(main(event))`.
+- `main()` is `async def` and contains all business logic.
+- Never call `asyncio.run()` — always `uvloop.run()`.
+- Never put business logic inside `lambda_handler`.
+
+Full event loop patterns → [`references/async-patterns.md`](references/async-patterns.md).
+
 ## Code organisation
 
 Section headers for long files:
@@ -153,6 +182,7 @@ Section headers for long files:
 - ❌ `@pytest.mark.asyncio` → `conftest.py` handles it.
 - ❌ Mocking AWS in integration tests → LocalStack.
 - ❌ `asyncio.run()` → `uvloop.run()`.
+- ❌ Business logic inside `lambda_handler` — sync handler is one line: `return uvloop.run(main(event))`, all logic in `async def main()`.
 - ❌ Wildcard imports.
 - ❌ Global mutable state → pass context objects.
 - ❌ `from __future__ import annotations` — deprecated post-PEP 649.
@@ -194,6 +224,7 @@ Before finalising code:
 - [ ] No blocking calls in async
 - [ ] `raise` specific (`ValueError`, `TypeError`), not generic `Exception`
 - [ ] All async functions awaited
+- [ ] Lambda handlers: `lambda_handler` is sync one-liner (`uvloop.run(main(event))`), all logic in `async def main()`
 - [ ] Tests cover error paths + edge cases
 
 ## Pre-commit checklist

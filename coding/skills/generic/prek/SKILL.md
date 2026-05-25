@@ -289,7 +289,7 @@ hooks = [
     id = "mypy",
     name = "🐍 python · Validate with Mypy",
     pass_filenames = false,
-    stages = ["push"],        # slow — run only on push, not every commit
+    stages = ["pre-push"],        # slow — run only on push, not every commit
     additional_dependencies = [
       # add your type stubs here:
       # "types-aiobotocore[dynamodb,lambda,s3,sns,sqs]",
@@ -309,7 +309,7 @@ hooks = [
 #     args = ["src/"],
 #     pass_filenames = false,
 #     types_or = ["python", "pyi"],
-#     stages = ["push"]
+#     stages = ["pre-push"]
 #   }
 # ]
 

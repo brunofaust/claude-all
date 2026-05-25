@@ -2,6 +2,8 @@ default_language_version.python = "3.11"
 
 exclude = { glob = [".claude/**", ".worktrees/**", ".mypy_cache/**"] }
 
+default_stages = ["pre-commit"]
+
 [[repos]]
 repo = "https://github.com/pre-commit/pre-commit-hooks"
 rev = "v6.0.0"
