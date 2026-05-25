@@ -14,10 +14,13 @@ claude-all/
 │   │   ├── aws/              # AWS-specific tooling
 │   │   ├── databases/        # Non-AWS database tooling
 │   │   ├── python/           # Python-specific
+│   │   ├── web/              # Web / SEO agents
 │   │   └── support/          # Cross-cutting: debugging, incidents
 │   ├── skills/               # Reusable skills (e.g., python style)
+│   ├── hooks/                # Claude Code hook scripts (PreToolUse / PostToolUse / Stop)
 │   ├── plugins/              # Claude Code plugins
-│   └── mcps/                 # MCP server configurations
+│   ├── mcps/                 # MCP server configurations
+│   └── tools/                # OS-level CLI tools (brew)
 └── README.md
 ```
 
@@ -236,11 +239,14 @@ All agents follow the same pattern: a detailed `description` so Claude Code's au
 
 #### 2.5 Generic (cross-cutting)
 
-| Skill                      | Description                                                                                                                                                                                                                                                                        |
-| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| adversarial-verification   | Evidence-first verification discipline. 5-step gate (IDENTIFY/RUN/READ/VERIFY/CLAIM) before claiming work complete. Forbids hedging language until evidence is quoted. Includes revert-and-rerun regression check + try-to-break failure probes.                                   |
-| self-rationalization-guard | Behavioral guard — detects 7 execution-avoidance patterns (explaining instead of executing, restating constraints, pre-emptive surrender, spirit-vs-letter dodge, retroactive scope shrink, false-equivalence substitution, authority deflection) and forces redirect to action.   |
-| subagent-prompting         | 10-point dispatch-prompt checklist for high-quality Agent/Task tool calls. Subagent has zero memory of parent session — inline every input. Includes return-status enum (DONE / DONE_WITH_CONCERNS / NEEDS_CONTEXT / BLOCKED / OVER_BUDGET) + parallel-dispatch independence test. |
+| Skill                      | Description                                                                                                                                                                                                                                                                                                                               |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| adversarial-verification   | Evidence-first verification discipline. 5-step gate (IDENTIFY/RUN/READ/VERIFY/CLAIM) before claiming work complete. Forbids hedging language until evidence is quoted. Includes revert-and-rerun regression check + try-to-break failure probes.                                                                                          |
+| code-review-discipline     | Discipline for any review-style task (code review, security review, SEO review, migration review, architecture review). Enforces uniform output format, mechanical Approve/Warning/Block verdict rule, PR merge-readiness pre-check, and "report-only" rule. Pair with domain-specific review skills — this one defines the output shape. |
+| prek                       | Prek setup, config reference, and gotchas. Use when adding new hooks to `prek.toml`, debugging hook failures, or understanding the `final_check.py` Claude Code hook pattern. Covers `stages = ["pre-commit"]` requirement, `SKIP=` env var, `prek autoupdate`, and the 2-failure stop rule.                                              |
+| self-rationalization-guard | Behavioral guard — detects 7 execution-avoidance patterns (explaining instead of executing, restating constraints, pre-emptive surrender, spirit-vs-letter dodge, retroactive scope shrink, false-equivalence substitution, authority deflection) and forces redirect to action.                                                          |
+| subagent-prompting         | 10-point dispatch-prompt checklist for high-quality Agent/Task tool calls. Subagent has zero memory of parent session — inline every input. Includes return-status enum (DONE / DONE_WITH_CONCERNS / NEEDS_CONTEXT / BLOCKED / OVER_BUDGET) + parallel-dispatch independence test.                                                        |
+| verification-loop          | Structured pre-PR verification with explicit PASS/FAIL per gate. Six phases (lint/format → types → tests → coverage → security/secrets → diff review) culminating in a READY / NOT READY verdict. Complements `adversarial-verification` (claim verification) by enforcing a uniform gate format before any PR opens.                     |
 
 #### 2.2 Frontend
 
@@ -258,6 +264,7 @@ All four kept under one `frontend/` folder — React-specific items are a subset
 | Skill            | Description                                                                                                                                                                                                                                                                                                                                                      |
 | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | aws-architecture | Serverless + event-driven AWS patterns — Lambda idempotency / VPC / cold starts, SQS visibility + DLQ, SNS vs EventBridge vs SQS decision matrix, DynamoDB partition design + single-table, Step Functions Express vs Standard, API Gateway HTTP vs REST, cost gotchas (NAT, CW Logs, cross-AZ). Anchored to AWS Well-Architected + Serverless Application Lens. |
+| aws-debug-loop   | Structured debug loop for AWS dev environments. Covers e2e and integration test failures — how to split a full test into isolated pieces, hotfix the dev environment directly (env vars, timeouts, image versions) before deploying, validate each fix in isolation, run independent pieces in parallel, and know when to declare a piece fixed vs redeploy.     |
 
 #### 2.4 Web
 
@@ -265,7 +272,19 @@ All four kept under one `frontend/` folder — React-specific items are a subset
 | ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | seo   | SEO + GEO + AEO — classic search ranking, generative-engine citation (Perplexity / ChatGPT / Gemini / AI Overviews), and answer-engine optimization (featured snippets, PAA, voice). Covers on-page, JSON-LD (with deprecation warnings for HowTo / non-authority FAQPage), Core Web Vitals (LCP / INP / CLS with current thresholds), robots/sitemap/hreflang, AI-bot access (GPTBot, ClaudeBot, PerplexityBot), `llms.txt`, programmatic-page caps. |
 
-### 3. Plugins
+### 3. Hooks
+
+Hook scripts that ship in `coding/hooks/`. Installed via `claude-all` into `.claude/hooks/` + `.claude/settings.json` (or the user-level equivalents with `--user`). All hooks are **non-blocking by default** — they emit `stderr` reminders that Claude reads and acts on, without hard-stopping the tool.
+
+| Hook                          | Event         | Description                                                                                                                                                                                                                               |
+| ----------------------------- | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `config-protection.py`        | `PreToolUse`  | Blocks edits to lint/formatter configs (`prek.toml`, `.ruff.toml`, `.pre-commit-config.yaml`) without explicit user intent — prevents accidental side-effect changes to the quality gate during unrelated coding tasks.                   |
+| `dev-server-tmux.py`          | `PreToolUse`  | Blocks long-running dev server commands (e.g. `npm run dev`, `uvicorn`, `next dev`) unless the session is inside a tmux pane — prevents orphaned background processes that outlive the Claude session.                                    |
+| `edited-files-accumulator.py` | `PostToolUse` | After every `Edit`/`Write`/`MultiEdit`, appends the edited file path to a per-session temp file. Pairs with `prek-stop-runner.py` to enable per-response prek batch execution.                                                            |
+| `prek-stop-runner.py`         | `Stop`        | Reads the accumulator written by `edited-files-accumulator.py`, runs `prek run` for both `pre-commit` and `pre-push` stages against the batch, then clears the file. Result: prek fires once per Claude response, not once per file edit. |
+| `suggest-compact.py`          | `PreToolUse`  | Counts edit-class tool calls per session. Every N calls emits a non-blocking `/compact` reminder before the context window fills and forces an abrupt compaction.                                                                         |
+
+### 4. Plugins
 
 Each plugin lives at `coding/plugins/<name>/plugin.json`. The installer dispatches on the `type` field:
 
@@ -287,7 +306,7 @@ Installed plugins:
 | `claude-mem`        | claude-marketplace    | [thedotmack/claude-mem](https://github.com/thedotmack/claude-mem)             | Persistent cross-session memory for Claude Code.                                                                                       |
 | `code-review-graph` | pip (`[communities]`) | [tirth8205/code-review-graph](https://github.com/tirth8205/code-review-graph) | Persistent incremental knowledge graph for token-efficient, context-aware code reviews. Includes `igraph` via the `communities` extra. |
 
-### 4. MCPs
+### 5. MCPs
 
 Each MCP lives at `coding/mcps/<name>/mcp.json`. Installer runs `claude mcp add` at the chosen scope (`--user` → user scope, `--project` → writes `.mcp.json` in cwd).
 
@@ -333,7 +352,7 @@ Installed MCPs:
 | `playwright` | `@playwright/mcp`                       | [microsoft/playwright-mcp](https://github.com/microsoft/playwright-mcp)                       | Browser automation — navigate, click, fill, screenshot, evaluate JS.                                     |
 | `postgres`   | `@modelcontextprotocol/server-postgres` | [mcp/server-postgres](https://github.com/modelcontextprotocol/servers/tree/main/src/postgres) | Read-only SQL against a Postgres DB. **Edit connection URL after install** (see `post_install_message`). |
 
-### 5. Tools
+### 6. Tools
 
 CLI tools installed at the OS level (not into `~/.claude/`). Each tool lives at `coding/tools/<name>/tool.json`. Currently only `type: brew` (Homebrew) is supported.
 

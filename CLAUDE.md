@@ -1,5 +1,44 @@
 # claude-all — contribution guidelines
 
+## Commands
+
+```bash
+# Install an agent or skill into Claude Code
+./claude-all install <agent-name> --level user    # global
+./claude-all install <agent-name> --level project # repo-local
+
+# Dev setup (installs prek)
+uv sync --dev
+
+# Lint (single entry point — runs ruff, mypy, markdownlint, typos)
+prek run --all-files
+```
+
+## Repo structure
+
+| Path                                           | Purpose                                                          |
+| ---------------------------------------------- | ---------------------------------------------------------------- |
+| `claude-all` / `claude-all.py`                 | CLI installer — discovers and installs agents/skills/hooks       |
+| `coding/agents/<category>/<name>.md`           | Agent definitions (dispatched by the router)                     |
+| `coding/agents/<category>/<name>.claude_md.md` | Companion snippet injected into `~/.claude/CLAUDE.md` on install |
+| `coding/skills/<category>/<name>/SKILL.md`     | Skill definitions (invoked via Skill tool)                       |
+| `coding/hooks/`                                | Hook scripts (source — not yet active)                           |
+| `.claude/hooks/`                               | Active hooks for this repo's Claude sessions                     |
+| `.claude/agents/`                              | Sub-agent definitions scoped to this repo                        |
+
+## Adding a new agent or skill
+
+**Agent:**
+
+1. Create `coding/agents/<category>/<name>.md` — the agent definition
+1. Optionally create `coding/agents/<category>/<name>.claude_md.md` — snippet injected into `~/.claude/CLAUDE.md`
+1. Run `./claude-all install <name> --level user` to activate
+
+**Skill:**
+
+1. Create `coding/skills/<category>/<name>/SKILL.md`
+1. Run `./claude-all install <name> --level user` to activate
+
 ## Naming conventions — always use generic placeholders
 
 All examples, agent prompts, skill documentation, and config snippets must use
