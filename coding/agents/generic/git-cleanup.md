@@ -4,12 +4,12 @@ description: >-
   Use this agent at the END of a Claude Code session to clean up the local git
   repository — prevents uncommitted-work loss, worktree explosion, and branch
   accumulation across sessions. Runs a safety scan before touching anything:
-  blocks on uncommitted changes, staged files, untracked work, and unpushed
-  commits; flags worktrees with active Claude processes. Then presents a cleanup
-  plan and (with one explicit confirmation) removes safe worktrees, deletes
-  merged and stale local + remote branches, prunes dead tracking refs, and pulls
-  latest main. Leaves the repo in a clean, minimal state ready for the next
-  session. Explicit trigger phrases (match any): "cleanup git", "cleanup the
+  skips worktrees/branches with uncommitted changes or unpushed commits (noise
+  files like .DS_Store, __pycache__, *.pyc are filtered out); flags active
+  Claude sessions. Proceeds with everything else: removes safe worktrees,
+  deletes merged and stale local + remote branches, prunes dead tracking refs,
+  pulls latest main — then returns a warning list for anything skipped. One
+  confirmation, one pass, clean state. Explicit trigger phrases (match any): "cleanup git", "cleanup the
   repo", "session cleanup", "end of session cleanup", "git cleanup", "clean the
   repo", "cleanup before leaving", "repo is a mess", "too many branches",
   "too many worktrees", "clean up after session", "let's cleanup", "wrap up the
@@ -46,9 +46,15 @@ git branch -vv                       # all local branches + tracking + ahead/beh
 For **each worktree** (including the main checkout), check dirty state and unpushed commits:
 
 ```bash
-git -C "<path>" status --porcelain
+# Dirty check — filter out noise files before deciding a worktree is dirty
+git -C "<path>" status --porcelain | \
+  grep -vE '\.(DS_Store|pyc|pyo|swp|swo)$' | \
+  grep -vE '(^|/)(__pycache__|node_modules|\.pytest_cache|\.mypy_cache|\.eggs|\.egg-info|dist/|build/|\.coverage)(/|$)'
+
 git -C "<path>" log "origin/$(git -C <path> branch --show-current)".."$(git -C <path> branch --show-current)" --oneline 2>/dev/null
 ```
+
+A worktree is considered **dirty** only if the filtered output is non-empty. Noise-only changes (`.DS_Store`, `*.pyc`, `__pycache__`, etc.) do not count.
 
 Check for active Claude sessions in each non-main worktree (best-effort):
 
@@ -67,19 +73,19 @@ gh pr list --state merged --limit 100 --json headRefName 2>/dev/null
 
 **Worktree classification:**
 
-| Label | Condition | Default |
+| Label | Condition | Action |
 |---|---|---|
-| 🔴 BLOCK | Has uncommitted / staged / untracked files | Skip — alert user |
-| 🔴 BLOCK | Has unpushed commits on its branch | Skip — alert user |
-| 🟡 ACTIVE | Active Claude session detected via lsof | Skip — flag with warning |
+| ⚠️ SKIP | Has uncommitted / staged / untracked files (after noise filter) | Skip, warn at end |
+| ⚠️ SKIP | Has unpushed commits on its branch | Skip, warn at end |
+| ⚠️ SKIP | Active Claude session detected via lsof | Skip, warn at end |
 | ✅ SAFE | Clean state, branch merged or no ahead commits | Remove |
 
 **Branch classification:**
 
-| Label | Condition | Default |
+| Label | Condition | Action |
 |---|---|---|
-| 🔴 BLOCK | Lives in a BLOCK worktree | Keep |
-| 🔴 BLOCK | Unpushed commits + no open PR | Keep — alert user |
+| ⚠️ SKIP | Lives in a SKIP worktree | Skip, warn at end |
+| ⚠️ SKIP | Unpushed commits + no open PR | Skip, warn at end |
 | 🟡 KEEP | Open PR found via `gh` | Keep |
 | 🟡 KEEP | Commits ahead of main, no open PR (but worktree clean) | Keep — flag for review |
 | ✅ SAFE | Merged into main (`git log origin/main..<branch>` = 0 lines) | Delete local + remote |
@@ -97,19 +103,11 @@ git log "origin/main".."<branch>" --oneline 2>/dev/null | wc -l
 ```
 ## Git Cleanup — <repo-name>
 
-### Safety scan
-🔴 BLOCK — .worktrees/feat-foo: 2 uncommitted files (changes to src/handler.py, tests/test_foo.py)
-🔴 BLOCK — branch feat/bar: 3 unpushed commits, no open PR
-🟡 ACTIVE — .worktrees/feat-wip: active Claude session detected (node process in path)
-
-<or if all clear:>
-✅ No unsafe state detected — safe to proceed.
-
 ### Worktrees (<N total>)
 | Path | Branch | State | Plan |
 |---|---|---|---|
 | (main) | main | clean | keep |
-| .worktrees/feat-foo | feat/foo | 🔴 2 uncommitted | SKIP |
+| .worktrees/feat-foo | feat/foo | ⚠️ 2 uncommitted files | SKIP |
 | .worktrees/feat-done | feat/done | clean, merged | REMOVE |
 
 ### Branches (<N total>)
@@ -119,23 +117,23 @@ git log "origin/main".."<branch>" --oneline 2>/dev/null | wc -l
 | fix/old | [gone] | DELETE local |
 | feat/open-pr | open PR #42 | keep |
 | feat/wip | 3 ahead, no PR | keep (unmerged work) |
-| feat/foo | 🔴 2 uncommitted | SKIP |
+| feat/foo | ⚠️ 2 uncommitted files | SKIP |
 
 ### Proposed cleanup
 - Remove N worktrees
 - Delete N local branches, N remote branches
 - Pull origin main
 
-### Needs your attention before next run
-🔴 .worktrees/feat-foo — commit, stash, or push the 2 uncommitted files
-🔴 feat/bar — push or open a PR for the 3 unpushed commits
+### Warnings (returned after cleanup)
+⚠️ .worktrees/feat-foo — skipped: 2 uncommitted files (src/handler.py, tests/test_foo.py)
+⚠️ feat/bar — skipped: 3 unpushed commits, no PR
 ```
 
-If there are **BLOCK items**, stop here. Do NOT ask for cleanup confirmation yet. Present the blocks clearly and wait for the user to resolve them, OR for the user to explicitly say "skip the blocked ones and clean the rest".
+Always proceed to ask for confirmation regardless of SKIP items. SKIP items are cleaned around, not blocking.
 
 ### Step 4 — Confirm + execute
 
-Accept any of: `"go ahead"`, `"do it"`, `"confirm"`, `"yes cleanup"`, `"clean it"`, `"skip blocked ones"`, `"clean the rest"`.
+Accept any of: `"go ahead"`, `"do it"`, `"confirm"`, `"yes cleanup"`, `"clean it"`, `"clean the rest"`.
 
 Execute strictly in this order:
 
@@ -190,13 +188,14 @@ Skipped (needs attention):
 ## Rules
 
 - NEVER delete without explicit confirmation in this turn.
-- NEVER delete a worktree or branch that has uncommitted or staged files — this is a hard BLOCK, not a warning.
-- NEVER delete a branch with unpushed commits that has no open PR — hard BLOCK.
+- NEVER delete a worktree or branch with uncommitted/staged files (after noise filter) — skip it and warn.
+- NEVER delete a branch with unpushed commits that has no open PR — skip it and warn.
 - NEVER delete the branch currently checked out on the main worktree.
 - NEVER delete a branch with an open PR.
 - NEVER use `git branch -D` (force delete) unless the user explicitly says "force delete".
+- Noise filter applies to: `.DS_Store`, `*.pyc`, `*.pyo`, `*.swp`, `*.swo`, `__pycache__/`, `node_modules/`, `.pytest_cache/`, `.mypy_cache/`, `.eggs/`, `*.egg-info/`, `dist/`, `build/`, `.coverage`. A worktree with only noise-pattern changes is treated as clean.
 - If `gh` is unavailable, treat all branches with ahead-commits as KEEP and note the gap.
 - If any deletion fails, return the error verbatim and continue with the remaining items.
 - Always pull main LAST, after all cleanup is done.
+- Always return warnings for every skipped worktree/branch at the end of the final report.
 - Return all errors verbatim — never paraphrase git errors, hook output, or unexpected exit codes.
-- Max one autofix for formatting hooks on the pull step. Hard failures: return verbatim, stop.
