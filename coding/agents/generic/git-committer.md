@@ -53,17 +53,19 @@ pattern is: detect the autofix, re-stage the modified files, and retry ONCE.
 ### Commit recipe with hooks
 
 ```bash
-# Attempt 1
-git commit -m "$MSG" 2>&1
+HOOK_OUT=$(git commit -m "$MSG" 2>&1)
 EXIT=$?
 
 if [ $EXIT -ne 0 ]; then
-  # Check if hooks modified files (autofix pattern)
+  # Two distinct failure modes:
+  # A) Autofix — hook rewrote files (formatter, trailing-whitespace stripper).
+  #    git diff --name-only will show modified files. Re-stage + retry ONCE.
+  # B) Hard failure — hook found real errors (type errors, lint, secrets).
+  #    git diff --name-only will be empty. Do NOT retry. Return output verbatim.
   MODIFIED=$(git diff --name-only)
   if [ -n "$MODIFIED" ]; then
-    # Re-stage hook-modified files and retry
     git add -A
-    git commit -m "$MSG" 2>&1
+    HOOK_OUT=$(git commit -m "$MSG" 2>&1)
     EXIT=$?
   fi
 fi
@@ -71,36 +73,30 @@ fi
 
 ### Output format for hook runs
 
-Always summarize hook output — never dump raw lines. Parse the hook output and report:
+**On success (possibly after one autofix retry):**
 
 ```
-**Hook run (attempt 1):** FAILED — hooks modified files (autofix)
-  ✅ Passed: check-json, check-toml, trailing-whitespace, mixed-line-ending (8 hooks)
-  🔧 Autofixed: mdformat (CLAUDE.md reformatted)
-  ❌ Failed: mdformat (exit 1 — files modified, re-staging)
-
-**Hook run (attempt 2):** PASSED (all 14 hooks)
+**Hooks:** PASSED (14 hooks — 1 autofix retry: mdformat rewrote CLAUDE.md)
 ✓ Committed: abc1234 — feat(agents): add claude_md snippets
 ```
 
-On hard failure (hook exits non-zero, no files modified, or still failing after retry):
+**On hard failure — return the FULL verbatim hook output to the caller:**
 
 ```
-**Hook run:** FAILED — commit blocked
-  ❌ mypy: 2 type errors
-      src/foo.py:42: error: Incompatible return value type (got "str", expected "int")
-      src/foo.py:55: error: Argument 1 to "bar" has incompatible type "None"; expected "str"
-  ✅ Passed: 11 other hooks
+**Hooks:** FAILED — commit blocked. Fix the errors below, then re-commit.
 
-**Action required:** fix the type errors above, then re-commit.
+--- VERBATIM HOOK OUTPUT ---
+<full output of $HOOK_OUT, untruncated>
+---
 ```
 
-Rules for hook output:
-- Count passed hooks and report as one line — don't list each passing hook.
-- For `Skipped` hooks: count them, don't list unless user asks.
-- For `Failed` hooks: quote the FIRST useful error line verbatim per hook. Not the full output.
-- Max 2 retry attempts total (attempt 1 = initial, attempt 2 = after re-stage). After 2 failures, stop and surface the error.
-- Never run `--no-verify` to bypass hooks.
+Rules:
+- **Passing hooks**: one summary line with the count. Do not list them individually.
+- **Skipped hooks**: include in the count. Do not list.
+- **Failing hooks**: return the **complete, untruncated output** verbatim. The caller (main session) needs the full text to diagnose and fix — do NOT summarise, truncate, or paraphrase error messages.
+- **Never attempt to fix errors** surfaced by hooks. Report and stop. The caller decides what to fix.
+- **Never run `--no-verify`** to bypass hooks.
+- Max 1 autofix retry (for formatter-modified files). After that, if still failing, return verbatim output and stop.
 
 ## Unrelated-concerns detection
 
