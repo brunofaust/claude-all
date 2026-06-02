@@ -213,6 +213,10 @@ Dispatch them as parallel agents (`subagent-prompting` / `dispatching-parallel-a
 findings in this skill's output format; you synthesize one report. Reserve the full panel for
 high-stakes diffs — a small change needs one pass.
 
+> The numeric gates + split-role panel are adapted from [affaan-m/ECC](https://github.com/affaan-m/ECC)
+> ([`rules/common/code-review.md`](https://github.com/affaan-m/ECC/blob/main/rules/common/code-review.md),
+> [`rules/common/agents.md`](https://github.com/affaan-m/ECC/blob/main/rules/common/agents.md)) — track for updates.
+
 ## Integration with existing review tooling
 
 | Tool                             | This skill's contribution                                                    |

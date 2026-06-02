@@ -85,3 +85,7 @@ This makes the reuse decision reviewable and prevents the next person re-litigat
 Reusing a maintained solution beats generating net-new on **both** axes that matter: **tokens** (you
 write a wrapper, not the engine) and **reliability** (battle-tested code has fewer edge-case bugs than
 freshly-generated code). The few minutes of search routinely save hours of building + debugging.
+
+## References (track for updates)
+
+- Adapted from [affaan-m/ECC](https://github.com/affaan-m/ECC) — [`rules/common/development-workflow.md`](https://github.com/affaan-m/ECC/blob/main/rules/common/development-workflow.md) and [`rules/common/patterns.md`](https://github.com/affaan-m/ECC/blob/main/rules/common/patterns.md).

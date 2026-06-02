@@ -94,3 +94,9 @@ Cover branches and error paths, not just the happy line. (For Python services, s
   `eslint-plugin-jest-dom`.
 - Coverage thresholds per layer in `vitest.config`/`jest.config` (`coverageThreshold`), enforced in CI.
 - `vitest-axe`/`jest-axe` in the a11y test suite; Playwright-CT in the integration job.
+
+## References (track for updates)
+
+- Adapted from [affaan-m/ECC](https://github.com/affaan-m/ECC) — [`rules/react/testing.md`](https://github.com/affaan-m/ECC/blob/main/rules/react/testing.md) and [`rules/common/testing.md`](https://github.com/affaan-m/ECC/blob/main/rules/common/testing.md).
+- [Testing Library — query priority](https://testing-library.com/docs/queries/about/#priority) · [Guiding principles](https://testing-library.com/docs/guiding-principles/)
+- [MSW (Mock Service Worker)](https://mswjs.io/) · [Playwright component testing](https://playwright.dev/docs/test-components)

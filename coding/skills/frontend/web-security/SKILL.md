@@ -117,3 +117,9 @@ in `script-src` defeats the point.
 - `semgrep` rulesets (`p/xss`, `p/react`) in CI.
 - A CSP smoke check in CI; secret-scanning (gitleaks) so keys never reach client bundles.
 - Validate Server Action inputs with a schema lib — make `Schema.parse` the lint-enforced entry.
+
+## References (track for updates)
+
+- Adapted from [affaan-m/ECC](https://github.com/affaan-m/ECC) — [`rules/react/security.md`](https://github.com/affaan-m/ECC/blob/main/rules/react/security.md) and [`rules/common/security.md`](https://github.com/affaan-m/ECC/blob/main/rules/common/security.md).
+- [OWASP XSS Prevention Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html) · [Content Security Policy Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Content_Security_Policy_Cheat_Sheet.html)
+- [MDN: Content-Security-Policy](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Security-Policy)

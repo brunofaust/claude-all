@@ -98,3 +98,9 @@ easily testable). Presentational components shouldn't fetch or know about stores
 
 - ESLint `react-hooks/rules-of-hooks` (error) + `react-hooks/exhaustive-deps` (error in CI for new
   code). `eslint-plugin-react` for keys + common mistakes. Verify behavior with `react-testing`.
+
+## References (track for updates)
+
+- Adapted from [affaan-m/ECC](https://github.com/affaan-m/ECC) — [`rules/react/`](https://github.com/affaan-m/ECC/tree/main/rules/react) (`coding-style.md`, `hooks.md`, `patterns.md`).
+- [react.dev — You Might Not Need an Effect](https://react.dev/learn/you-might-not-need-an-effect) · [Rules of Hooks](https://react.dev/reference/rules/rules-of-hooks)
+- [React 19 release notes](https://react.dev/blog/2024/12/05/react-19) (`use`, `useActionState`, `useOptimistic`, ref-as-prop).
