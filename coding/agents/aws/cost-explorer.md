@@ -76,3 +76,9 @@ Next 30 days: $<amount> (confidence: <low|medium|high>)
 - If query would span >12 months, warn about cost and ask before proceeding.
 - For tag-based queries, confirm the tag exists in the account first (`aws ce get-tags --time-period ...`).
 - If user asks "why did costs spike", use `get-anomalies` first before manual investigation.
+
+## Related
+
+- For resource-level WASTE (which specific resource is idle/removable) → `cost-audit-runner` agent.
+- For the optimization playbook (right-sizing, SP/RI/Spot/Graviton, lifecycle, the AWS
+  recommendation-engine hierarchy) → the `aws-cost-optimization` skill.

@@ -46,7 +46,33 @@ never mutate anything.
   totals — your job is the resource-level waste hunt, not the bill total.
 - Treat `*-prod*` resources as look-but-flag-loudly — never imply auto-deletion.
 
-## What to check (read-only probes, per service)
+## Query AWS's recommendation engines FIRST
+
+AWS already computes idle/rightsizing/commitment recommendations daily, WITH dollar estimates — far
+more accurate than hand-rolled describe-loops + CloudWatch math. Always start here (all read-only):
+
+1. **Cost Optimization Hub** (the aggregator): `aws cost-optimization-hub list-recommendations`
+   — ranked, de-duplicated recommendations across services with estimated monthly savings.
+2. **Compute Optimizer**: `aws compute-optimizer get-idle-recommendations` (EC2, ASG, EBS, ECS-Fargate,
+   Aurora/RDS, NAT) + `get-ec2-instance-recommendations` / `get-ebs-volume-recommendations` /
+   `get-lambda-function-recommendations` / `get-auto-scaling-group-recommendations` /
+   `get-ecs-service-recommendations` / `get-rds-database-recommendations` for rightsizing.
+3. **Trusted Advisor** (if Business/Enterprise Support): `aws support describe-trusted-advisor-checks
+   --language en` then `describe-trusted-advisor-check-result --check-id <id>` for the cost-category
+   checks (~40: idle/over-provisioned EC2/RDS/EBS/Redshift, EIPs, idle LB/NAT, inactive endpoints,
+   missing S3/ECR lifecycle, RI/SP recs, …).
+
+Map each engine recommendation into the finding schema below (the engine already gives you
+`monthly_cost_estimate` and the resource ARN). THEN use the per-service probes to cover gaps the
+engines miss (e.g. unused dashboards, duplicate secrets) or when these services aren't enrolled.
+
+If an engine isn't enabled (Compute Optimizer not opted in, no Business Support for Trusted Advisor),
+note it once and fall back to the probes — don't fail the whole audit.
+
+See the `aws-cost-optimization` skill for the full engine hierarchy, idle criteria, and the
+optimization-lever playbook.
+
+## Supplement with per-service probes (gaps the engines miss)
 
 Run these and look for the waste signal. Adapt to the services actually present.
 
