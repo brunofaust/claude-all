@@ -141,7 +141,8 @@ WARN_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"\brm\s+(-[a-z]*\s+)*-?[a-z]*[rf][a-z]*\s"), "broad recursive delete (rm -rf)"),
     (re.compile(r"\bchmod\s+-R\s+777\b"), "chmod -R 777 (world-writable)"),
     (
-        re.compile(r"\b(curl|wget)\b[^\n]*\|\s*(sudo\s+)?sh\b"),
+        # match a pipe into any shell: sh, bash, zsh, dash, ksh
+        re.compile(r"\b(curl|wget)\b[^\n]*\|\s*(sudo\s+)?\w*sh\b"),
         "pipe-to-shell install (supply-chain risk)",
     ),
     (re.compile(r"\bgit\s+checkout\s+(--\s+)?\.\s*$"), "git checkout . (discards local changes)"),
