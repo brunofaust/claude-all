@@ -6,5 +6,6 @@ When doing a security pass before a release, threat-modeling a feature, auditing
 - Threat-model with **STRIDE**; verify against **OWASP Top 10 / ASVS**.
 - Two modes: **daily** zero-noise high-confidence gate vs **deep** periodic exhaustive audit with trend tracking.
 - Real secret leak → **rotate first**, then purge from history, then sweep for similar.
+- **Building an action-taking tool/agent/automation?** Make it safe by default: schema-validate inputs, **default to dry-run**, bound the scope (timeouts/max-items/cost), be idempotent, support rollback, and gate destructive ops on explicit confirmation. (Design-time complement to the `destructive-command-guard` hook.)
 
 Complements `web-security` (frontend XSS/CSP) and the `iam-auditor` agent (AWS IAM). Use the built-in `/security-review` for a quick diff pass; this skill is the whole-system view.

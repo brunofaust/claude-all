@@ -5,8 +5,10 @@ description: >-
   secrets, dependency supply chain, CI/CD pipeline, LLM/AI, and cloud/infra. Use when: doing a
   security pass before a release, threat-modeling a feature/service, reviewing auth/authz or input
   handling on the backend, auditing dependencies for CVEs, hardening a CI/CD pipeline, securing an
-  LLM-integrated feature (prompt injection, untrusted model output), or sweeping a repo/git history
-  for leaked secrets. Two modes: a daily zero-noise high-confidence gate, and a periodic deep audit.
+  LLM-integrated feature (prompt injection, untrusted model output), sweeping a repo/git history for
+  leaked secrets, or DESIGNING a tool/agent/automation that takes a side-effecting action to be safe by
+  default (schema validation, dry-run default, bounded params, rollback, confirmation gates). Two modes:
+  a daily zero-noise high-confidence gate, and a periodic deep audit.
   Complements web-security (frontend XSS/CSP), iam-auditor (AWS IAM), and code-review-discipline
   (output shape). Use the built-in `/security-review` for a quick diff pass; use this for the
   whole-system view.
@@ -62,6 +64,34 @@ findings with the `code-review-discipline` severity model (CRITICAL→BLOCK … 
    crafted inputs. (Pairs with the `code-review-discipline` LLM-trust-boundary lens.)
 6. **Cloud / infra** — IAM least-privilege (→ `iam-auditor` for AWS), encryption at rest + in transit,
    minimal network exposure (security groups, no public DBs), audit logging + alerting on.
+
+## Building safe action-taking tools & agents (design-time)
+
+The layers above *find* problems; this *prevents* them. When you **build** something that takes a
+side effect on the user's behalf — an MCP tool, an agent/subagent with write access, a script, an
+automation, a workflow step — make it **safe by default**. (This is the design-time complement to the
+runtime `destructive-command-guard` hook: the hook blocks at execution, this prevents at the design.)
+
+- **Validate every input against a schema** (zod / pydantic) at the entry point — a tool is a public API.
+- **Default to dry-run.** `dry_run: bool = True` — the caller opts INTO real execution; a forgotten
+  flag previews, never destroys.
+- **Bound the scope.** Cap everything that can run away: timeouts, max-items / batch-size,
+  intensity / rate, recursion depth, total cost. Reject out-of-range at the boundary (`max=3600`).
+- **Be idempotent.** Same call twice → same result (idempotency keys, conditional writes) so a retry
+  or replay can't double-charge / double-delete.
+- **Support rollback.** Snapshot before mutate; rollback-on-failure default true; or make the op
+  reversible. Never leave half-applied state.
+- **Gate destructive ops on explicit confirmation.** delete / drop / purge / charge / deploy-to-prod
+  require an explicit, logged confirmation token — never a default, never inferred. (Mirrors the
+  `dynamodb-mutator` / `sqs-monitor` agent confirmation pattern.)
+- **Isolate state.** Namespace memory / files / credentials per task or tenant — one run can't read
+  or clobber another's.
+- **Least privilege + audit log.** The tool gets only the permissions it needs; every action is
+  logged (who / what / when) for repudiation.
+
+Anti-pattern: an MCP tool or agent that executes a destructive action **by default**, with unbounded
+params, no input validation, and no rollback — one bad or prompt-injected input and it's
+irreversible. Default-safe (dry-run + bounded + validated + reversible) inverts that.
 
 ## Output
 
