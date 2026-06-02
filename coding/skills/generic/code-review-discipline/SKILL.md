@@ -169,6 +169,50 @@ Required before merge: <specific actions, if BLOCK or WARNING>
 
 ______________________________________________________________________
 
+## Size & complexity gates (default thresholds)
+
+Concrete, mechanical thresholds so "too big" isn't subjective — exceeding one is a finding (severity
+by how far over). Tune per project, but have explicit numbers:
+
+| Metric | Soft limit | Hard limit (BLOCK) |
+| --- | --- | --- |
+| Function length | 50 lines | — (refactor) |
+| File length | ~400 lines typical | 800 lines |
+| Nesting depth | 3 | 4 |
+| Function parameters | 4 (pass an object/dataclass beyond) | — |
+| Cyclomatic complexity | per linter (ruff `PLR*` / eslint `complexity`) | — |
+| Test coverage | per-layer table below | project gate (e.g. 80%) |
+
+Per-layer coverage (deeper logic = higher bar):
+
+| Layer | Target |
+| --- | --- |
+| utils / pure logic | ≥ 90% |
+| hooks / domain services | ≥ 85% |
+| presentational / handlers | ≥ 80% |
+| container / orchestration | ≥ 70% |
+
+These are *signals*, not a replacement for judgment — a 60-line flat mapping is fine; a 30-line
+function with 4 levels of nesting is not. Enforce the mechanical ones in the linter (ruff `PLR` caps,
+eslint `complexity`/`max-lines`) so they never reach review — see the `prek` skill "Rolling out a
+complexity cap without a backlog".
+
+## Split-role review panel (high-stakes changes)
+
+For a significant PR, run **independent reviewers in parallel**, each with ONE lens, then merge their
+findings (dedupe; keep the highest severity per issue). One reviewer wearing five hats misses things;
+five focused passes don't. Lenses:
+
+- **Factual / correctness** — does it do what it claims? Logic, edge cases, error paths.
+- **Senior-engineer** — design, naming, simplicity, the size/complexity gates above.
+- **Security** — the `web-security` / threat lenses (inputs, authz, secrets, injection).
+- **Consistency** — does it match the existing patterns/conventions in this codebase?
+- **Redundancy / reuse** — is this reinventing something that already exists? (see `research-before-build`)
+
+Dispatch them as parallel agents (`subagent-prompting` / `dispatching-parallel-agents`); each returns
+findings in this skill's output format; you synthesize one report. Reserve the full panel for
+high-stakes diffs — a small change needs one pass.
+
 ## Integration with existing review tooling
 
 | Tool                             | This skill's contribution                                                    |
