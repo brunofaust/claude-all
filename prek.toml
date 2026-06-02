@@ -168,7 +168,12 @@ rev = "v1.46.2"
 hooks = [
   {
     id = "typos",
-    name = "🔍 content · Check typos"
+    name = "🔍 content · Check typos",
+    # The prek skill documents typo-handling and deliberately contains example
+    # misspellings + multi-language sample words; exclude it so typos doesn't flag or
+    # rewrite those examples. (This is the skill's own "scope-exclude a path" lever,
+    # applied to itself.)
+    exclude = { glob = ["coding/skills/generic/prek/**"] }
   }
 ]
 
