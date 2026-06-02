@@ -300,7 +300,16 @@ Each plugin lives at `coding/plugins/<name>/plugin.json`. The installer dispatch
 
 Optional fields:
 
-- `post_install` — list of argv lists, run after the main install, e.g. `[["code-review-graph", "install"]]` for one-time setup commands.
+- `post_install` — list of **typed steps** run after the main install. Each step is one of:
+
+    - `{"type": "pip", "package": "<pkg>"}` — pip-install `<pkg>` into the plugin's pipx venv via
+        `pipx inject` (optional: `"extras": ["x"]`, `"pin": "==1.2"`, `"target": "<other-app>"` to
+        inject into a different venv than the plugin's own `package`).
+    - `{"type": "bash", "command": ["foo", "install"]}` — run a command (optional: `"pwd": "sub/dir"`).
+    - A bare argv list (e.g. `["foo", "install"]`) is still accepted as a legacy `bash` step.
+
+    Example: `[{"type": "pip", "package": "igraph"}, {"type": "bash", "command": ["code-review-graph", "install"]}]`
+
 - `post_install_message` — string printed after install, e.g. instructions the user must follow per-project.
 
 Installed plugins:

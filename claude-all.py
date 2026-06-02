@@ -196,6 +196,86 @@ def annotate_installed(items: list[Item]) -> None:
 # ---------------------- install ----------------------
 
 
+def _run_post_install_step(name: str, pip_package: str | None, step: object) -> None:
+    """Execute one post_install step.
+
+    A step is either a typed dict or a legacy bare argv list (kept for
+    backward compatibility — treated as a ``bash`` step).
+
+    Typed forms::
+
+        {"type": "pip",  "package": "igraph", "extras": ["x"]}   # optional: "target", "pin"
+        {"type": "bash", "command": ["foo", "install"], "pwd": "sub/dir"}  # "pwd" optional
+
+    - ``pip`` injects the package into a pipx venv via ``pipx inject``. The
+      target venv defaults to the plugin's own ``package`` (``pip_package``);
+      override with ``target`` when injecting into a different app.
+    - ``bash`` runs ``command`` (an argv list) optionally in ``pwd``.
+
+    Args:
+        name: Plugin name (for log messages).
+        pip_package: The plugin's pip package — default pipx inject target.
+        step: The raw step from ``post_install`` (dict or legacy list).
+    """
+    # Legacy form: a bare argv list → behave like a bash step.
+    if isinstance(step, list):
+        step = {"type": "bash", "command": step}
+    if not isinstance(step, dict):
+        print(f"  ! {name}: skipping invalid post_install entry: {step!r}", file=sys.stderr)
+        return
+
+    stype = step.get("type", "bash")
+
+    if stype == "pip":
+        pkg = step.get("package")
+        if not pkg:
+            print(f"  ! {name}: pip post_install step missing 'package'", file=sys.stderr)
+            return
+        extras = step.get("extras") or []
+        spec = f"{pkg}[{','.join(extras)}]" if extras else pkg
+        pin = step.get("pin") or ""
+        if pin:
+            spec = f"{spec}{pin}"
+        target = step.get("target") or pip_package
+        if not target:
+            print(
+                f"  ! {name}: pip post_install step needs a pipx 'target' "
+                "(plugin is not pip-type, so there's no default venv)",
+                file=sys.stderr,
+            )
+            return
+        if shutil.which("pipx") is None:
+            print(
+                f"  ! {name}: pipx not on PATH — run later: pipx inject {target} {spec}",
+                file=sys.stderr,
+            )
+            return
+        cmd = ["pipx", "inject", target, spec]
+        print(f"  → post_install (pip): {' '.join(cmd)}")
+        subprocess.run(cmd, check=True)
+        return
+
+    if stype == "bash":
+        cmd = step.get("command")
+        if not isinstance(cmd, list) or not cmd:
+            print(f"  ! {name}: bash post_install step missing 'command' list", file=sys.stderr)
+            return
+        if shutil.which(cmd[0]) is None:
+            print(
+                f"  ! {name}: post_install '{cmd[0]}' not on PATH — "
+                f"open a new shell and run: {' '.join(cmd)}",
+                file=sys.stderr,
+            )
+            return
+        cwd = step.get("pwd") or None
+        suffix = f"  (cwd={cwd})" if cwd else ""
+        print(f"  → post_install (bash): {' '.join(cmd)}{suffix}")
+        subprocess.run(cmd, check=True, cwd=cwd)
+        return
+
+    print(f"  ! {name}: unknown post_install step type {stype!r}", file=sys.stderr)
+
+
 def install_plugin(item: Item) -> str:
     meta = json.loads(item.src.read_text())
     ptype = meta.get("type", "claude-marketplace")
@@ -234,23 +314,9 @@ def install_plugin(item: Item) -> str:
     else:
         return f"skipped plugin {item.name}: unknown type '{ptype}'"
 
-    # Post-install hooks
-    for cmd in meta.get("post_install") or []:
-        if not isinstance(cmd, list) or not cmd:
-            print(
-                f"  ! {item.name}: skipping invalid post_install entry: {cmd!r}",
-                file=sys.stderr,
-            )
-            continue
-        if shutil.which(cmd[0]) is None:
-            print(
-                f"  ! {item.name}: post_install '{cmd[0]}' not on PATH — "
-                f"open a new shell and run: {' '.join(cmd)}",
-                file=sys.stderr,
-            )
-            continue
-        print(f"  → post_install: {' '.join(cmd)}")
-        subprocess.run(cmd, check=True)
+    # Post-install hooks (typed steps; legacy argv lists still accepted)
+    for step in meta.get("post_install") or []:
+        _run_post_install_step(item.name, meta.get("package"), step)
 
     msg = meta.get("post_install_message")
     if msg:
@@ -421,19 +487,9 @@ def install_tool(item: Item) -> str:
             print(f"  → brew install {package}")
             subprocess.run(["brew", "install", package], check=True)
 
-        # Post-install hooks (e.g. `rtk init -g`)
-        for cmd in meta.get("post_install") or []:
-            if not isinstance(cmd, list) or not cmd:
-                continue
-            if shutil.which(cmd[0]) is None:
-                print(
-                    f"  ! {item.name}: post_install '{cmd[0]}' not on PATH. "
-                    f"Open a new shell and run: {' '.join(cmd)}",
-                    file=sys.stderr,
-                )
-                continue
-            print(f"  → post_install: {' '.join(cmd)}")
-            subprocess.run(cmd, check=True)
+        # Post-install hooks (typed steps; legacy argv lists still accepted; e.g. `rtk init -g`)
+        for step in meta.get("post_install") or []:
+            _run_post_install_step(item.name, meta.get("package"), step)
 
         record_install(item.kind, item.name, None)
 
