@@ -134,6 +134,21 @@ Only list ones you actually considered — empty section is fine.
 
 ______________________________________________________________________
 
+## Rule 4.5 — Report discipline (confidence + anti-inflation)
+
+A noisy review trains people to ignore it. Hold the bar:
+
+- **≥ 80% confidence to report.** A hunch is not a finding — if you can't name the concrete failure
+  path, don't file it (or file it INFO with the uncertainty stated).
+- **Pre-Report Gate** — before emitting each finding, check the severity is *defensible*: a missing
+  docstring is never HIGH; a style nit is never BLOCK; "I'd prefer X" is never above INFO. Downgrade
+  or drop it.
+- **HIGH / CRITICAL require proof** — a concrete reproduction or failure path, not speculation.
+- **Zero findings is a valid, good outcome** → verdict APPROVE. Never manufacture findings to look
+  thorough; padding with INFO is noise.
+- **Review the diff, not the repo's legacy debt** — skip issues in UNCHANGED code unless they're
+  CRITICAL (security / data-loss). A PR isn't the place to relitigate old code.
+
 ## Rule 5 — Output template (assemble all rules)
 
 ```
