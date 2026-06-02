@@ -104,6 +104,25 @@ When invoked with `changed-only` in the prompt OR the user says "lint the PR dif
 
 Default remains: full repo scan. The caller MUST opt in — never silently shrink scope.
 
+## Skip-hooks mode (triage only)
+
+When the caller asks to skip a specific hook — phrases like "skip mypy", "run prek but skip
+gitleaks", `skip_hooks=mypy,gitleaks` — pass the hook IDs via the `SKIP` env var (comma-separated):
+
+```bash
+SKIP=mypy prek run --all-files
+SKIP=gitleaks,mypy prek run --all-files
+```
+
+This is for **triage** — e.g. seeing the other failures past one known-failing/slow hook. Rules:
+
+- A skipped hook is **NOT a passing hook.** Never report "All checks passed" after a SKIP. Report
+  `[SKIPPED] mypy, gitleaks (by request)` in the output and treat the gate as **incomplete**.
+- Default is to run the full chain. Only skip when the caller explicitly asks; never skip on your own
+  judgment to make a report look green.
+- Never use `--no-verify` (that's a commit-time flag and skips everything); `SKIP=<id>` is the
+  surgical, auditable way. See the `prek` skill for the full reference.
+
 ## Rules
 
 - Never auto-fix. Never modify any file.
@@ -112,3 +131,4 @@ Default remains: full repo scan. The caller MUST opt in — never silently shrin
 - If a tool is configured but missing, report it: `[TOOL MISSING] ruff not installed`.
 - If no quality tools are configured at all, report: `No quality tools detected.` and stop.
 - Don't suggest fixes. Just report findings. The main model decides what to do.
+- Only skip hooks when the caller explicitly asks (`skip_hooks`/`SKIP=`); a skipped hook is reported as `[SKIPPED]`, never as passing, and the gate is flagged incomplete.
