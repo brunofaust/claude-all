@@ -1,20 +1,45 @@
 ---
 name: prek
 description: >-
-  prek — a fast Rust-based pre-commit hook runner that uses prek.toml instead of
-  .pre-commit-config.yaml and runs the same hook ecosystem. Use when: setting up prek
-  in a new project, adding or configuring hooks, debugging hook failures (staged-file
-  issues, --files mode gotchas), understanding the final_check.py Claude Code hook
-  pattern, or running prek as a CI quality gate.
+  Git pre-commit hook framework — covers BOTH pre-commit (the original Python tool) and prek (its
+  faster, dependency-free Rust drop-in). Same hook ecosystem, hook IDs, stages, and SKIP=; prek reads
+  .pre-commit-config.yaml unchanged and adds an optional prek.toml. Use when: setting up pre-commit or
+  prek in a project, adding or configuring hooks, debugging hook failures (staged-file issues, --files
+  mode gotchas), resolving a finding (fix / allowlist / scope-exclude a path), multi-language
+  spell-check (typos + cspell), understanding the final_check.py Claude Code hook pattern, or running
+  it as a CI quality gate.
 disable-model-invocation: false
 user-invocable: true
 ---
 
-# prek — Git Hook Framework
+# pre-commit / prek — Git Hook Framework
 
-> `prek` is a Rust-based pre-commit hook runner. It uses `prek.toml` instead of `.pre-commit-config.yaml`,
-> runs the same pre-commit hook ecosystem, and is significantly faster.
-> This skill covers setup, daily usage, and the full annotated `prek.toml` pattern.
+> This skill covers the **pre-commit** git-hook framework and **prek**, its faster Rust drop-in.
+> They share the same hooks, hook IDs, config model, stages, and `SKIP=`, so everything here applies
+> to **both**. Examples are shown as `prek.toml` (TOML) but map 1:1 to `.pre-commit-config.yaml`
+> (YAML) — use whichever your project has.
+
+## prek ⇄ pre-commit — interchangeable
+
+`prek` (j178/prek) is a dependency-free Rust reimplementation of `pre-commit`, **fully compatible with
+existing `.pre-commit-config.yaml` files**, plus an optional native `prek.toml`. Same `repos → hooks`
+model, same upstream hook repos, same hook IDs. Translate freely:
+
+| Action | pre-commit (Python) | prek (Rust drop-in) |
+| --- | --- | --- |
+| Install the tool | `pipx install pre-commit` | `uv tool install prek` |
+| Install git hooks | `pre-commit install` | `prek install` |
+| Run on staged files | `pre-commit run` | `prek run` |
+| Run on all files | `pre-commit run --all-files` | `prek run --all-files` |
+| Run one hook on files | `pre-commit run <id> --files a b` | `prek run <id> --files a b` |
+| Update hook revisions | `pre-commit autoupdate` | `prek autoupdate` |
+| Skip a hook | `SKIP=<id> …` | `SKIP=<id> …` (identical) |
+| Config file | `.pre-commit-config.yaml` | `.pre-commit-config.yaml` **or** `prek.toml` |
+
+The only prek-only piece is `prek.toml` (TOML) — upstream pre-commit reads YAML only; `prek util
+yaml-to-toml` converts an existing config. Throughout this skill, wherever it says `prek`, read "prek
+**or** pre-commit"; wherever it shows `prek.toml`, the same keys work in `.pre-commit-config.yaml` as
+YAML (`repos:` / `- repo:` / `hooks:` instead of `[[repos]]` / `hooks = [...]`).
 
 ## When to invoke
 
@@ -28,10 +53,10 @@ ______________________________________________________________________
 
 ## What prek is NOT
 
-- `prek` is **not** a replacement for individual tools. It **orchestrates** them.
-- Never run `ruff check`, `mypy`, `eslint`, or `prettier` directly when prek is installed.
-    Those are prek hooks — run `prek run --all-files` instead.
-- "I ran ruff and it passed" ≠ "prek passed". Other hooks (typos, gitleaks, pyupgrade,
+- `prek` / `pre-commit` is **not** a replacement for individual tools. It **orchestrates** them.
+- Never run `ruff check`, `mypy`, `eslint`, or `prettier` directly when prek/pre-commit is installed.
+    Those are hooks — run `prek run --all-files` (or `pre-commit run --all-files`) instead.
+- "I ran ruff and it passed" ≠ "the gate passed". Other hooks (typos, gitleaks, pyupgrade,
     markdownlint, mypy) may still fail.
 
 ______________________________________________________________________
