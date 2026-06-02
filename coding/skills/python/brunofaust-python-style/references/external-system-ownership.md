@@ -45,8 +45,14 @@ ticket = await jira.get_issue("PROJ-123")
 
 ## Layering rule
 
-- Connectors/clients in `integrations/<system>/` — only layer that touches external APIs.
-- AWS service wrappers in `aws_resources/<service>/` or `aws/<service>/` — only layer that touches `boto3`.
+- Third-party API connectors/clients in `integrations/<system>/` — only layer that touches those APIs.
+- **AWS service wrappers in `core/aws/<service>.py`** — one file per service (`s3.py`, `sqs.py`,
+  `dynamodb.py`, …), the only layer that touches `boto3`/`aiobotocore`. They share a `core/aws/base.py`
+  (one `AWSClient` base + a process-wide aiobotocore session, so clients are reused across invocations).
+  These wrappers are **settings-free** — they live in `core/` precisely because they take config as
+  args, not by importing `settings` (see `project-structure.md`, "core is extractable").
+- Do NOT confuse this with `aws_resources/` — that holds **deployable units** (Lambda handlers, ECS
+  tasks) which *consume* the `core/aws` clients. Resource ≠ client wrapper.
 - Services/handlers consume the client interface, never import the underlying SDK.
 - Tests mock the client, not the SDK.
 
@@ -55,20 +61,20 @@ ticket = await jira.get_issue("PROJ-123")
 ```toml
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 "httpx".msg = "Use the owning connector class. Allowed only in src/*/integrations/**"
-"boto3".msg = "Use the AWS service wrapper. Allowed only in src/*/aws_resources/**"
-"aioboto3".msg = "Use the AWS service wrapper. Allowed only in src/*/aws_resources/**"
+"boto3".msg = "Use the core/aws/<service>.py wrapper. Allowed only in src/*/core/aws/**"
+"aiobotocore".msg = "Use the core/aws/<service>.py wrapper. Allowed only in src/*/core/aws/**"
 "atlassian".msg = "Use JiraClient or ConfluenceClient"
 
 [tool.ruff.lint.per-file-ignores]
 "src/*/integrations/**" = ["TID251"]
-"src/*/aws_resources/**" = ["TID251"]
+"src/*/core/aws/**" = ["TID251"]      # the boto3/aiobotocore owners live here
 ```
 
 ## Audit recipe
 
 ```bash
-rg -n "import httpx|from httpx|boto3\.client|from atlassian|^import github" \
-  src --type py | rg -v "src/[^/]+/integrations/|src/[^/]+/aws_resources/"
+rg -n "import httpx|from httpx|boto3\.client|from atlassian|^import github|aiobotocore" \
+  src --type py | rg -v "src/[^/]+/integrations/|src/[^/]+/core/aws/"
 ```
 
 Empty output = clean. Any line returned = a leak to fix.
