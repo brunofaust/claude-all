@@ -567,7 +567,61 @@ The goal: the gate blocks *new* complexity from day one, while legacy debt is pa
 
 ______________________________________________________________________
 
-## Known gotchas
+## Resolving a hook finding — fix, scope, or allowlist
+
+When a hook flags something, you have **three levers**, in order of preference:
+
+1. **Fix it** — correct the underlying issue. Always the default.
+1. **Allowlist narrowly** — exempt the one word / rule code / line, at config level, when it's a
+    genuine false positive (a real domain term, an intentional pattern).
+1. **Scope-exclude a path** — `exclude = { glob = [...] }` on the hook, for whole directories that
+    shouldn't be checked at all (generated code, i18n locale dumps, vendored files, fixtures).
+
+A top-level `exclude = { glob = [...] }` applies to **every** hook; a per-hook `exclude` scopes to one.
+For a one-off bypass use `SKIP=<id>` (see Daily commands) — that's not a real resolution, just a defer.
+
+### Worked example — `typos`
+
+```toml
+# prek.toml — scope-exclude paths typos shouldn't scan (i18n locales, generated docs)
+{ id = "typos", name = "🔍 content · Check typos",
+  exclude = { glob = [
+    "src/myapp/i18n/locales/**",      # translated strings — not English, not typos
+    "frontend/src/i18n/locales/**",
+    "docs/generated/**",              # machine-generated
+    "src/myapp/email/subjects.json",
+  ] } }
+```
+
+```toml
+# pyproject.toml — allowlist real words/identifiers typos misreads (narrower than a path exclude)
+[tool.typos.default.extend-words]
+mab = "mab"            # "multi-armed bandit", not a typo of "may"
+[tool.typos.default.extend-identifiers]
+arrange = "arrange"     # numpy API, not "arrange"
+```
+
+…and if it's an actual misspelling, just **fix the word**. Prefer fix > word-allowlist > path-exclude.
+
+### Per-hook cheat sheet
+
+| Hook | Fix | Allowlist (narrow) | Scope-exclude (path) |
+| --- | --- | --- | --- |
+| `typos` | correct spelling | `[tool.typos.default.extend-words]` / `extend-identifiers` | hook `exclude` glob (i18n, generated) |
+| `ruff-check` | fix the code | `# noqa: E501` (last resort) · `[tool.ruff.lint] ignore` · `per-file-ignores` | `[tool.ruff] extend-exclude` |
+| `mypy` | add/narrow types | `# type: ignore[arg-type]  # reason` (NOT bare — `python-check-blanket-type-ignore` blocks that) · `[[tool.mypy.overrides]] ignore_errors` for 3rd-party | hook `exclude` glob |
+| `gitleaks` | **rotate + remove the secret** | false positive → `# gitleaks:allow` · `.gitleaksignore` (fingerprint) · `[allowlist]` regex | path in `[allowlist].paths` — **never allowlist a real secret** |
+| `bandit` | fix the risk | `# nosec B101` (scoped) · `[tool.bandit] skips = ["B101"]` (e.g. assert_used in tests) | `[tool.bandit] exclude_dirs` |
+| `interrogate` | add the docstring | `[tool.interrogate]` `ignore-init-method` / `ignore-magic` / `fail-under` | `[tool.interrogate] exclude = [...]` |
+| `vulture` | delete dead code | used-dynamically → add to `vulture_whitelist.py` | hook `exclude` glob |
+| `markdownlint` | fix the markdown | `--disable MD013` (rule) · `<!-- markdownlint-disable MD033 -->` inline | `--config pyproject.toml` exclusions |
+| `mdformat` | let it auto-format | (it's a formatter — no per-finding allowlist) | hook `exclude` glob (generated docs) |
+| `pyupgrade` | let it auto-rewrite | — | per-file `exclude` glob (generated models / SDK base needing old syntax) |
+| `check-added-large-files` | don't commit the blob (Git LFS / S3 + pointer) | `args = ["--maxkb=N"]` raise the limit | path exclude |
+| semantic-dedup hook (`myorg/myhook`) | extract/merge/hoist the duplicate (see `lint-fixer`) | tune the similarity threshold in its config | scope-exclude generated/dup-by-design files |
+
+Security rule: for `gitleaks` you **fix** (rotate the leaked credential + purge it) — an allowlist is
+only ever for a *false* positive (a test fixture, an example key), never to wave through a real secret.
 
 ### `check-added-large-files` fails in `--files` mode
 
