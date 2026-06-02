@@ -173,6 +173,26 @@ def discover(filters: list[str]) -> list[Item]:
                 )
             )
 
+    hook_root = REPO_ROOT / "coding" / "hooks"
+    hook_manifest = hook_root / "hooks.json"
+    if hook_manifest.exists():
+        try:
+            manifest = json.loads(hook_manifest.read_text())
+        except (json.JSONDecodeError, OSError):
+            manifest = {}
+        for name in sorted(k for k in manifest if not k.startswith("_")):
+            py = hook_root / f"{name}.py"
+            if py.exists():
+                items.append(
+                    Item(
+                        kind="hooks",
+                        category="coding",
+                        subcategory="hooks",
+                        name=name,
+                        src=py,
+                    )
+                )
+
     if filters:
 
         def matches(it: Item) -> bool:
@@ -738,8 +758,95 @@ def remove_claude_md(item: Item, level: str) -> str | None:
     return f"CLAUDE.md stripped ({target})"
 
 
+def _command_hook_basename(cmd: str) -> str:
+    """Best-effort basename of the script a hook command runs (for dedup).
+
+    Handles `"/abs/x.py"`, `$VAR/.claude/hooks/x.py`, and `python3 /abs/x.py`.
+    Returns "" for non-script commands (e.g. `rtk hook claude`, shell one-liners).
+
+    Args:
+        cmd: The hook's ``command`` string from settings.json.
+    """
+    stripped = (cmd or "").strip()
+    if not stripped:
+        return ""
+    token = stripped.split()[-1].strip("\"'")
+    name = Path(token).name
+    return name if name.endswith(".py") else ""
+
+
+def install_standalone_hook(item: Item, level: str) -> str:
+    """Install a standalone ``coding/hooks/`` script: symlink + wire into settings.json.
+
+    Metadata (event / matcher / timeout) comes from ``coding/hooks/hooks.json``. The
+    symlink uses NO kind-prefix (``<name>.py``) to match the hand-wired convention, and
+    the settings merge dedups by command basename across ALL events — so re-install
+    cleanly replaces any prior entry for the same hook (incl. a hand-wired one) instead
+    of double-firing.
+
+    Args:
+        item: The hook item (``kind="hooks"``).
+        level: Installation scope — ``'user'`` or ``'project'``.
+    """
+    try:
+        manifest = json.loads((REPO_ROOT / "coding" / "hooks" / "hooks.json").read_text())
+    except (json.JSONDecodeError, OSError):
+        manifest = {}
+    meta = manifest.get(item.name, {})
+    event = meta.get("event", "PreToolUse")
+    matcher = meta.get("matcher", "Edit|Write")
+    timeout = int(meta.get("timeout", 2000))
+
+    base = (USER_CLAUDE_DIR if level == "user" else Path.cwd() / ".claude") / "hooks"
+    base.mkdir(parents=True, exist_ok=True)
+    dest = base / f"{item.name}.py"
+    if dest.is_symlink() or dest.exists():
+        dest.unlink()
+    os.symlink(item.src, dest)
+    cmd_str = str(dest)
+    target_basename = f"{item.name}.py"
+
+    settings_file = _settings_path(level)
+    settings_file.parent.mkdir(parents=True, exist_ok=True)
+    settings: dict = {}
+    if settings_file.exists():
+        try:
+            settings = json.loads(settings_file.read_text())
+        except json.JSONDecodeError:
+            settings = {}
+    settings.setdefault("hooks", {})
+
+    # Drop any prior entry for this hook anywhere (basename match), then re-add fresh.
+    for ev, blocks in list(settings["hooks"].items()):
+        for block in blocks:
+            block["hooks"] = [
+                h
+                for h in block.get("hooks", [])
+                if _command_hook_basename(h.get("command", "")) != target_basename
+            ]
+        settings["hooks"][ev] = [b for b in blocks if b.get("hooks")]
+        if not settings["hooks"][ev]:
+            del settings["hooks"][ev]
+
+    event_blocks = settings.setdefault("hooks", {}).setdefault(event, [])
+    target_block = next((b for b in event_blocks if b.get("matcher") == matcher), None)
+    if target_block is None:
+        target_block = {"matcher": matcher, "hooks": []}
+        event_blocks.append(target_block)
+    target_block.setdefault("hooks", []).append(
+        {"type": "command", "command": cmd_str, "timeout": timeout}
+    )
+
+    settings_file.write_text(json.dumps(settings, indent=2) + "\n")
+    record_install(item.kind, item.name, None)
+    return f"installed hook {item.name} → {dest} ({event}/{matcher or '*'})"
+
+
 def install_item(item: Item, target_root: Path) -> str:
     level = "user" if target_root == USER_CLAUDE_DIR else "project"
+
+    if item.kind == "hooks":
+        return install_standalone_hook(item, level)
 
     if item.kind == "plugins":
         result = install_plugin(item)

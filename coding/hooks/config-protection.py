@@ -56,6 +56,21 @@ def main() -> int:
     file_path: str = data.get("tool_input", {}).get("file_path", "")
     filename = file_path.rsplit("/", 1)[-1] if "/" in file_path else file_path
 
+    # The Claude Code hooks + settings ARE the safety/quality gate. Neutering or
+    # rewiring them (e.g. disabling a lint hook to unblock a refactor) must be a
+    # conscious user decision, never a side effect. Guard them by path.
+    in_claude = "/.claude/" in file_path
+    if ("/.claude/hooks/" in file_path) or (
+        in_claude and filename in {"settings.json", "settings.local.json"}
+    ):
+        print(
+            f"[config-protection] STOP — `{filename}` is a Claude Code hook/settings file "
+            "(the safety/quality gate). Do NOT edit, disable, or rewire it without explicit user "
+            "confirmation. Surface the request to the user and wait for their yes before retrying.",
+            file=sys.stderr,
+        )
+        return 1  # non-blocking: Claude must ask the user first
+
     if filename in CONFIRM_REQUIRED:
         print(
             f"[config-protection] STOP — do not edit `{filename}` without user confirmation. "
