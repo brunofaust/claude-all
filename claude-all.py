@@ -1005,72 +1005,80 @@ TUI_UPDATE = "update"
 TUI_QUIT = "quit"
 
 
+def _tui_select_loop(stdscr, items: list[Item]) -> str:
+    """Curses event loop for `tui_select` (run inside `curses.wrapper`).
+
+    Returns TUI_INSTALL, TUI_UPDATE, or TUI_QUIT.
+
+    Args:
+        stdscr: The curses standard screen, supplied by `curses.wrapper`.
+        items: All available items to display in the selection UI.
+    """
+    curses.curs_set(0)
+    stdscr.keypad(True)
+    state = TuiState(items=items)
+    state.rebuild_visible()
+
+    while True:
+        draw(stdscr, state)
+        ch = stdscr.getch()
+
+        if state.filter_mode:
+            if ch in (10, 13, curses.KEY_ENTER):
+                state.filter_mode = False
+            elif ch == 27:
+                state.filter_mode = False
+                state.filter_text = ""
+                state.rebuild_visible()
+            elif ch in (curses.KEY_BACKSPACE, 127, 8):
+                state.filter_text = state.filter_text[:-1]
+                state.rebuild_visible()
+            elif 32 <= ch < 127:
+                state.filter_text += chr(ch)
+                state.rebuild_visible()
+            continue
+
+        if ch in (curses.KEY_UP, ord("k")):
+            if state.cursor > 0:
+                state.cursor -= 1
+        elif ch in (curses.KEY_DOWN, ord("j")):
+            if state.cursor < len(state.visible) - 1:
+                state.cursor += 1
+        elif ch == curses.KEY_PPAGE:
+            state.cursor = max(0, state.cursor - 10)
+        elif ch == curses.KEY_NPAGE:
+            state.cursor = min(len(state.visible) - 1, state.cursor + 10)
+        elif ch == curses.KEY_HOME:
+            state.cursor = 0
+        elif ch == curses.KEY_END:
+            state.cursor = max(0, len(state.visible) - 1)
+        elif ch == ord(" "):
+            if state.visible:
+                idx = state.visible[state.cursor]
+                items[idx].selected = not items[idx].selected
+        elif ch == ord("a"):
+            for vi in state.visible:
+                items[vi].selected = True
+        elif ch == ord("n"):
+            for vi in state.visible:
+                items[vi].selected = False
+        elif ch == ord("/"):
+            state.filter_mode = True
+        elif ch == ord("u"):
+            return TUI_UPDATE
+        elif ch in (10, 13, curses.KEY_ENTER):
+            return TUI_INSTALL
+        elif ch in (ord("q"), 27):
+            return TUI_QUIT
+
+
 def tui_select(items: list[Item]) -> str:
     """Return TUI_INSTALL, TUI_UPDATE, or TUI_QUIT.
 
     Args:
         items: All available items to display in the selection UI.
     """
-
-    def _run(stdscr):
-        curses.curs_set(0)
-        stdscr.keypad(True)
-        state = TuiState(items=items)
-        state.rebuild_visible()
-
-        while True:
-            draw(stdscr, state)
-            ch = stdscr.getch()
-
-            if state.filter_mode:
-                if ch in (10, 13, curses.KEY_ENTER):
-                    state.filter_mode = False
-                elif ch == 27:
-                    state.filter_mode = False
-                    state.filter_text = ""
-                    state.rebuild_visible()
-                elif ch in (curses.KEY_BACKSPACE, 127, 8):
-                    state.filter_text = state.filter_text[:-1]
-                    state.rebuild_visible()
-                elif 32 <= ch < 127:
-                    state.filter_text += chr(ch)
-                    state.rebuild_visible()
-                continue
-
-            if ch in (curses.KEY_UP, ord("k")):
-                if state.cursor > 0:
-                    state.cursor -= 1
-            elif ch in (curses.KEY_DOWN, ord("j")):
-                if state.cursor < len(state.visible) - 1:
-                    state.cursor += 1
-            elif ch == curses.KEY_PPAGE:
-                state.cursor = max(0, state.cursor - 10)
-            elif ch == curses.KEY_NPAGE:
-                state.cursor = min(len(state.visible) - 1, state.cursor + 10)
-            elif ch == curses.KEY_HOME:
-                state.cursor = 0
-            elif ch == curses.KEY_END:
-                state.cursor = max(0, len(state.visible) - 1)
-            elif ch == ord(" "):
-                if state.visible:
-                    idx = state.visible[state.cursor]
-                    items[idx].selected = not items[idx].selected
-            elif ch == ord("a"):
-                for vi in state.visible:
-                    items[vi].selected = True
-            elif ch == ord("n"):
-                for vi in state.visible:
-                    items[vi].selected = False
-            elif ch == ord("/"):
-                state.filter_mode = True
-            elif ch == ord("u"):
-                return TUI_UPDATE
-            elif ch in (10, 13, curses.KEY_ENTER):
-                return TUI_INSTALL
-            elif ch in (ord("q"), 27):
-                return TUI_QUIT
-
-    return curses.wrapper(_run)
+    return curses.wrapper(_tui_select_loop, items)
 
 
 def choose_level_tui() -> str | None:
