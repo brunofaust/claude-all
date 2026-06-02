@@ -169,6 +169,28 @@ Required before merge: <specific actions, if BLOCK or WARNING>
 
 ______________________________________________________________________
 
+## High-signal lens — bugs that pass CI but break in prod
+
+Linters and unit tests catch the easy stuff. Spend review attention on the failures that get through
+green CI and only surface under real load / real data / real users:
+
+- **Injection & query safety** — string-built SQL/NoSQL/shell/regex from request data; ORM `.raw()` /
+  f-string queries; missing parameterization. (CI passes; prod gets owned.)
+- **🔴 LLM trust-boundary violations** — untrusted model output (or user text routed through a model)
+  driving a **privileged action**: SQL, shell, `eval`, a tool/function call, a payment, a file write,
+  an auth decision. Model output is **untrusted input** — it must be validated + allowlisted before
+  anything privileged. Prompt-injection turns a "helpful" feature into RCE/data-exfil. (See the
+  `security-audit` skill, LLM/AI layer.)
+- **Conditional side effects** — a write/delete/charge inside an `if` that the tests never exercise;
+  an early-return that skips cleanup; a retry that double-charges. Trace every side effect's branches.
+- **Concurrency / ordering** — race on shared state, non-idempotent handlers, missing locks/TTLs,
+  assuming message order.
+- **Boundary data** — null/empty/huge/unicode/timezone/`0`/negative inputs the happy-path tests skip.
+- **Resource & failure paths** — unclosed connections, unbounded growth, no timeout, swallowed
+  errors, partial-failure in batch ops returning "success".
+
+Flag these even when CI is green — they're exactly what CI doesn't model.
+
 ## Size & complexity gates (default thresholds)
 
 Concrete, mechanical thresholds so "too big" isn't subjective — exceeding one is a finding (severity
