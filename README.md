@@ -305,11 +305,9 @@ Optional fields:
 
 Installed plugins:
 
-| Plugin              | Type                  | Source                                                                        | Description                                                                                                                            |
-| ------------------- | --------------------- | ----------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `caveman`           | claude-marketplace    | [JuliusBrussee/caveman](https://github.com/JuliusBrussee/caveman)             | Ultra-compressed communication mode. Cuts token usage from Claude responses.                                                           |
-| `claude-mem`        | claude-marketplace    | [thedotmack/claude-mem](https://github.com/thedotmack/claude-mem)             | Persistent cross-session memory for Claude Code.                                                                                       |
-| `code-review-graph` | pip (`[communities]`) | [tirth8205/code-review-graph](https://github.com/tirth8205/code-review-graph) | Persistent incremental knowledge graph for token-efficient, context-aware code reviews. Includes `igraph` via the `communities` extra. |
+| Plugin              | Type                  | Source                                                                        | Description                                                                                                                                                                     |
+| ------------------- | --------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `code-review-graph` | pip (`[communities]`) | [tirth8205/code-review-graph](https://github.com/tirth8205/code-review-graph) | Persistent incremental knowledge graph for token-efficient, context-aware code reviews. `igraph` is pip-installed into the plugin's pipx venv via `pipx inject` during install. |
 
 ### 5. MCPs
 

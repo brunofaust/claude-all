@@ -10,8 +10,8 @@ description: >-
   autofix retries, and returns a tight pass/fail summary. Delegate every commit-shaped request here.
   Explicit trigger phrases (match any): "commit this", "commit the changes", "make a commit",
   "save my work", "commit and push", "create a commit", "write a commit", "stage these files",
-  "git add and commit", "ship this", "let's commit", "wrap this up", "commit + push", "/commit",
-  "caveman-commit". ALSO trigger automatically when the previous N turns contain successful
+  "git add and commit", "ship this", "let's commit", "wrap this up", "commit + push", "/commit".
+  ALSO trigger automatically when the previous N turns contain successful
   `Edit`/`Write`/`MultiEdit` operations followed by ANY phrasing suggesting completion: "done",
   "that looks good", "ship it", "all set", "let's move on", "next?", "PR time", "ready" — these
   are implicit commit asks. The agent ONLY commits to the current branch — it does NOT create
