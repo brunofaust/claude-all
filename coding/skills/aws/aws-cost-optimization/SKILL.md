@@ -122,3 +122,22 @@ cost data across clouds — use it if you report cost across AWS + others.
 - **`cost-audit-runner` agent** — runs the resource-level waste hunt (engines-first) read-only.
 - **`cost-explorer` agent** — spend totals / trends / forecast / by-tag (CE API).
 - **`aws-architecture` skill** — the cost gotchas baked into design (NAT, CW Logs ingest, cross-AZ).
+
+## References (track these for updates)
+
+AWS official:
+
+- [Well-Architected — Cost Optimization pillar](https://docs.aws.amazon.com/wellarchitected/latest/framework/cost-optimization.html)
+- [Compute Optimizer — viewing idle resource recommendations](https://docs.aws.amazon.com/compute-optimizer/latest/ug/view-idle-recommendations.html) (idle criteria per resource)
+- [Trusted Advisor — cost optimization checks](https://docs.aws.amazon.com/awssupport/latest/user/cost-optimization-checks.html) (the ~40-check catalog)
+- [Cost Optimization Hub — `list_recommendations`](https://docs.aws.amazon.com/boto3/latest/reference/services/cost-optimization-hub/client/list_recommendations.html)
+- [FOCUS — FinOps Open Cost & Usage Specification](https://focus.finops.org/)
+
+Open-source / ecosystem (prior art + tools worth referencing):
+
+- [OptimNow/cloud-finops-skills](https://github.com/OptimNow/cloud-finops-skills) — FOCUS-aligned FinOps knowledge skill + MCP
+- [zxkane/aws-skills](https://github.com/zxkane/aws-skills) — `aws-cost-operations` Claude Code skill
+- [ahmedasmar/devops-claude-skills](https://github.com/ahmedasmar/devops-claude-skills) — `aws-cost-finops` skill
+- [Cloud Custodian](https://github.com/cloud-custodian/cloud-custodian) — policy-as-code governance / auto-remediation
+- [Infracost](https://github.com/infracost/infracost) — PR-time Terraform cost diffs
+- [Komiser](https://github.com/tailwarden/komiser) — idle-resource inventory

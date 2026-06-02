@@ -149,3 +149,11 @@ ingestion) to separate "idle" from "low".
 - Estimates are rough — say so. Don't fabricate precise dollar figures.
 - Sort findings by confidence then by estimated savings. Prod-sensitive items always carry a caveat.
 - If the caller wants spend totals/trends/forecast, point them to `cost-explorer` — that's not this.
+
+## References (track these for updates)
+
+- [Compute Optimizer — idle resource recommendations](https://docs.aws.amazon.com/compute-optimizer/latest/ug/view-idle-recommendations.html) (criteria + `GetIdleRecommendations`)
+- [Trusted Advisor — cost optimization checks](https://docs.aws.amazon.com/awssupport/latest/user/cost-optimization-checks.html)
+- [Cost Optimization Hub — `list_recommendations`](https://docs.aws.amazon.com/boto3/latest/reference/services/cost-optimization-hub/client/list_recommendations.html)
+- [Well-Architected — Cost Optimization pillar](https://docs.aws.amazon.com/wellarchitected/latest/framework/cost-optimization.html)
+- Full playbook + engine hierarchy: the `aws-cost-optimization` skill.

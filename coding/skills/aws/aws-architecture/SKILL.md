@@ -217,6 +217,39 @@ Single-table design (Alex DeBrie style) — fewer tables, generic PK/SK names, G
 
 Don't single-table-design just because you read about it. **Three-or-fewer tables is fine for most apps.**
 
+### RDS vs DynamoDB — decide per table, by access pattern
+
+This is a *per-table* decision, not a whole-app one — most real systems use **both** (polyglot
+persistence): DynamoDB for the connectionless/ephemeral tables, RDS/Aurora for the relational core.
+
+**Use DynamoDB for the table when ANY of these hold:**
+
+- **High Lambda (or other serverless) fan-out without RDS Proxy.** Each concurrent Lambda holds an
+  RDS connection; without RDS Proxy you hit `max_connections` fast. DynamoDB is connectionless
+  (HTTPS, IAM-auth) — no pool to exhaust. (With RDS Proxy you *can* fan out to RDS — so this point is
+  conditional on not having/ wanting the proxy.)
+- **Insert-only / append-only** — event logs, audit trails, time-series keyed by entity. No updates,
+  no joins.
+- **Needs TTL auto-expiry** — sessions, ephemeral state, caches. DynamoDB TTL deletes expired items
+  for free (~48h async window); doing this in RDS means a reaper job.
+- **Idempotency keys / distributed locks** — single-item atomic conditional writes
+  (`attribute_not_exists`) are exactly DynamoDB's strength; pair with TTL to expire keys.
+- **Access is by a known key** — get/put by partition key (± sort key), no ad-hoc `WHERE`.
+- **Extreme or spiky write throughput, single-digit-ms point latency, or serverless scale-to-zero.**
+
+**Use RDS / Aurora for the table when ANY of these hold:**
+
+- **Joins** across entities.
+- **Multi-row / multi-table ACID transactions** (DynamoDB `TransactWriteItems` caps at 100 items and
+  has no cross-"table" relational semantics).
+- **Ad-hoc queries, reporting, aggregations, analytics** where the query shape isn't known up front.
+- **Rich relational integrity** — foreign keys, `CHECK`/uniqueness constraints, referential cascades.
+- **Querying on many attributes** (DynamoDB needs a key/GSI designed per access pattern; max 20 GSIs).
+
+Rule of thumb: if you can write down every access pattern up front and they're all key-based →
+DynamoDB. If queries are relational/variable/transactional → RDS. When unsure, **RDS is the safer
+default** (you can always add a DynamoDB table for the specific hot/ephemeral access pattern later).
+
 ### Relational → DynamoDB migration: when it's worth it
 
 Moving an existing RDS/Postgres workload to DynamoDB is a big, often-irreversible bet. Decide on the
@@ -545,3 +578,6 @@ ______________________________________________________________________
 - [The DynamoDB Book](https://www.dynamodbbook.com/) (DeBrie) — single-table design
 - [AWS Lambda Powertools](https://docs.powertools.aws.dev/) — idempotency, parameters, logging
 - [AWS Pricing Calculator](https://calculator.aws/) — always model cost before commit
+- [Planning where to use RDS Proxy](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/rds-proxy-planning.html) — connection-limit driver for the RDS-vs-DynamoDB decision
+- [RDS Proxy connection considerations](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/rds-proxy-connections.html) — MaxConnectionsPercent / IdleClientTimeout tuning
+- [DynamoDB Time to Live (TTL)](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/TTL.html) — auto-expiry for ephemeral / idempotency tables
