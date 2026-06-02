@@ -41,7 +41,7 @@ Two directives change how you stage and commit. Detect them in the caller's prom
     autofix-modified files and the original `git diff --cached --name-only`), never `git add -A`.
   - If the index is empty in this mode, return "Nothing staged (no-restage mode) — nothing to
     commit." and stop. Do not auto-stage to rescue it.
-- **`skip_hooks=<id1,id2,…>`** (phrases: "skip the codecongruence hook", "SKIP=docs-updated",
+- **`skip_hooks=<id1,id2,…>`** (phrases: "skip the myhook hook", "SKIP=docs-check",
   "skip hooks X and Y"). When set, run the commit with `SKIP=<id1,id2,…> git commit …` so prek/
   pre-commit skips exactly those hook IDs. Never use `--no-verify` (that skips ALL hooks); `SKIP=`
   is targeted and auditable. Report which hooks were skipped in the summary.
@@ -73,7 +73,7 @@ pattern is: detect the autofix, re-stage the modified files, and retry ONCE.
 
 ```bash
 # SKIP_PREFIX is "SKIP=id1,id2 " only when the caller set skip_hooks; otherwise empty.
-SKIP_PREFIX=""   # e.g. SKIP_PREFIX="SKIP=codecongruence,docs-updated "
+SKIP_PREFIX=""   # e.g. SKIP_PREFIX="SKIP=myhook,docs-check "
 # Snapshot what was staged BEFORE committing — needed for no-restage retry.
 STAGED_BEFORE=$(git diff --cached --name-only)
 
