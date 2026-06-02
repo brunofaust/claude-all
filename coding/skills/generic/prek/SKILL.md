@@ -1,8 +1,45 @@
-# prek — Git Hook Framework
+---
+name: prek
+description: >-
+  Git pre-commit hook framework — covers BOTH pre-commit (the original Python tool) and prek (its
+  faster, dependency-free Rust drop-in). Same hook ecosystem, hook IDs, stages, and SKIP=; prek reads
+  .pre-commit-config.yaml unchanged and adds an optional prek.toml. Use when: setting up pre-commit or
+  prek in a project, adding or configuring hooks, debugging hook failures (staged-file issues, --files
+  mode gotchas), resolving a finding (fix / allowlist / scope-exclude a path), multi-language
+  spell-check (typos + cspell), understanding the final_check.py Claude Code hook pattern, or running
+  it as a CI quality gate.
+disable-model-invocation: false
+user-invocable: true
+---
 
-> `prek` is a Rust-based pre-commit hook runner. It uses `prek.toml` instead of `.pre-commit-config.yaml`,
-> runs the same pre-commit hook ecosystem, and is significantly faster.
-> This skill covers setup, daily usage, and the full annotated `prek.toml` pattern.
+# pre-commit / prek — Git Hook Framework
+
+> This skill covers the **pre-commit** git-hook framework and **prek**, its faster Rust drop-in.
+> They share the same hooks, hook IDs, config model, stages, and `SKIP=`, so everything here applies
+> to **both**. Examples are shown as `prek.toml` (TOML) but map 1:1 to `.pre-commit-config.yaml`
+> (YAML) — use whichever your project has.
+
+## prek ⇄ pre-commit — interchangeable
+
+`prek` (j178/prek) is a dependency-free Rust reimplementation of `pre-commit`, **fully compatible with
+existing `.pre-commit-config.yaml` files**, plus an optional native `prek.toml`. Same `repos → hooks`
+model, same upstream hook repos, same hook IDs. Translate freely:
+
+| Action | pre-commit (Python) | prek (Rust drop-in) |
+| --- | --- | --- |
+| Install the tool | `pipx install pre-commit` | `uv tool install prek` |
+| Install git hooks | `pre-commit install` | `prek install` |
+| Run on staged files | `pre-commit run` | `prek run` |
+| Run on all files | `pre-commit run --all-files` | `prek run --all-files` |
+| Run one hook on files | `pre-commit run <id> --files a b` | `prek run <id> --files a b` |
+| Update hook revisions | `pre-commit autoupdate` | `prek autoupdate` |
+| Skip a hook | `SKIP=<id> …` | `SKIP=<id> …` (identical) |
+| Config file | `.pre-commit-config.yaml` | `.pre-commit-config.yaml` **or** `prek.toml` |
+
+The only prek-only piece is `prek.toml` (TOML) — upstream pre-commit reads YAML only; `prek util
+yaml-to-toml` converts an existing config. Throughout this skill, wherever it says `prek`, read "prek
+**or** pre-commit"; wherever it shows `prek.toml`, the same keys work in `.pre-commit-config.yaml` as
+YAML (`repos:` / `- repo:` / `hooks:` instead of `[[repos]]` / `hooks = [...]`).
 
 ## When to invoke
 
@@ -16,10 +53,10 @@ ______________________________________________________________________
 
 ## What prek is NOT
 
-- `prek` is **not** a replacement for individual tools. It **orchestrates** them.
-- Never run `ruff check`, `mypy`, `eslint`, or `prettier` directly when prek is installed.
-    Those are prek hooks — run `prek run --all-files` instead.
-- "I ran ruff and it passed" ≠ "prek passed". Other hooks (typos, gitleaks, pyupgrade,
+- `prek` / `pre-commit` is **not** a replacement for individual tools. It **orchestrates** them.
+- Never run `ruff check`, `mypy`, `eslint`, or `prettier` directly when prek/pre-commit is installed.
+    Those are hooks — run `prek run --all-files` (or `pre-commit run --all-files`) instead.
+- "I ran ruff and it passed" ≠ "the gate passed". Other hooks (typos, gitleaks, pyupgrade,
     markdownlint, mypy) may still fail.
 
 ______________________________________________________________________
@@ -67,9 +104,15 @@ uv run prek run --all-files
 # Run on specific files only (used by final_check.py hook)
 prek run --files src/mymodule/foo.py src/mymodule/bar.py
 
-# Skip a specific hook by ID
+# Skip a specific hook by ID (comma-separated for several)
 SKIP=mypy prek run --all-files
 SKIP=gitleaks,mypy prek run --all-files
+
+# The same SKIP env var works at COMMIT time — skips the hook for ONE commit.
+# Use when a pre-existing failure is unrelated to your change (then fix it separately):
+SKIP=mypy git commit -m "feat: ..."
+# Prefer SKIP=<id> over `git commit --no-verify`: SKIP skips ONLY the named hook(s);
+# --no-verify disables EVERY hook and silently hides real failures.
 
 # Update all hooks to their latest revisions
 prek autoupdate
@@ -460,6 +503,9 @@ hooks = [
 # ]
 
 # ── Optional: Local project hooks ────────────────────────────────────────────
+# `language = "system"` hooks shell out to a project script (which resolves the
+# venv, runs frontend tooling, etc.). Use them for checks no upstream hook covers.
+# Put the slow / cross-cutting ones on `pre-push` so they don't tax every commit.
 # [[repos]]
 # repo = "local"
 # hooks = [
@@ -469,13 +515,198 @@ hooks = [
 #     entry = "scripts/precommit_docs.sh",
 #     language = "system",
 #     pass_filenames = false
+#   },
+#   # Architecture boundary enforcement — fails if imports cross a forbidden layer.
+#   # Pairs with the python-module-migration skill (lock the layout after a move).
+#   {
+#     id = "import-linter",
+#     name = "🏗️ architecture · Import direction check",
+#     entry = "scripts/run_import_linter.sh",   # wraps `lint-imports`
+#     language = "system",
+#     pass_filenames = false,
+#     types_or = ["python"],
+#     stages = ["pre-push"]
+#   },
+#   # Frontend gates — wrap tsc / eslint / prettier; scoped to the frontend src tree.
+#   {
+#     id = "frontend-typecheck",
+#     name = "⚛️ frontend · TypeScript type check",
+#     entry = "scripts/run_frontend_typecheck.sh",
+#     language = "system",
+#     pass_filenames = false,
+#     files = "^frontend/src/.*\\.(ts|tsx)$",
+#     stages = ["pre-push"]
+#   },
+#   {
+#     id = "frontend-lint",
+#     name = "⚛️ frontend · ESLint (hooks, a11y, unused imports)",
+#     entry = "scripts/run_frontend_lint.sh",
+#     language = "system",
+#     pass_filenames = false,
+#     files = "^frontend/src/.*\\.(ts|tsx)$",
+#     stages = ["pre-push"]
+#   },
+#   {
+#     id = "frontend-format",
+#     name = "⚛️ frontend · Prettier format check",
+#     entry = "scripts/run_frontend_format_check.sh",
+#     language = "system",
+#     pass_filenames = false,
+#     files = "^frontend/src/.*\\.(ts|tsx|css)$",
+#     stages = ["pre-push"]
 #   }
 # ]
 ````
 
 ______________________________________________________________________
 
-## Known gotchas
+## Rolling out a new hook or complexity cap without a backlog
+
+Turning on a strict hook (Ruff `PLR` complexity caps, `interrogate` docstring coverage, `bandit`,
+`mypy --strict`) on an existing codebase usually lights up **hundreds** of pre-existing findings and
+**blocks every commit** until they're all fixed — which buries the *new* signal you actually care
+about under legacy noise.
+
+Introduce strict gates at **current-worst + a small margin**, then ratchet down:
+
+- **Measure first.** Run the candidate rule across the repo and count findings before enabling it as
+  a gate: `ruff check --select PLR0915 --statistics .` (repeat per code).
+- **Select specific codes, not the blanket group.** `select = ["PLR0911","PLR0912","PLR0913","PLR0915"]`
+  — NOT `select = ["PLR"]`. Blanket `PLR` enabled at tight defaults has lit 300–400+ findings in one
+  shot (observed: 346 → 418) and blocked the whole team. Pick the few codes that matter.
+- **Set the cap just above today's worst function**, so nothing currently passing breaks:
+  ```toml
+  [tool.ruff.lint.pylint]
+  max-branches = 12       # current worst is 11 → 12 passes today, ratchet to 10 next quarter
+  max-statements = 60
+  max-args = 7
+  max-returns = 7
+  ```
+- **Ratchet, don't bulk-fix.** Lower the caps one notch per PR/sprint; each step is a small, reviewable
+  diff instead of a 400-file refactor that hides real regressions.
+- **Per-file ignores for legacy hotspots** (`# ruff: noqa: PLR0915` with a TODO) beat disabling the
+  rule globally — new code still gets gated.
+
+The goal: the gate blocks *new* complexity from day one, while legacy debt is paid down on a schedule
+— never a commit-blocking wall of pre-existing findings.
+
+______________________________________________________________________
+
+## Resolving a hook finding — fix, scope, or allowlist
+
+When a hook flags something, you have **three levers**, in order of preference:
+
+1. **Fix it** — correct the underlying issue. Always the default.
+1. **Allowlist narrowly** — exempt the one word / rule code / line, at config level, when it's a
+    genuine false positive (a real domain term, an intentional pattern).
+1. **Scope-exclude a path** — `exclude = { glob = [...] }` on the hook, for whole directories that
+    shouldn't be checked at all (generated code, i18n locale dumps, vendored files, fixtures).
+
+A top-level `exclude = { glob = [...] }` applies to **every** hook; a per-hook `exclude` scopes to one.
+For a one-off bypass use `SKIP=<id>` (see Daily commands) — that's not a real resolution, just a defer.
+
+### Worked example — `typos`
+
+```toml
+# prek.toml — scope-exclude paths typos shouldn't scan (i18n locales, generated docs)
+{ id = "typos", name = "🔍 content · Check typos",
+  exclude = { glob = [
+    "src/myapp/i18n/locales/**",      # translated strings — not English, not typos
+    "frontend/src/i18n/locales/**",
+    "docs/generated/**",              # machine-generated
+    "src/myapp/email/subjects.json",
+  ] } }
+```
+
+```toml
+# pyproject.toml — allowlist real words/identifiers typos misreads (narrower than a path exclude)
+[tool.typos.default.extend-words]
+mab = "mab"            # "multi-armed bandit", not a typo of "may"
+[tool.typos.default.extend-identifiers]
+arange = "arange"     # numpy API (np.arange), not a typo of "arrange"
+```
+
+…and if it's an actual misspelling, just **fix the word**. Prefer fix > word-allowlist > path-exclude.
+
+### Multi-language spell-check — `typos` (code) + CSpell (content)
+
+`typos` (and `codespell`) are **corrections-based** and English: low-noise typo catching on code, but
+they don't *catch* typos in other languages (they don't false-positive on them either — they just
+ignore unknown words). For multilingual content, add **[CSpell](https://cspell.org/)** — a
+**dictionary-based** checker with dictionaries for dozens of human + programming languages — and
+**scope it to the content paths**. Keep `typos` for code so you don't drown the codebase in
+dictionary false positives.
+
+> **`codespell` is NOT a multi-language alternative** — it's the same English corrections model as
+> `typos`. Switching to it gains nothing here; CSpell is the only true multi-language option.
+
+```toml
+# prek.toml — typos stays on code; CSpell handles multilingual content only
+[[repos]]
+repo = "https://github.com/streetsidesoftware/cspell-cli"
+rev = "v8.x.x"        # pin to a real tag
+hooks = [
+  {
+    id = "cspell",
+    name = "🔤 content · Multi-language spell check",
+    # scope to content you author multilingually — NOT the whole repo
+    files = "^(src/myapp/i18n|docs|content)/.*\\.(md|mdx|json|po|ts|tsx)$",
+    additional_dependencies = [
+      "@cspell/dict-pt-pt",   # Portuguese
+      "@cspell/dict-es-es",   # Spanish
+      "@cspell/dict-fr-fr",   # French
+    ]
+  }
+]
+```
+
+```yaml
+# cspell.config.yaml (repo root) — check against several language dictionaries
+version: "0.2"
+language: "en,pt,pt-PT,es"          # words must be valid in AT LEAST one of these
+import:
+  - "@cspell/dict-pt-pt/cspell-ext.json"
+  - "@cspell/dict-es-es/cspell-ext.json"
+  - "@cspell/dict-fr-fr/cspell-ext.json"
+dictionaries: ["softwareTerms", "filetypes"]
+words:                              # project allowlist (real terms/names CSpell won't know)
+  - myapp
+  - polars
+ignorePaths: ["**/*.lock", "node_modules/**", "**/*.min.*"]
+flagWords: []                       # words to ALWAYS flag (e.g. banned/forbidden terms)
+```
+
+Trade-offs to plan for:
+
+- **Dictionary-based → noisy on code** (every identifier/abbrev/lib name is "unknown"). That's why
+  you scope CSpell to content and grow `words:` over time, rather than running it repo-wide.
+- Needs **Node** in the hook env (the `cspell-cli` hook provides it). Heavier than `typos` (Rust).
+- Rolling it onto an existing repo surfaces many "unknown word" findings at once — apply the
+  "Rolling out a new hook without a backlog" discipline above: scope narrow first, build `words:`,
+  expand.
+- **Translator-owned i18n dumps** are often NOT worth CI spell-checking (translators own
+  correctness; you'd need every locale's dictionary + heavy allowlisting). Reserve CSpell for content
+  *you* author in multiple languages, and keep machine/translator output path-excluded.
+
+### Per-hook cheat sheet
+
+| Hook | Fix | Allowlist (narrow) | Scope-exclude (path) |
+| --- | --- | --- | --- |
+| `typos` | correct spelling | `[tool.typos.default.extend-words]` / `extend-identifiers` | hook `exclude` glob (i18n, generated) |
+| `ruff-check` | fix the code | `# noqa: E501` (last resort) · `[tool.ruff.lint] ignore` · `per-file-ignores` | `[tool.ruff] extend-exclude` |
+| `mypy` | add/narrow types | `# type: ignore[arg-type]  # reason` (NOT bare — `python-check-blanket-type-ignore` blocks that) · `[[tool.mypy.overrides]] ignore_errors` for 3rd-party | hook `exclude` glob |
+| `gitleaks` | **rotate + remove the secret** | false positive → `# gitleaks:allow` · `.gitleaksignore` (fingerprint) · `[allowlist]` regex | path in `[allowlist].paths` — **never allowlist a real secret** |
+| `bandit` | fix the risk | `# nosec B101` (scoped) · `[tool.bandit] skips = ["B101"]` (e.g. assert_used in tests) | `[tool.bandit] exclude_dirs` |
+| `interrogate` | add the docstring | `[tool.interrogate]` `ignore-init-method` / `ignore-magic` / `fail-under` | `[tool.interrogate] exclude = [...]` |
+| `vulture` | delete dead code | used-dynamically → add to `vulture_whitelist.py` | hook `exclude` glob |
+| `markdownlint` | fix the markdown | `--disable MD013` (rule) · `<!-- markdownlint-disable MD033 -->` inline | `--config pyproject.toml` exclusions |
+| `mdformat` | let it auto-format | (it's a formatter — no per-finding allowlist) | hook `exclude` glob (generated docs) |
+| `pyupgrade` | let it auto-rewrite | — | per-file `exclude` glob (generated models / SDK base needing old syntax) |
+| `check-added-large-files` | don't commit the blob (Git LFS / S3 + pointer) | `args = ["--maxkb=N"]` raise the limit | path exclude |
+| semantic-dedup hook (`myorg/myhook`) | extract/merge/hoist the duplicate (see `lint-fixer`) | tune the similarity threshold in its config | scope-exclude generated/dup-by-design files |
+
+Security rule: for `gitleaks` you **fix** (rotate the leaked credential + purge it) — an allowlist is
+only ever for a *false* positive (a test fixture, an example key), never to wave through a real secret.
 
 ### `check-added-large-files` fails in `--files` mode
 

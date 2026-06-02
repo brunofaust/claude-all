@@ -6,8 +6,9 @@
   "extras": ["communities"],
   "command": "code-review-graph",
   "post_install": [
-    ["code-review-graph", "install"]
+    {"type": "pip", "package": "igraph"},
+    {"type": "bash", "command": ["code-review-graph", "install"]}
   ],
   "post_install_message": "Please run 'code-review-graph build' inside each project where you want to use it.",
-  "description": "Persistent incremental knowledge graph for token-efficient, context-aware code reviews with Claude Code. Includes igraph via 'communities' extra."
+  "description": "Persistent incremental knowledge graph for token-efficient, context-aware code reviews with Claude Code. igraph (for community detection) is pip-installed into the plugin's pipx venv via 'pipx inject' during install."
 }

@@ -173,6 +173,26 @@ def discover(filters: list[str]) -> list[Item]:
                 )
             )
 
+    hook_root = REPO_ROOT / "coding" / "hooks"
+    hook_manifest = hook_root / "hooks.json"
+    if hook_manifest.exists():
+        try:
+            manifest = json.loads(hook_manifest.read_text())
+        except (json.JSONDecodeError, OSError):
+            manifest = {}
+        for name in sorted(k for k in manifest if not k.startswith("_")):
+            py = hook_root / f"{name}.py"
+            if py.exists():
+                items.append(
+                    Item(
+                        kind="hooks",
+                        category="coding",
+                        subcategory="hooks",
+                        name=name,
+                        src=py,
+                    )
+                )
+
     if filters:
 
         def matches(it: Item) -> bool:
@@ -194,6 +214,86 @@ def annotate_installed(items: list[Item]) -> None:
 
 
 # ---------------------- install ----------------------
+
+
+def _run_post_install_step(name: str, pip_package: str | None, step: object) -> None:
+    """Execute one post_install step.
+
+    A step is either a typed dict or a legacy bare argv list (kept for
+    backward compatibility — treated as a ``bash`` step).
+
+    Typed forms::
+
+        {"type": "pip",  "package": "igraph", "extras": ["x"]}   # optional: "target", "pin"
+        {"type": "bash", "command": ["foo", "install"], "pwd": "sub/dir"}  # "pwd" optional
+
+    - ``pip`` injects the package into a pipx venv via ``pipx inject``. The
+      target venv defaults to the plugin's own ``package`` (``pip_package``);
+      override with ``target`` when injecting into a different app.
+    - ``bash`` runs ``command`` (an argv list) optionally in ``pwd``.
+
+    Args:
+        name: Plugin name (for log messages).
+        pip_package: The plugin's pip package — default pipx inject target.
+        step: The raw step from ``post_install`` (dict or legacy list).
+    """
+    # Legacy form: a bare argv list → behave like a bash step.
+    if isinstance(step, list):
+        step = {"type": "bash", "command": step}
+    if not isinstance(step, dict):
+        print(f"  ! {name}: skipping invalid post_install entry: {step!r}", file=sys.stderr)
+        return
+
+    stype = step.get("type", "bash")
+
+    if stype == "pip":
+        pkg = step.get("package")
+        if not pkg:
+            print(f"  ! {name}: pip post_install step missing 'package'", file=sys.stderr)
+            return
+        extras = step.get("extras") or []
+        spec = f"{pkg}[{','.join(extras)}]" if extras else pkg
+        pin = step.get("pin") or ""
+        if pin:
+            spec = f"{spec}{pin}"
+        target = step.get("target") or pip_package
+        if not target:
+            print(
+                f"  ! {name}: pip post_install step needs a pipx 'target' "
+                "(plugin is not pip-type, so there's no default venv)",
+                file=sys.stderr,
+            )
+            return
+        if shutil.which("pipx") is None:
+            print(
+                f"  ! {name}: pipx not on PATH — run later: pipx inject {target} {spec}",
+                file=sys.stderr,
+            )
+            return
+        cmd = ["pipx", "inject", target, spec]
+        print(f"  → post_install (pip): {' '.join(cmd)}")
+        subprocess.run(cmd, check=True)
+        return
+
+    if stype == "bash":
+        cmd = step.get("command")
+        if not isinstance(cmd, list) or not cmd:
+            print(f"  ! {name}: bash post_install step missing 'command' list", file=sys.stderr)
+            return
+        if shutil.which(cmd[0]) is None:
+            print(
+                f"  ! {name}: post_install '{cmd[0]}' not on PATH — "
+                f"open a new shell and run: {' '.join(cmd)}",
+                file=sys.stderr,
+            )
+            return
+        cwd = step.get("pwd") or None
+        suffix = f"  (cwd={cwd})" if cwd else ""
+        print(f"  → post_install (bash): {' '.join(cmd)}{suffix}")
+        subprocess.run(cmd, check=True, cwd=cwd)
+        return
+
+    print(f"  ! {name}: unknown post_install step type {stype!r}", file=sys.stderr)
 
 
 def install_plugin(item: Item) -> str:
@@ -234,23 +334,9 @@ def install_plugin(item: Item) -> str:
     else:
         return f"skipped plugin {item.name}: unknown type '{ptype}'"
 
-    # Post-install hooks
-    for cmd in meta.get("post_install") or []:
-        if not isinstance(cmd, list) or not cmd:
-            print(
-                f"  ! {item.name}: skipping invalid post_install entry: {cmd!r}",
-                file=sys.stderr,
-            )
-            continue
-        if shutil.which(cmd[0]) is None:
-            print(
-                f"  ! {item.name}: post_install '{cmd[0]}' not on PATH — "
-                f"open a new shell and run: {' '.join(cmd)}",
-                file=sys.stderr,
-            )
-            continue
-        print(f"  → post_install: {' '.join(cmd)}")
-        subprocess.run(cmd, check=True)
+    # Post-install hooks (typed steps; legacy argv lists still accepted)
+    for step in meta.get("post_install") or []:
+        _run_post_install_step(item.name, meta.get("package"), step)
 
     msg = meta.get("post_install_message")
     if msg:
@@ -421,19 +507,9 @@ def install_tool(item: Item) -> str:
             print(f"  → brew install {package}")
             subprocess.run(["brew", "install", package], check=True)
 
-        # Post-install hooks (e.g. `rtk init -g`)
-        for cmd in meta.get("post_install") or []:
-            if not isinstance(cmd, list) or not cmd:
-                continue
-            if shutil.which(cmd[0]) is None:
-                print(
-                    f"  ! {item.name}: post_install '{cmd[0]}' not on PATH. "
-                    f"Open a new shell and run: {' '.join(cmd)}",
-                    file=sys.stderr,
-                )
-                continue
-            print(f"  → post_install: {' '.join(cmd)}")
-            subprocess.run(cmd, check=True)
+        # Post-install hooks (typed steps; legacy argv lists still accepted; e.g. `rtk init -g`)
+        for step in meta.get("post_install") or []:
+            _run_post_install_step(item.name, meta.get("package"), step)
 
         record_install(item.kind, item.name, None)
 
@@ -682,8 +758,95 @@ def remove_claude_md(item: Item, level: str) -> str | None:
     return f"CLAUDE.md stripped ({target})"
 
 
+def _command_hook_basename(cmd: str) -> str:
+    """Best-effort basename of the script a hook command runs (for dedup).
+
+    Handles `"/abs/x.py"`, `$VAR/.claude/hooks/x.py`, and `python3 /abs/x.py`.
+    Returns "" for non-script commands (e.g. `rtk hook claude`, shell one-liners).
+
+    Args:
+        cmd: The hook's ``command`` string from settings.json.
+    """
+    stripped = (cmd or "").strip()
+    if not stripped:
+        return ""
+    token = stripped.split()[-1].strip("\"'")
+    name = Path(token).name
+    return name if name.endswith(".py") else ""
+
+
+def install_standalone_hook(item: Item, level: str) -> str:
+    """Install a standalone ``coding/hooks/`` script: symlink + wire into settings.json.
+
+    Metadata (event / matcher / timeout) comes from ``coding/hooks/hooks.json``. The
+    symlink uses NO kind-prefix (``<name>.py``) to match the hand-wired convention, and
+    the settings merge dedups by command basename across ALL events — so re-install
+    cleanly replaces any prior entry for the same hook (incl. a hand-wired one) instead
+    of double-firing.
+
+    Args:
+        item: The hook item (``kind="hooks"``).
+        level: Installation scope — ``'user'`` or ``'project'``.
+    """
+    try:
+        manifest = json.loads((REPO_ROOT / "coding" / "hooks" / "hooks.json").read_text())
+    except (json.JSONDecodeError, OSError):
+        manifest = {}
+    meta = manifest.get(item.name, {})
+    event = meta.get("event", "PreToolUse")
+    matcher = meta.get("matcher", "Edit|Write")
+    timeout = int(meta.get("timeout", 2000))
+
+    base = (USER_CLAUDE_DIR if level == "user" else Path.cwd() / ".claude") / "hooks"
+    base.mkdir(parents=True, exist_ok=True)
+    dest = base / f"{item.name}.py"
+    if dest.is_symlink() or dest.exists():
+        dest.unlink()
+    os.symlink(item.src, dest)
+    cmd_str = str(dest)
+    target_basename = f"{item.name}.py"
+
+    settings_file = _settings_path(level)
+    settings_file.parent.mkdir(parents=True, exist_ok=True)
+    settings: dict = {}
+    if settings_file.exists():
+        try:
+            settings = json.loads(settings_file.read_text())
+        except json.JSONDecodeError:
+            settings = {}
+    settings.setdefault("hooks", {})
+
+    # Drop any prior entry for this hook anywhere (basename match), then re-add fresh.
+    for ev, blocks in list(settings["hooks"].items()):
+        for block in blocks:
+            block["hooks"] = [
+                h
+                for h in block.get("hooks", [])
+                if _command_hook_basename(h.get("command", "")) != target_basename
+            ]
+        settings["hooks"][ev] = [b for b in blocks if b.get("hooks")]
+        if not settings["hooks"][ev]:
+            del settings["hooks"][ev]
+
+    event_blocks = settings.setdefault("hooks", {}).setdefault(event, [])
+    target_block = next((b for b in event_blocks if b.get("matcher") == matcher), None)
+    if target_block is None:
+        target_block = {"matcher": matcher, "hooks": []}
+        event_blocks.append(target_block)
+    target_block.setdefault("hooks", []).append(
+        {"type": "command", "command": cmd_str, "timeout": timeout}
+    )
+
+    settings_file.write_text(json.dumps(settings, indent=2) + "\n")
+    record_install(item.kind, item.name, None)
+    return f"installed hook {item.name} → {dest} ({event}/{matcher or '*'})"
+
+
 def install_item(item: Item, target_root: Path) -> str:
     level = "user" if target_root == USER_CLAUDE_DIR else "project"
+
+    if item.kind == "hooks":
+        return install_standalone_hook(item, level)
 
     if item.kind == "plugins":
         result = install_plugin(item)
@@ -949,72 +1112,80 @@ TUI_UPDATE = "update"
 TUI_QUIT = "quit"
 
 
+def _tui_select_loop(stdscr, items: list[Item]) -> str:
+    """Curses event loop for `tui_select` (run inside `curses.wrapper`).
+
+    Returns TUI_INSTALL, TUI_UPDATE, or TUI_QUIT.
+
+    Args:
+        stdscr: The curses standard screen, supplied by `curses.wrapper`.
+        items: All available items to display in the selection UI.
+    """
+    curses.curs_set(0)
+    stdscr.keypad(True)
+    state = TuiState(items=items)
+    state.rebuild_visible()
+
+    while True:
+        draw(stdscr, state)
+        ch = stdscr.getch()
+
+        if state.filter_mode:
+            if ch in (10, 13, curses.KEY_ENTER):
+                state.filter_mode = False
+            elif ch == 27:
+                state.filter_mode = False
+                state.filter_text = ""
+                state.rebuild_visible()
+            elif ch in (curses.KEY_BACKSPACE, 127, 8):
+                state.filter_text = state.filter_text[:-1]
+                state.rebuild_visible()
+            elif 32 <= ch < 127:
+                state.filter_text += chr(ch)
+                state.rebuild_visible()
+            continue
+
+        if ch in (curses.KEY_UP, ord("k")):
+            if state.cursor > 0:
+                state.cursor -= 1
+        elif ch in (curses.KEY_DOWN, ord("j")):
+            if state.cursor < len(state.visible) - 1:
+                state.cursor += 1
+        elif ch == curses.KEY_PPAGE:
+            state.cursor = max(0, state.cursor - 10)
+        elif ch == curses.KEY_NPAGE:
+            state.cursor = min(len(state.visible) - 1, state.cursor + 10)
+        elif ch == curses.KEY_HOME:
+            state.cursor = 0
+        elif ch == curses.KEY_END:
+            state.cursor = max(0, len(state.visible) - 1)
+        elif ch == ord(" "):
+            if state.visible:
+                idx = state.visible[state.cursor]
+                items[idx].selected = not items[idx].selected
+        elif ch == ord("a"):
+            for vi in state.visible:
+                items[vi].selected = True
+        elif ch == ord("n"):
+            for vi in state.visible:
+                items[vi].selected = False
+        elif ch == ord("/"):
+            state.filter_mode = True
+        elif ch == ord("u"):
+            return TUI_UPDATE
+        elif ch in (10, 13, curses.KEY_ENTER):
+            return TUI_INSTALL
+        elif ch in (ord("q"), 27):
+            return TUI_QUIT
+
+
 def tui_select(items: list[Item]) -> str:
     """Return TUI_INSTALL, TUI_UPDATE, or TUI_QUIT.
 
     Args:
         items: All available items to display in the selection UI.
     """
-
-    def _run(stdscr):
-        curses.curs_set(0)
-        stdscr.keypad(True)
-        state = TuiState(items=items)
-        state.rebuild_visible()
-
-        while True:
-            draw(stdscr, state)
-            ch = stdscr.getch()
-
-            if state.filter_mode:
-                if ch in (10, 13, curses.KEY_ENTER):
-                    state.filter_mode = False
-                elif ch == 27:
-                    state.filter_mode = False
-                    state.filter_text = ""
-                    state.rebuild_visible()
-                elif ch in (curses.KEY_BACKSPACE, 127, 8):
-                    state.filter_text = state.filter_text[:-1]
-                    state.rebuild_visible()
-                elif 32 <= ch < 127:
-                    state.filter_text += chr(ch)
-                    state.rebuild_visible()
-                continue
-
-            if ch in (curses.KEY_UP, ord("k")):
-                if state.cursor > 0:
-                    state.cursor -= 1
-            elif ch in (curses.KEY_DOWN, ord("j")):
-                if state.cursor < len(state.visible) - 1:
-                    state.cursor += 1
-            elif ch == curses.KEY_PPAGE:
-                state.cursor = max(0, state.cursor - 10)
-            elif ch == curses.KEY_NPAGE:
-                state.cursor = min(len(state.visible) - 1, state.cursor + 10)
-            elif ch == curses.KEY_HOME:
-                state.cursor = 0
-            elif ch == curses.KEY_END:
-                state.cursor = max(0, len(state.visible) - 1)
-            elif ch == ord(" "):
-                if state.visible:
-                    idx = state.visible[state.cursor]
-                    items[idx].selected = not items[idx].selected
-            elif ch == ord("a"):
-                for vi in state.visible:
-                    items[vi].selected = True
-            elif ch == ord("n"):
-                for vi in state.visible:
-                    items[vi].selected = False
-            elif ch == ord("/"):
-                state.filter_mode = True
-            elif ch == ord("u"):
-                return TUI_UPDATE
-            elif ch in (10, 13, curses.KEY_ENTER):
-                return TUI_INSTALL
-            elif ch in (ord("q"), 27):
-                return TUI_QUIT
-
-    return curses.wrapper(_run)
+    return curses.wrapper(_tui_select_loop, items)
 
 
 def choose_level_tui() -> str | None:

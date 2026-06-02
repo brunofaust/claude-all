@@ -1,6 +1,10 @@
-______________________________________________________________________
-
-## name: brunofaust-python-style description: > Modern Python 3.14+ coding standards for async-first, type-safe production code. Use when: writing async Python code, building CDC pipelines, implementing data transformations, adding type hints, setting up pytest fixtures, designing dataclasses, reviewing code for Python best practices, optimizing async patterns, or creating data engineering features. Enforce for all Python coding tasks: new features, refactoring, bug fixes, type safety reviews, async/await patterns, structured logging, datalake silver/gold layer transformations. disable-model-invocation: false user-invocable: true
+---
+name: brunofaust-python-style
+description: >-
+  Modern Python 3.14+ coding standards for async-first, type-safe production code. Use when: writing async Python code, building CDC pipelines, implementing data transformations, adding type hints, setting up pytest fixtures, designing dataclasses, reviewing code for Python best practices, optimizing async patterns, or creating data engineering features. Enforce for all Python coding tasks: new features, refactoring, bug fixes, type safety reviews, async/await patterns, structured logging, datalake silver/gold layer transformations.
+disable-model-invocation: false
+user-invocable: true
+---
 
 # Python Coding Style Guide (condensed)
 
@@ -78,7 +82,7 @@ from app import CACHE_1_HOURS
 from app.core.cache import cached_async
 ```
 
-Rules: parenthesised imports for large groups, `TYPE_CHECKING` for type-only imports, **never** wildcard imports, **never** `from __future__ import annotations` (deprecated in 3.14 per PEP 649).
+Rules: parenthesised imports for large groups, `TYPE_CHECKING` for type-only imports, **never** wildcard imports, **never** `from __future__ import annotations` (deprecated in 3.14 per PEP 649). **Never alias an import to a `_`-prefixed name** (e.g. `import orjson as _orjson`) — module-level names never start with `_` (that's what `__all__` is for, see Visibility rule), and an alias must *mean something* (disambiguation, convention like `import polars as pl`), not act as a visibility hack. If you're aliasing to hide a name, you want `__all__` instead.
 
 Full TYPE_CHECKING semantics + Protocol typing + generics → `references/type-hints.md`.
 

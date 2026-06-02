@@ -1,6 +1,10 @@
-______________________________________________________________________
-
-## name: seo description: > SEO + GEO + AEO audit and optimization. Use when: writing or editing HTML meta / titles / OpenGraph / structured data (JSON-LD), auditing a page for search performance, improving Core Web Vitals, optimizing for generative engines (ChatGPT / Perplexity / Gemini / Google AI Overviews), winning featured snippets, designing programmatic-SEO pages, reviewing sitemaps / robots / canonicals / hreflang, or troubleshooting why a page isn't ranking. Covers classic search-engine SEO, GEO (Generative Engine Optimization), and AEO (Answer Engine Optimization). disable-model-invocation: false user-invocable: true
+---
+name: seo
+description: >-
+  SEO + GEO + AEO audit and optimization. Use when: writing or editing HTML meta / titles / OpenGraph / structured data (JSON-LD), auditing a page for search performance, improving Core Web Vitals, optimizing for generative engines (ChatGPT / Perplexity / Gemini / Google AI Overviews), winning featured snippets, designing programmatic-SEO pages, reviewing sitemaps / robots / canonicals / hreflang, or troubleshooting why a page isn't ranking. Covers classic search-engine SEO, GEO (Generative Engine Optimization), and AEO (Answer Engine Optimization).
+disable-model-invocation: false
+user-invocable: true
+---
 
 # SEO + GEO + AEO Skill
 

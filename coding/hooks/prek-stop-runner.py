@@ -58,8 +58,17 @@ def find_project_root(file_path: str) -> Path | None:
     return None
 
 
+# Hooks that gate the COMMIT itself, not the edited files. They false-fail in a
+# Stop lint-batch — e.g. `no-commit-to-branch` fails purely because you're on `main`,
+# though no commit is happening. Skip them here; they still run on a real `git commit`.
+COMMIT_CEREMONY_HOOKS: tuple[str, ...] = ("no-commit-to-branch",)
+
+
 def _run_prek_stage(root: Path, files: list[str], stage: str) -> subprocess.CompletedProcess[str]:
     """Run prek for a single hook stage and return the CompletedProcess.
+
+    Commit-ceremony hooks (see ``COMMIT_CEREMONY_HOOKS``) are skipped via the ``SKIP``
+    env var, merged with any ``SKIP`` the user already set.
 
     Args:
         root: Project root where prek.toml exists.
@@ -69,12 +78,16 @@ def _run_prek_stage(root: Path, files: list[str], stage: str) -> subprocess.Comp
     Returns:
         CompletedProcess with prek output captured.
     """
+    env = dict(os.environ)
+    skip = [s for s in env.get("SKIP", "").split(",") if s.strip()]
+    skip.extend(h for h in COMMIT_CEREMONY_HOOKS if h not in skip)
+    env["SKIP"] = ",".join(skip)
     return subprocess.run(
         ["uv", "run", "prek", "run", "--hook-stage", stage, "--files", *files],
         cwd=root,
         capture_output=True,
         text=True,
-        env=os.environ,
+        env=env,
     )
 
 

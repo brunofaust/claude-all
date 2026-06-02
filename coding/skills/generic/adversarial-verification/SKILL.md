@@ -1,6 +1,10 @@
-______________________________________________________________________
-
-## name: adversarial-verification description: >- Evidence-first verification discipline. Use BEFORE claiming work complete, before opening a PR, after applying a fix, before saying "tests pass" / "it works" / "the bug is fixed". The rule: no success word without a fresh command run quoted verbatim. Tries to BREAK the change instead of confirming it. Pairs with `test-runner` (executor) and `e2e-scenario-runner` (multi- service probe). Synthesized from obra/superpowers `verification-before-   completion`, alirezarezvani/claude-skills `adversarial-reviewer`, robertoecf/adversarial-review. disable-model-invocation: false user-invocable: true
+---
+name: adversarial-verification
+description: >-
+  Evidence-first verification discipline. Use BEFORE claiming work complete, before opening a PR, after applying a fix, before saying "tests pass" / "it works" / "the bug is fixed". The rule: no success word without a fresh command run quoted verbatim. Tries to BREAK the change instead of confirming it. Pairs with `test-runner` (executor) and `e2e-scenario-runner` (multi- service probe). Synthesized from obra/superpowers `verification-before- completion`, alirezarezvani/claude-skills `adversarial-reviewer`, robertoecf/adversarial-review.
+disable-model-invocation: false
+user-invocable: true
+---
 
 # Adversarial verification
 
@@ -132,6 +136,22 @@ For `PARTIAL`: list what passed + what's untested + what would need to change to
 - ❌ "It's a one-line change, it can't break" → famous last words.
 - ❌ "The test was failing before, now it passes" → without revert-cycle, the test may always pass.
 - ❌ Claim PASS based on agent return value alone (agents can hallucinate success).
+
+## Judge the artifact, not the effort (anti-sycophancy)
+
+When you EVALUATE something — your own work, a PR, an agent's output, a generated result — grade what
+IS, not the attempt:
+
+- **No cope phrases** that soften a failing verdict: "solid foundation", "good start", "has potential",
+  "almost there", "on the right track". That's sycophancy, not assessment.
+- **No points for effort or intent.** It works (evidence) or it doesn't. "Tried hard" / "complex
+  problem" don't move the verdict.
+- **State the verdict first, plainly**, then the evidence. If it fails, say "fails" and show the
+  failing case — don't bury it under praise.
+- Be specific about what's wrong and what would make it pass. Honest-and-actionable beats kind-and-vague.
+
+The flip side of the evidence rule: just as you don't claim success without proof, you don't grant
+partial credit without it either.
 
 ## Hand-offs
 

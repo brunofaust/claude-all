@@ -1,6 +1,9 @@
-______________________________________________________________________
-
-## name: code-review-discipline description: > Discipline for any review-style task (code review, security review, SEO review, migration review, architecture review). Enforces a uniform output format, mechanical Approve/Warning/Block verdict rule, PR merge-readiness pre-check, "report-only" rule (no silent refactors), and a "common false positives" pattern. Pair with whatever review skill is doing the actual domain work — this one defines the SHAPE of the output and the discipline. Use when: reviewing a PR, reviewing a diff, performing a security audit, reviewing a migration, reviewing an architecture proposal, or building any new reviewer agent / skill. user-invocable: true
+---
+name: code-review-discipline
+description: >-
+  Discipline for any review-style task (code review, security review, SEO review, migration review, architecture review). Enforces a uniform output format, mechanical Approve/Warning/Block verdict rule, PR merge-readiness pre-check, "report-only" rule (no silent refactors), and a "common false positives" pattern. Pair with whatever review skill is doing the actual domain work — this one defines the SHAPE of the output and the discipline. Use when: reviewing a PR, reviewing a diff, performing a security audit, reviewing a migration, reviewing an architecture proposal, or building any new reviewer agent / skill.
+user-invocable: true
+---
 
 # Code Review Discipline
 
@@ -131,6 +134,21 @@ Only list ones you actually considered — empty section is fine.
 
 ______________________________________________________________________
 
+## Rule 4.5 — Report discipline (confidence + anti-inflation)
+
+A noisy review trains people to ignore it. Hold the bar:
+
+- **≥ 80% confidence to report.** A hunch is not a finding — if you can't name the concrete failure
+  path, don't file it (or file it INFO with the uncertainty stated).
+- **Pre-Report Gate** — before emitting each finding, check the severity is *defensible*: a missing
+  docstring is never HIGH; a style nit is never BLOCK; "I'd prefer X" is never above INFO. Downgrade
+  or drop it.
+- **HIGH / CRITICAL require proof** — a concrete reproduction or failure path, not speculation.
+- **Zero findings is a valid, good outcome** → verdict APPROVE. Never manufacture findings to look
+  thorough; padding with INFO is noise.
+- **Review the diff, not the repo's legacy debt** — skip issues in UNCHANGED code unless they're
+  CRITICAL (security / data-loss). A PR isn't the place to relitigate old code.
+
 ## Rule 5 — Output template (assemble all rules)
 
 ```
@@ -165,6 +183,76 @@ Required before merge: <specific actions, if BLOCK or WARNING>
 ```
 
 ______________________________________________________________________
+
+## High-signal lens — bugs that pass CI but break in prod
+
+Linters and unit tests catch the easy stuff. Spend review attention on the failures that get through
+green CI and only surface under real load / real data / real users:
+
+- **Injection & query safety** — string-built SQL/NoSQL/shell/regex from request data; ORM `.raw()` /
+  f-string queries; missing parameterization. (CI passes; prod gets owned.)
+- **🔴 LLM trust-boundary violations** — untrusted model output (or user text routed through a model)
+  driving a **privileged action**: SQL, shell, `eval`, a tool/function call, a payment, a file write,
+  an auth decision. Model output is **untrusted input** — it must be validated + allowlisted before
+  anything privileged. Prompt-injection turns a "helpful" feature into RCE/data-exfil. (See the
+  `security-audit` skill, LLM/AI layer.)
+- **Conditional side effects** — a write/delete/charge inside an `if` that the tests never exercise;
+  an early-return that skips cleanup; a retry that double-charges. Trace every side effect's branches.
+- **Concurrency / ordering** — race on shared state, non-idempotent handlers, missing locks/TTLs,
+  assuming message order.
+- **Boundary data** — null/empty/huge/unicode/timezone/`0`/negative inputs the happy-path tests skip.
+- **Resource & failure paths** — unclosed connections, unbounded growth, no timeout, swallowed
+  errors, partial-failure in batch ops returning "success".
+
+Flag these even when CI is green — they're exactly what CI doesn't model.
+
+## Size & complexity gates (default thresholds)
+
+Concrete, mechanical thresholds so "too big" isn't subjective — exceeding one is a finding (severity
+by how far over). Tune per project, but have explicit numbers:
+
+| Metric | Soft limit | Hard limit (BLOCK) |
+| --- | --- | --- |
+| Function length | 50 lines | — (refactor) |
+| File length | ~400 lines typical | 800 lines |
+| Nesting depth | 3 | 4 |
+| Function parameters | 4 (pass an object/dataclass beyond) | — |
+| Cyclomatic complexity | per linter (ruff `PLR*` / eslint `complexity`) | — |
+| Test coverage | per-layer table below | project gate (e.g. 80%) |
+
+Per-layer coverage (deeper logic = higher bar):
+
+| Layer | Target |
+| --- | --- |
+| utils / pure logic | ≥ 90% |
+| hooks / domain services | ≥ 85% |
+| presentational / handlers | ≥ 80% |
+| container / orchestration | ≥ 70% |
+
+These are *signals*, not a replacement for judgment — a 60-line flat mapping is fine; a 30-line
+function with 4 levels of nesting is not. Enforce the mechanical ones in the linter (ruff `PLR` caps,
+eslint `complexity`/`max-lines`) so they never reach review — see the `prek` skill "Rolling out a
+complexity cap without a backlog".
+
+## Split-role review panel (high-stakes changes)
+
+For a significant PR, run **independent reviewers in parallel**, each with ONE lens, then merge their
+findings (dedupe; keep the highest severity per issue). One reviewer wearing five hats misses things;
+five focused passes don't. Lenses:
+
+- **Factual / correctness** — does it do what it claims? Logic, edge cases, error paths.
+- **Senior-engineer** — design, naming, simplicity, the size/complexity gates above.
+- **Security** — the `web-security` / threat lenses (inputs, authz, secrets, injection).
+- **Consistency** — does it match the existing patterns/conventions in this codebase?
+- **Redundancy / reuse** — is this reinventing something that already exists? (see `research-before-build`)
+
+Dispatch them as parallel agents (`subagent-prompting` / `dispatching-parallel-agents`); each returns
+findings in this skill's output format; you synthesize one report. Reserve the full panel for
+high-stakes diffs — a small change needs one pass.
+
+> The numeric gates + split-role panel are adapted from [affaan-m/ECC](https://github.com/affaan-m/ECC)
+> ([`rules/common/code-review.md`](https://github.com/affaan-m/ECC/blob/main/rules/common/code-review.md),
+> [`rules/common/agents.md`](https://github.com/affaan-m/ECC/blob/main/rules/common/agents.md)) — track for updates.
 
 ## Integration with existing review tooling
 

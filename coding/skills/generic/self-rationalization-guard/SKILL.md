@@ -1,6 +1,10 @@
-______________________________________________________________________
-
-## name: self-rationalization-guard description: >- Behavioral guard — detects when an agent is writing explanations / restating constraints / pre-emptively surrendering instead of executing the task. Fires when the agent emits >2 sentences before any tool call on an actionable request. Pairs with `adversarial-verification` (output-side discipline). Synthesized from obra/superpowers writing-skills + verification-before- completion + kadaliao/claude-code-skills-collection. disable-model-invocation: false user-invocable: true
+---
+name: self-rationalization-guard
+description: >-
+  Behavioral guard — detects when an agent is writing explanations / restating constraints / pre-emptively surrendering instead of executing the task. Fires when the agent emits >2 sentences before any tool call on an actionable request. Pairs with `adversarial-verification` (output-side discipline). Synthesized from obra/superpowers writing-skills + verification-before- completion + kadaliao/claude-code-skills-collection.
+disable-model-invocation: false
+user-invocable: true
+---
 
 # Self-rationalization guard
 

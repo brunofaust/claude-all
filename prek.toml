@@ -120,7 +120,11 @@ hooks = [
     additional_dependencies = [
       "mdformat-mkdocs"
     ],
-    exclude = { glob = [".claude/**", "coding/agents/**"] }
+    # mdformat rewrites YAML frontmatter (--- fences) into a thematic break + ## heading,
+    # which destroys the `name:`/`description:` of every SKILL.md and breaks skill
+    # model-invocation. Agents are already excluded; skills/plugins/mcps/tools carry
+    # frontmatter or JSON that must not be reformatted, so exclude them too.
+    exclude = { glob = [".claude/**", "coding/agents/**", "coding/skills/**", "coding/plugins/**", "coding/mcps/**", "coding/tools/**"] }
   }
 ]
 
@@ -164,7 +168,12 @@ rev = "v1.46.2"
 hooks = [
   {
     id = "typos",
-    name = "🔍 content · Check typos"
+    name = "🔍 content · Check typos",
+    # The prek skill documents typo-handling and deliberately contains example
+    # misspellings + multi-language sample words; exclude it so typos doesn't flag or
+    # rewrite those examples. (This is the skill's own "scope-exclude a path" lever,
+    # applied to itself.)
+    exclude = { glob = ["coding/skills/generic/prek/**"] }
   }
 ]
 

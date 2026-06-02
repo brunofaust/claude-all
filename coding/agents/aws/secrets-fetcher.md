@@ -3,7 +3,7 @@ name: secrets-fetcher
 description: >-
   Use this agent FIRST whenever the user wants to fetch, list, or describe AWS Secrets Manager secrets
   — `aws secretsmanager get-secret-value`, `aws secretsmanager list-secrets`, `aws secretsmanager   describe-secret`. The main session must NOT run these directly — secret values end up in the
-  transcript verbatim AND in claude-mem memory AND in any subprocess heredoc that unwraps them.
+  transcript verbatim AND in any session-memory / indexing plugin AND in any subprocess heredoc that unwraps them.
   Delegate every Secrets Manager read here. Explicit trigger phrases (match any): "get the secret",
   "fetch the secret", "what's the value of <secret-id>", "secretsmanager get-secret-value", "aws
   secretsmanager", "describe secret X", "list secrets", "look up the password", "look up the API key",
@@ -114,7 +114,7 @@ If you accidentally execute a command that would echo a secret, immediately:
 - ❌ `TOKEN=$(aws secretsmanager get-secret-value ... --query SecretString --output text)` — the `--query SecretString --output text` step PRINTS the value to stdout (which goes to the transcript). Never use the `--output text` form on secret values.
 - ❌ Piping `get-secret-value` to any python parser that prints fields (`json.load(sys.stdin)['password']`) — same leak.
 - ❌ "Helpful" echo of "secret fetched, here's the password so you can see it" — never. The user knows their own secret. Returning metadata is the entire job.
-- ❌ Storing fetched secrets in `/tmp/foo` (still on disk, claude-mem may index).
+- ❌ Storing fetched secrets in `/tmp/foo` (still on disk, a memory/indexing plugin may index it).
 
 ## Rules
 

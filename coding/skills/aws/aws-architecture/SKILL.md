@@ -1,6 +1,10 @@
-______________________________________________________________________
-
-## name: aws-architecture description: > AWS serverless + event-driven architecture patterns. Use when: designing Lambda functions, picking between SQS/SNS/EventBridge, sizing DynamoDB capacity, designing Step Functions workflows, choosing API Gateway flavour, designing ECS / Fargate services, reviewing IaC (Terraform/CloudFormation) for AWS architectural fitness, debugging Lambda cold starts, sizing visibility timeouts, picking partition keys, designing DLQ + retry strategies, or reviewing AWS cost / performance trade-offs. disable-model-invocation: false user-invocable: true
+---
+name: aws-architecture
+description: >-
+  AWS serverless + event-driven architecture patterns. Use when: designing Lambda functions, picking between SQS/SNS/EventBridge, sizing DynamoDB capacity, designing Step Functions workflows, choosing API Gateway flavour, designing ECS / Fargate services, reviewing IaC (Terraform/CloudFormation) for AWS architectural fitness, debugging Lambda cold starts, sizing visibility timeouts, picking partition keys, designing DLQ + retry strategies, or reviewing AWS cost / performance trade-offs.
+disable-model-invocation: false
+user-invocable: true
+---
 
 # AWS Architecture Skill
 
@@ -213,6 +217,63 @@ Single-table design (Alex DeBrie style) — fewer tables, generic PK/SK names, G
 
 Don't single-table-design just because you read about it. **Three-or-fewer tables is fine for most apps.**
 
+### RDS vs DynamoDB — decide per table, by access pattern
+
+This is a *per-table* decision, not a whole-app one — most real systems use **both** (polyglot
+persistence): DynamoDB for the connectionless/ephemeral tables, RDS/Aurora for the relational core.
+
+**Use DynamoDB for the table when ANY of these hold:**
+
+- **High Lambda (or other serverless) fan-out without RDS Proxy.** Each concurrent Lambda holds an
+  RDS connection; without RDS Proxy you hit `max_connections` fast. DynamoDB is connectionless
+  (HTTPS, IAM-auth) — no pool to exhaust. (With RDS Proxy you *can* fan out to RDS — so this point is
+  conditional on not having/ wanting the proxy.)
+- **Insert-only / append-only** — event logs, audit trails, time-series keyed by entity. No updates,
+  no joins.
+- **Needs TTL auto-expiry** — sessions, ephemeral state, caches. DynamoDB TTL deletes expired items
+  for free (~48h async window); doing this in RDS means a reaper job.
+- **Idempotency keys / distributed locks** — single-item atomic conditional writes
+  (`attribute_not_exists`) are exactly DynamoDB's strength; pair with TTL to expire keys.
+- **Access is by a known key** — get/put by partition key (± sort key), no ad-hoc `WHERE`.
+- **Extreme or spiky write throughput, single-digit-ms point latency, or serverless scale-to-zero.**
+
+**Use RDS / Aurora for the table when ANY of these hold:**
+
+- **Joins** across entities.
+- **Multi-row / multi-table ACID transactions** (DynamoDB `TransactWriteItems` caps at 100 items and
+  has no cross-"table" relational semantics).
+- **Ad-hoc queries, reporting, aggregations, analytics** where the query shape isn't known up front.
+- **Rich relational integrity** — foreign keys, `CHECK`/uniqueness constraints, referential cascades.
+- **Querying on many attributes** (DynamoDB needs a key/GSI designed per access pattern; max 20 GSIs).
+
+Rule of thumb: if you can write down every access pattern up front and they're all key-based →
+DynamoDB. If queries are relational/variable/transactional → RDS. When unsure, **RDS is the safer
+default** (you can always add a DynamoDB table for the specific hot/ephemeral access pattern later).
+
+### Relational → DynamoDB migration: when it's worth it
+
+Moving an existing RDS/Postgres workload to DynamoDB is a big, often-irreversible bet. Decide on the
+*access patterns*, not the hype. Run this checklist BEFORE migrating:
+
+- **Enumerate every query first.** List all current SQL access patterns (point lookups, ranges,
+  joins, aggregations, ad-hoc reporting). DynamoDB serves only patterns you designed a key/GSI for —
+  there is no `JOIN`, no ad-hoc `WHERE`, no `GROUP BY`. If the app does multi-table joins or analysts
+  run arbitrary queries, DDB is the wrong store (or needs a separate analytics path: S3 export +
+  Athena).
+- **What actually drives the move?** Good reasons: extreme write throughput, predictable
+  single-digit-ms point lookups at scale, serverless scale-to-zero, or **RDS connection-limit /
+  RDS-Proxy pain** under high Lambda fan-out (each Lambda holds a connection; DDB is connectionless).
+  Bad reasons: "NoSQL is modern", "joins feel slow" (add an index first).
+- **Cost compare honestly.** DDB on-demand at high steady throughput can cost *more* than a
+  right-sized RDS instance. Model write/read units against real traffic; don't assume DDB is cheaper.
+- **Relational integrity moves to the app.** No foreign keys, no transactions across "tables" beyond
+  `TransactWriteItems` (25-item cap), no `CHECK` constraints. You own consistency now.
+- **Migration is expand-contract, not big-bang.** Dual-write to both stores, backfill DDB from a
+  Postgres snapshot, shadow-read and diff, then cut over. Keep Postgres as the rollback for a while.
+
+Default verdict: if you can't write down every access pattern up front and they're all key-based,
+**keep Postgres**. Migrate only when a specific scale/throughput/connection driver forces it.
+
 ### On-demand vs provisioned
 
 - **On-demand**: pay per request. Default for unpredictable / spiky loads.
@@ -332,6 +393,49 @@ ______________________________________________________________________
 - Secrets Manager > Lambda env vars for rotating credentials. Use Powertools `parameters` for caching.
 - SQS / SNS / DDB: server-side encryption (SSE-KMS) for anything customer-related.
 - IAM roles for service accounts (IRSA in EKS / Task roles in ECS) — never bake credentials in containers.
+
+______________________________________________________________________
+
+## 10.5 AWS client wrappers — one owner per service (`core/aws/`)
+
+How you *organize the boto3 code* matters as much as the architecture. Contain every AWS SDK call
+behind a thin async wrapper, one file per service, in a settings-free `core/aws/` package:
+
+```
+core/aws/
+├── base.py        # shared AWSClient base + process-wide aiobotocore session reuse
+├── s3.py          # S3Client(AWSClient)
+├── sqs.py         # SQSClient(AWSClient)
+├── dynamodb.py    # DynamoDBClient(AWSClient)
+├── sns.py  ├ secrets.py  ├ sfn.py  ├ logs.py  └ …   # one file per service
+```
+
+Rules:
+
+- **One file per service.** `core/aws/s3.py` is THE only place `aiobotocore`'s S3 client is created.
+  Nothing else imports the SDK (enforce with ruff `banned-api` / TID251 — see the
+  `brunofaust-python-style` external-system-ownership reference).
+- **Share one session in `base.py`.** Lambda reuses the execution environment across invocations, so
+  a process-wide `aiobotocore` session + per-service client cache avoids re-creating clients on every
+  warm invoke (a real cold-vs-warm latency win):
+
+  ```python
+  # core/aws/base.py
+  _session: AioSession | None = None
+  clients: dict[str, Any] = {}          # service_name -> client, reused across invocations
+
+  def get_session() -> AioSession:
+      global _session
+      if _session is None:
+          _session = aio_get_session()
+      return _session
+  ```
+
+- **Settings-free.** Region / table names / bucket names are passed in (constructor args or
+  `Settings` injected by the caller), never imported inside `core/aws/`. That keeps the package
+  extractable as a shared library across services.
+- **`core/aws/` ≠ `aws_resources/`.** `core/aws/` holds the reusable *client wrappers*;
+  `aws_resources/` holds the *deployable units* (Lambda handlers, ECS tasks) that consume them.
 
 ______________________________________________________________________
 
@@ -474,3 +578,6 @@ ______________________________________________________________________
 - [The DynamoDB Book](https://www.dynamodbbook.com/) (DeBrie) — single-table design
 - [AWS Lambda Powertools](https://docs.powertools.aws.dev/) — idempotency, parameters, logging
 - [AWS Pricing Calculator](https://calculator.aws/) — always model cost before commit
+- [Planning where to use RDS Proxy](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/rds-proxy-planning.html) — connection-limit driver for the RDS-vs-DynamoDB decision
+- [RDS Proxy connection considerations](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/rds-proxy-connections.html) — MaxConnectionsPercent / IdleClientTimeout tuning
+- [DynamoDB Time to Live (TTL)](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/TTL.html) — auto-expiry for ephemeral / idempotency tables
