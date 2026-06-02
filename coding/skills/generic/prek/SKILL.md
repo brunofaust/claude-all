@@ -472,6 +472,9 @@ hooks = [
 # ]
 
 # ── Optional: Local project hooks ────────────────────────────────────────────
+# `language = "system"` hooks shell out to a project script (which resolves the
+# venv, runs frontend tooling, etc.). Use them for checks no upstream hook covers.
+# Put the slow / cross-cutting ones on `pre-push` so they don't tax every commit.
 # [[repos]]
 # repo = "local"
 # hooks = [
@@ -481,6 +484,45 @@ hooks = [
 #     entry = "scripts/precommit_docs.sh",
 #     language = "system",
 #     pass_filenames = false
+#   },
+#   # Architecture boundary enforcement — fails if imports cross a forbidden layer.
+#   # Pairs with the python-module-migration skill (lock the layout after a move).
+#   {
+#     id = "import-linter",
+#     name = "🏗️ architecture · Import direction check",
+#     entry = "scripts/run_import_linter.sh",   # wraps `lint-imports`
+#     language = "system",
+#     pass_filenames = false,
+#     types_or = ["python"],
+#     stages = ["pre-push"]
+#   },
+#   # Frontend gates — wrap tsc / eslint / prettier; scoped to the frontend src tree.
+#   {
+#     id = "frontend-typecheck",
+#     name = "⚛️ frontend · TypeScript type check",
+#     entry = "scripts/run_frontend_typecheck.sh",
+#     language = "system",
+#     pass_filenames = false,
+#     files = "^frontend/src/.*\\.(ts|tsx)$",
+#     stages = ["pre-push"]
+#   },
+#   {
+#     id = "frontend-lint",
+#     name = "⚛️ frontend · ESLint (hooks, a11y, unused imports)",
+#     entry = "scripts/run_frontend_lint.sh",
+#     language = "system",
+#     pass_filenames = false,
+#     files = "^frontend/src/.*\\.(ts|tsx)$",
+#     stages = ["pre-push"]
+#   },
+#   {
+#     id = "frontend-format",
+#     name = "⚛️ frontend · Prettier format check",
+#     entry = "scripts/run_frontend_format_check.sh",
+#     language = "system",
+#     pass_filenames = false,
+#     files = "^frontend/src/.*\\.(ts|tsx|css)$",
+#     stages = ["pre-push"]
 #   }
 # ]
 ````
