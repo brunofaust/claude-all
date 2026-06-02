@@ -79,9 +79,15 @@ uv run prek run --all-files
 # Run on specific files only (used by final_check.py hook)
 prek run --files src/mymodule/foo.py src/mymodule/bar.py
 
-# Skip a specific hook by ID
+# Skip a specific hook by ID (comma-separated for several)
 SKIP=mypy prek run --all-files
 SKIP=gitleaks,mypy prek run --all-files
+
+# The same SKIP env var works at COMMIT time — skips the hook for ONE commit.
+# Use when a pre-existing failure is unrelated to your change (then fix it separately):
+SKIP=mypy git commit -m "feat: ..."
+# Prefer SKIP=<id> over `git commit --no-verify`: SKIP skips ONLY the named hook(s);
+# --no-verify disables EVERY hook and silently hides real failures.
 
 # Update all hooks to their latest revisions
 prek autoupdate
