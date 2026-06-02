@@ -1,6 +1,10 @@
-______________________________________________________________________
-
-## name: aws-architecture description: > AWS serverless + event-driven architecture patterns. Use when: designing Lambda functions, picking between SQS/SNS/EventBridge, sizing DynamoDB capacity, designing Step Functions workflows, choosing API Gateway flavour, designing ECS / Fargate services, reviewing IaC (Terraform/CloudFormation) for AWS architectural fitness, debugging Lambda cold starts, sizing visibility timeouts, picking partition keys, designing DLQ + retry strategies, or reviewing AWS cost / performance trade-offs. disable-model-invocation: false user-invocable: true
+---
+name: aws-architecture
+description: >-
+  AWS serverless + event-driven architecture patterns. Use when: designing Lambda functions, picking between SQS/SNS/EventBridge, sizing DynamoDB capacity, designing Step Functions workflows, choosing API Gateway flavour, designing ECS / Fargate services, reviewing IaC (Terraform/CloudFormation) for AWS architectural fitness, debugging Lambda cold starts, sizing visibility timeouts, picking partition keys, designing DLQ + retry strategies, or reviewing AWS cost / performance trade-offs.
+disable-model-invocation: false
+user-invocable: true
+---
 
 # AWS Architecture Skill
 
@@ -212,6 +216,30 @@ Rules:
 Single-table design (Alex DeBrie style) — fewer tables, generic PK/SK names, GSIs for inverted access. Wins for tightly-coupled domain models with many access patterns. Loses for independent domains (just use separate tables — no shame).
 
 Don't single-table-design just because you read about it. **Three-or-fewer tables is fine for most apps.**
+
+### Relational → DynamoDB migration: when it's worth it
+
+Moving an existing RDS/Postgres workload to DynamoDB is a big, often-irreversible bet. Decide on the
+*access patterns*, not the hype. Run this checklist BEFORE migrating:
+
+- **Enumerate every query first.** List all current SQL access patterns (point lookups, ranges,
+  joins, aggregations, ad-hoc reporting). DynamoDB serves only patterns you designed a key/GSI for —
+  there is no `JOIN`, no ad-hoc `WHERE`, no `GROUP BY`. If the app does multi-table joins or analysts
+  run arbitrary queries, DDB is the wrong store (or needs a separate analytics path: S3 export +
+  Athena).
+- **What actually drives the move?** Good reasons: extreme write throughput, predictable
+  single-digit-ms point lookups at scale, serverless scale-to-zero, or **RDS connection-limit /
+  RDS-Proxy pain** under high Lambda fan-out (each Lambda holds a connection; DDB is connectionless).
+  Bad reasons: "NoSQL is modern", "joins feel slow" (add an index first).
+- **Cost compare honestly.** DDB on-demand at high steady throughput can cost *more* than a
+  right-sized RDS instance. Model write/read units against real traffic; don't assume DDB is cheaper.
+- **Relational integrity moves to the app.** No foreign keys, no transactions across "tables" beyond
+  `TransactWriteItems` (25-item cap), no `CHECK` constraints. You own consistency now.
+- **Migration is expand-contract, not big-bang.** Dual-write to both stores, backfill DDB from a
+  Postgres snapshot, shadow-read and diff, then cut over. Keep Postgres as the rollback for a while.
+
+Default verdict: if you can't write down every access pattern up front and they're all key-based,
+**keep Postgres**. Migrate only when a specific scale/throughput/connection driver forces it.
 
 ### On-demand vs provisioned
 

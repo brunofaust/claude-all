@@ -1,3 +1,15 @@
+---
+name: prek
+description: >-
+  prek — a fast Rust-based pre-commit hook runner that uses prek.toml instead of
+  .pre-commit-config.yaml and runs the same hook ecosystem. Use when: setting up prek
+  in a new project, adding or configuring hooks, debugging hook failures (staged-file
+  issues, --files mode gotchas), understanding the final_check.py Claude Code hook
+  pattern, or running prek as a CI quality gate.
+disable-model-invocation: false
+user-invocable: true
+---
+
 # prek — Git Hook Framework
 
 > `prek` is a Rust-based pre-commit hook runner. It uses `prek.toml` instead of `.pre-commit-config.yaml`,
@@ -472,6 +484,38 @@ hooks = [
 #   }
 # ]
 ````
+
+______________________________________________________________________
+
+## Rolling out a new hook or complexity cap without a backlog
+
+Turning on a strict hook (Ruff `PLR` complexity caps, `interrogate` docstring coverage, `bandit`,
+`mypy --strict`) on an existing codebase usually lights up **hundreds** of pre-existing findings and
+**blocks every commit** until they're all fixed — which buries the *new* signal you actually care
+about under legacy noise.
+
+Introduce strict gates at **current-worst + a small margin**, then ratchet down:
+
+- **Measure first.** Run the candidate rule across the repo and count findings before enabling it as
+  a gate: `ruff check --select PLR0915 --statistics .` (repeat per code).
+- **Select specific codes, not the blanket group.** `select = ["PLR0911","PLR0912","PLR0913","PLR0915"]`
+  — NOT `select = ["PLR"]`. Blanket `PLR` enabled at tight defaults has lit 300–400+ findings in one
+  shot (observed: 346 → 418) and blocked the whole team. Pick the few codes that matter.
+- **Set the cap just above today's worst function**, so nothing currently passing breaks:
+  ```toml
+  [tool.ruff.lint.pylint]
+  max-branches = 12       # current worst is 11 → 12 passes today, ratchet to 10 next quarter
+  max-statements = 60
+  max-args = 7
+  max-returns = 7
+  ```
+- **Ratchet, don't bulk-fix.** Lower the caps one notch per PR/sprint; each step is a small, reviewable
+  diff instead of a 400-file refactor that hides real regressions.
+- **Per-file ignores for legacy hotspots** (`# ruff: noqa: PLR0915` with a TODO) beat disabling the
+  rule globally — new code still gets gated.
+
+The goal: the gate blocks *new* complexity from day one, while legacy debt is paid down on a schedule
+— never a commit-blocking wall of pre-existing findings.
 
 ______________________________________________________________________
 

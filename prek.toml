@@ -120,7 +120,11 @@ hooks = [
     additional_dependencies = [
       "mdformat-mkdocs"
     ],
-    exclude = { glob = [".claude/**", "coding/agents/**"] }
+    # mdformat rewrites YAML frontmatter (--- fences) into a thematic break + ## heading,
+    # which destroys the `name:`/`description:` of every SKILL.md and breaks skill
+    # model-invocation. Agents are already excluded; skills/plugins/mcps/tools carry
+    # frontmatter or JSON that must not be reformatted, so exclude them too.
+    exclude = { glob = [".claude/**", "coding/agents/**", "coding/skills/**", "coding/plugins/**", "coding/mcps/**", "coding/tools/**"] }
   }
 ]
 

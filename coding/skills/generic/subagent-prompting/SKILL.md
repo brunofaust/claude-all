@@ -1,6 +1,10 @@
-______________________________________________________________________
-
-## name: subagent-prompting description: >- How to write a self-contained one-shot subagent dispatch prompt. Use BEFORE invoking the Agent / Task tool. The subagent has ZERO memory of the parent conversation — every input, success criterion, and refuse-condition must be inlined. Use for: dispatching a research task, parallel investigation, delegating mechanical work to a haiku agent, fanning out to multiple general-purpose agents. Synthesized from obra/superpowers subagent-driven- development + dispatching-parallel-agents + kadaliao worker-prompt-craft + undeadlist/claude-code-agents. disable-model-invocation: false user-invocable: true
+---
+name: subagent-prompting
+description: >-
+  How to write a self-contained one-shot subagent dispatch prompt. Use BEFORE invoking the Agent / Task tool. The subagent has ZERO memory of the parent conversation — every input, success criterion, and refuse-condition must be inlined. Use for: dispatching a research task, parallel investigation, delegating mechanical work to a haiku agent, fanning out to multiple general-purpose agents. Synthesized from obra/superpowers subagent-driven- development + dispatching-parallel-agents + kadaliao worker-prompt-craft + undeadlist/claude-code-agents.
+disable-model-invocation: false
+user-invocable: true
+---
 
 # Subagent prompting
 

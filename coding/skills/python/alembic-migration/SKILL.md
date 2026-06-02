@@ -1,6 +1,10 @@
-______________________________________________________________________
-
-## name: alembic-migration description: > Generate Alembic migrations following myapp patterns — naming, backfill safety, merge resolution, ENUM handling, asyncpg query syntax. Use when: creating a new alembic revision, adding/dropping/renaming columns, adding/altering ENUM types, backfilling data, merging divergent branches, resolving migration drift, running `alembic upgrade/downgrade`, debugging failed migrations, reviewing migration PRs. disable-model-invocation: false user-invocable: true
+---
+name: alembic-migration
+description: >-
+  Generate Alembic migrations following myapp patterns — naming, backfill safety, merge resolution, ENUM handling, asyncpg query syntax. Use when: creating a new alembic revision, adding/dropping/renaming columns, adding/altering ENUM types, backfilling data, merging divergent branches, resolving migration drift, running `alembic upgrade/downgrade`, debugging failed migrations, reviewing migration PRs.
+disable-model-invocation: false
+user-invocable: true
+---
 
 # Alembic Migration Skill (myapp)
 
@@ -352,6 +356,7 @@ migration, downgrade properly, retry. Stamp is for genuine drift recovery
 | Inline million-row UPDATE                                     | Holds locks, blocks writes      | Background job + follow-up migration              |
 | Empty `downgrade()` left as autogen `pass`                    | Silently irreversible           | Explicit reverse, or `raise NotImplementedError`  |
 | Rewriting alembic history (squash old migrations)             | Breaks staging/prod alignment   | Leave history alone; refactor models, not history |
+| Raw `op.execute("ALTER TABLE …")` for ops `op.*` supports     | Not dialect-checked, typo-prone, autogen can't reverse it | `op.add_column` / `op.alter_column` / `op.create_index`; reserve `op.execute` for what op funcs can't do (`ALTER TYPE … ADD VALUE`, `CREATE INDEX CONCURRENTLY`) |
 
 ## Reference migrations
 

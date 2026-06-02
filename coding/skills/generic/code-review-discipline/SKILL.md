@@ -1,6 +1,9 @@
-______________________________________________________________________
-
-## name: code-review-discipline description: > Discipline for any review-style task (code review, security review, SEO review, migration review, architecture review). Enforces a uniform output format, mechanical Approve/Warning/Block verdict rule, PR merge-readiness pre-check, "report-only" rule (no silent refactors), and a "common false positives" pattern. Pair with whatever review skill is doing the actual domain work — this one defines the SHAPE of the output and the discipline. Use when: reviewing a PR, reviewing a diff, performing a security audit, reviewing a migration, reviewing an architecture proposal, or building any new reviewer agent / skill. user-invocable: true
+---
+name: code-review-discipline
+description: >-
+  Discipline for any review-style task (code review, security review, SEO review, migration review, architecture review). Enforces a uniform output format, mechanical Approve/Warning/Block verdict rule, PR merge-readiness pre-check, "report-only" rule (no silent refactors), and a "common false positives" pattern. Pair with whatever review skill is doing the actual domain work — this one defines the SHAPE of the output and the discipline. Use when: reviewing a PR, reviewing a diff, performing a security audit, reviewing a migration, reviewing an architecture proposal, or building any new reviewer agent / skill.
+user-invocable: true
+---
 
 # Code Review Discipline
 

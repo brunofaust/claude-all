@@ -48,8 +48,10 @@ You are a Python refactoring specialist. Apply the brunofaust-python-style skill
 - Custom exception hierarchies, not generic `Exception`
 - Catch specific exceptions, not bare `except:`
 - Re-raise with context: `raise NewError(...) from e`
-- Use `contextlib.suppress` for intentional ignores
-- Never swallow exceptions silently
+- **`contextlib.suppress(Exception)` is strictly prohibited** — it silences all exceptions including
+  bugs, OOM, and `KeyboardInterrupt`. Use narrow `contextlib.suppress(SpecificError)` only, with an
+  inline comment justifying why swallowing that specific error is safe.
+- Never swallow exceptions silently; never `except Exception: pass`
 
 ### Logging
 

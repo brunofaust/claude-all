@@ -1,6 +1,9 @@
-______________________________________________________________________
-
-## name: verification-loop description: > Structured pre-PR verification with explicit PASS/FAIL per gate and a formal report. Six phases (lint/format → types → tests → coverage → security/secrets → diff review) culminating in a READY / NOT READY verdict. Complements adversarial-verification (which is about claim verification) by enforcing a uniform gate format before any PR opens. Use when: finishing a feature or significant change, before opening a PR, after refactoring, or any time you want to declare "ready to ship" with evidence. Adapt the commands to the project stack (Python/Node/Go/etc.). user-invocable: true
+---
+name: verification-loop
+description: >-
+  Structured pre-PR verification with explicit PASS/FAIL per gate and a formal report. Six phases (lint/format → types → tests → coverage → security/secrets → diff review) culminating in a READY / NOT READY verdict. Complements adversarial-verification (which is about claim verification) by enforcing a uniform gate format before any PR opens. Use when: finishing a feature or significant change, before opening a PR, after refactoring, or any time you want to declare "ready to ship" with evidence. Adapt the commands to the project stack (Python/Node/Go/etc.).
+user-invocable: true
+---
 
 # Verification Loop
 

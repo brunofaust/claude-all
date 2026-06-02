@@ -180,6 +180,32 @@ This prevents the "run pytest, see same error, edit, run pytest, see same error"
 
 When the caller's previous N turns include Edit/Write on source files referenced in a recent failing test, and the caller says "ok", "now check", "again", "is it working", etc. — RE-RUN the same target as before. Don't ask "which test?" — use the most recent target.
 
+## Known harness noise — don't report as real failures
+
+Some failures are the test *harness*, not the code under test. Recognize these and label them
+🔵 INFO (harness noise), not 🔴 BLOCK:
+
+- **`pyleak` / async teardown** — `asyncio.Runner` / event-loop "task was destroyed but it is
+  pending" / `_started` attribute errors at teardown, and `pyleak` warnings on class-based async
+  tests, are usually plugin/version flakiness, not a product bug. Note them, don't fail the run over
+  them. (A known case: pyleak versions that break class-based async tests — gate on `--collect-only`
+  + the actual assertions instead.)
+- **`pytest-xdist` worker crashes / nondeterministic ordering** — if a test passes serially but
+  fails under `-n auto`, that's a test-isolation / shared-state problem in the harness, not
+  necessarily a real failure. Re-run the affected file with `-p no:xdist` (serial) to confirm.
+
+### Run critical-path files serially
+
+Billing / migration / money-path tests that mutate shared state are race-prone under xdist. When
+the caller flags a file as critical, or it's clearly a billing/migration test, run it serially:
+
+```bash
+$CMD path/to/test_billing.py -p no:xdist --tb=short -q --no-header --color=no 2>&1 | tail -40
+```
+
+A "failure" that only reproduces in parallel and vanishes serially → report as 🟡 isolation flake,
+not a product bug.
+
 ## Severity buckets
 
 Tag each result so the caller can triage:
