@@ -2,10 +2,13 @@
 """PreToolUse hook — suggest /compact every N tool calls.
 
 Fires on all tools (matcher ""). Counts tool calls per session in a temp file.
-Every SUGGEST_EVERY calls, emits a non-blocking stderr reminder to run /compact
+Every SUGGEST_EVERY calls, emits a `systemMessage` (exit 0) suggesting /compact
 before the context window fills up and forces an abrupt compaction. Counting all
 tool calls (not just edits) tracks context pressure more faithfully, since any
 tool's output consumes the window.
+
+Using exit 0 + JSON `systemMessage` (rather than exit 1 + stderr) surfaces this
+as a normal warning to the user, not a "hook error / non-blocking status code".
 
 Does NOT print on every call — only when the threshold is crossed.
 """
@@ -47,13 +50,17 @@ def main() -> int:
         return 0  # can't write — skip silently
 
     if count % SUGGEST_EVERY == 0:
-        print(
-            f"[suggest-compact] {count} tool calls this session. "
-            "Consider running /compact now to keep the context window healthy "
-            "before it fills up and forces an abrupt compaction mid-task.",
-            file=sys.stderr,
+        json.dump(
+            {
+                "systemMessage": (
+                    f"[suggest-compact] {count} tool calls this session. "
+                    "Consider running /compact now to keep the context window healthy "
+                    "before it fills up and forces an abrupt compaction mid-task."
+                )
+            },
+            sys.stdout,
         )
-        return 1  # non-blocking warning
+        return 0  # surfaced as a normal warning, not a hook error
 
     return 0
 

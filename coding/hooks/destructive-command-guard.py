@@ -9,9 +9,10 @@ Fires on the `Bash` tool. Inspects the command and:
   `git reset --hard` / `git clean -fdx`, `docker`/`kubectl`/volume destruction,
   and cloud-resource deletion (`terraform destroy`, `aws ... delete-*`,
   `aws s3 rm --recursive` / `rb`).
-- **WARNS** (exit 1 — non-blocking) on risky-but-sometimes-legitimate commands
-  (broad `rm -rf`, `chmod -R 777`, `curl | sh`). Claude sees the warning and must
-  justify proceeding.
+- **WARNS** (exit 0 + `additionalContext`) on risky-but-sometimes-legitimate
+  commands (broad `rm -rf`, `chmod -R 777`, `curl | sh`). Claude sees the warning
+  as a system reminder and must justify proceeding. Exit 0 + JSON keeps this from
+  being rendered as a "hook error"; the command still runs (non-blocking).
 
 `rm -rf` of well-known build/cache dirs (`node_modules`, `dist`, `.venv`, …) is
 allowed — those are routine cleanup, not data loss.
@@ -46,8 +47,8 @@ Add to `.claude/settings.json` (project) or `~/.claude/settings.json` (user):
 }
 ```
 
-Exit codes: 0 = allow · 2 = block (stderr shown to Claude, command skipped) ·
-1 = non-blocking warning.
+Exit codes: 0 = allow (optionally with a non-blocking `additionalContext`
+warning) · 2 = block (stderr shown to Claude, command skipped).
 """
 
 from __future__ import annotations
@@ -209,12 +210,19 @@ def main() -> int:
         if pattern.search(command):
             if rm_is_safe:
                 continue
-            print(
-                f"[destructive-guard] Warning — {reason}. Proceed only if you've confirmed "
-                "this is intended and scoped correctly.",
-                file=sys.stderr,
+            json.dump(
+                {
+                    "hookSpecificOutput": {
+                        "hookEventName": "PreToolUse",
+                        "additionalContext": (
+                            f"[destructive-guard] Warning — {reason}. Proceed only if you've "
+                            "confirmed this is intended and scoped correctly."
+                        ),
+                    }
+                },
+                sys.stdout,
             )
-            return 1  # non-blocking warning
+            return 0  # non-blocking warning surfaced as a system reminder
 
     return 0
 
