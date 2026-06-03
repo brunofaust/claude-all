@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """PreToolUse hook — suggest /compact every N tool calls.
 
-Fires on Edit|Write. Counts edit-class tool calls per session in a temp file.
+Fires on all tools (matcher ""). Counts tool calls per session in a temp file.
 Every SUGGEST_EVERY calls, emits a non-blocking stderr reminder to run /compact
-before the context window fills up and forces an abrupt compaction.
+before the context window fills up and forces an abrupt compaction. Counting all
+tool calls (not just edits) tracks context pressure more faithfully, since any
+tool's output consumes the window.
 
-Does NOT fire on every call — only when the threshold is crossed.
+Does NOT print on every call — only when the threshold is crossed.
 """
 
 from __future__ import annotations
@@ -15,7 +17,7 @@ import os
 import sys
 import tempfile
 
-SUGGEST_EVERY = 50  # suggest compact after this many Edit/Write calls
+SUGGEST_EVERY = 50  # suggest compact after this many tool calls
 
 
 def main() -> int:
@@ -46,7 +48,7 @@ def main() -> int:
 
     if count % SUGGEST_EVERY == 0:
         print(
-            f"[suggest-compact] {count} edit-class tool calls this session. "
+            f"[suggest-compact] {count} tool calls this session. "
             "Consider running /compact now to keep the context window healthy "
             "before it fills up and forces an abrupt compaction mid-task.",
             file=sys.stderr,
