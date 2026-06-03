@@ -92,20 +92,27 @@ def discover(filters: list[str]) -> list[Item]:
     agent_root = REPO_ROOT / "coding" / "agents"
     if agent_root.exists():
         for p in sorted(agent_root.rglob("*.md")):
-            # `<agent>.claude_md.md` files are CLAUDE.md snippets injected alongside
-            # their agent, NOT standalone agents — don't surface them as installable.
-            if p.name.endswith(".claude_md.md"):
+            # CLAUDE.md snippets (flat `<name>.claude_md.md` or folder `claude_md.md`)
+            # are companions injected alongside their agent, NOT standalone agents.
+            if p.name.endswith(".claude_md.md") or p.name == "claude_md.md":
                 continue
             rel = p.relative_to(REPO_ROOT)
             parts = rel.parts
-            if len(parts) < 4:
-                continue
+            # Two layouts (hybrid): a flat `<category>/<name>.md`, or a folder
+            # `<category>/<name>/agent.md` (used when the agent ships companions —
+            # claude_md.md / hook.py — so they group in one directory).
+            if p.name == "agent.md":
+                name = p.parent.name
+            elif len(parts) == 4:
+                name = p.stem
+            else:
+                continue  # stray nested .md (e.g. a reference) — not an agent
             items.append(
                 Item(
                     kind="agents",
                     category=parts[0],
                     subcategory=parts[2],
-                    name=p.stem,
+                    name=name,
                     src=p,
                 )
             )
@@ -554,12 +561,14 @@ def _hook_files(item: Item) -> tuple[Path, Path] | None:
     Args:
         item: The resource item whose sibling hook files to locate.
     """
-    if item.kind == "agents":
+    if item.kind == "agents" and item.src.name != "agent.md":
+        # Flat agent: companions are prefixed siblings `<name>.hook.{py,json}`.
         base = item.src.parent
         json_path = base / f"{item.name}.hook.json"
         py_path = base / f"{item.name}.hook.py"
     else:
-        base = item.src.parent  # SKILL.md / plugin.json / mcp.json parent
+        # Folder agent (`<name>/agent.md`) / SKILL.md / plugin.json / mcp.json parent.
+        base = item.src.parent
         json_path = base / "hook.json"
         py_path = base / "hook.py"
     if json_path.exists() and py_path.exists():
@@ -709,9 +718,11 @@ def _claude_md_snippet_path(item: Item) -> Path | None:
     Args:
         item: The resource item whose claude_md snippet path to resolve.
     """
-    if item.kind == "agents":
+    if item.kind == "agents" and item.src.name != "agent.md":
+        # Flat agent: companion is a prefixed sibling `<name>.claude_md.md`.
         candidate = item.src.with_name(f"{item.name}.claude_md.md")
     else:
+        # Folder agent (`<name>/agent.md`) / skill / plugin / mcp: `claude_md.md` in the dir.
         candidate = item.src.parent / "claude_md.md"
     return candidate if candidate.exists() else None
 
