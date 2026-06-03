@@ -16,16 +16,16 @@ prek run --all-files
 
 ## Repo structure
 
-| Path                                           | Purpose                                                          |
-| ---------------------------------------------- | ---------------------------------------------------------------- |
-| `claude-all` / `claude-all.py`                 | CLI installer — discovers and installs agents/skills/hooks       |
-| `coding/agents/<category>/<name>.md`           | Agent definitions (dispatched by the router)                     |
-| `coding/agents/<category>/<name>.claude_md.md` | Companion snippet injected into `~/.claude/CLAUDE.md` on install |
-| `coding/skills/<category>/<name>/SKILL.md`     | Skill definitions (invoked via Skill tool)                       |
+| Path                                           | Purpose                                                                                                                       |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `claude-all` / `claude-all.py`                 | CLI installer — discovers and installs agents/skills/hooks                                                                    |
+| `coding/agents/<category>/<name>.md`           | Agent definitions (dispatched by the router)                                                                                  |
+| `coding/agents/<category>/<name>.claude_md.md` | Companion snippet injected into `~/.claude/CLAUDE.md` on install                                                              |
+| `coding/skills/<category>/<name>/SKILL.md`     | Skill definitions (invoked via Skill tool)                                                                                    |
 | `coding/claude_md/<name>/claude_md.md`         | Standalone `~/.claude/CLAUDE.md` snippet (no agent/skill to install — e.g. dispatch rules for built-in agents like `Explore`) |
-| `coding/hooks/`                                | Hook scripts (source — not yet active)                           |
-| `.claude/hooks/`                               | Active hooks for this repo's Claude sessions                     |
-| `.claude/agents/`                              | Sub-agent definitions scoped to this repo                        |
+| `coding/hooks/`                                | Hook scripts (source — not yet active)                                                                                        |
+| `.claude/hooks/`                               | Active hooks for this repo's Claude sessions                                                                                  |
+| `.claude/agents/`                              | Sub-agent definitions scoped to this repo                                                                                     |
 
 ## Adding a new agent or skill
 

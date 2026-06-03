@@ -1,10 +1,10 @@
 ### Command dispatch — broad codebase search → `Explore` (built-in)
 
-| Pattern | Agent |
-|---|---|
+| Pattern                                                                    | Agent     |
+| -------------------------------------------------------------------------- | --------- |
 | "where is X used", "how does Y work", "find all callers/usages/references" | `Explore` |
-| Multi-repo / multi-directory sweeps to understand a codebase | `Explore` |
-| Iterative `grep -r` → read a file → `grep` again loops across many files | `Explore` |
+| Multi-repo / multi-directory sweeps to understand a codebase               | `Explore` |
+| Iterative `grep -r` → read a file → `grep` again loops across many files   | `Explore` |
 
 Anti-patterns:
 
