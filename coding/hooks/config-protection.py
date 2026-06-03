@@ -48,6 +48,7 @@ def _remind(message: str) -> int:
     )
     return 0
 
+
 # Files that are pure hook/lint config — pause and require user confirmation.
 CONFIRM_REQUIRED: frozenset[str] = frozenset(
     [
