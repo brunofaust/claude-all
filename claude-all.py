@@ -77,7 +77,7 @@ def record_install(kind: str, name: str, target_path: Path | None) -> None:
 
 @dataclass
 class Item:
-    kind: str  # agents | skills | plugins | mcps
+    kind: str  # agents | skills | plugins | mcps | tools | hooks | instructions
     category: str  # coding
     subcategory: str  # aws | python | ...
     name: str
@@ -92,6 +92,10 @@ def discover(filters: list[str]) -> list[Item]:
     agent_root = REPO_ROOT / "coding" / "agents"
     if agent_root.exists():
         for p in sorted(agent_root.rglob("*.md")):
+            # `<agent>.claude_md.md` files are CLAUDE.md snippets injected alongside
+            # their agent, NOT standalone agents — don't surface them as installable.
+            if p.name.endswith(".claude_md.md"):
+                continue
             rel = p.relative_to(REPO_ROOT)
             parts = rel.parts
             if len(parts) < 4:
@@ -168,6 +172,25 @@ def discover(filters: list[str]) -> list[Item]:
                     kind="tools",
                     category=parts[0],
                     subcategory=subcategory,
+                    name=parts[2],
+                    src=p,
+                )
+            )
+
+    # Standalone CLAUDE.md snippets ("instructions"): a resource whose ONLY effect
+    # is to inject a tagged block into ~/.claude/CLAUDE.md (no agent/skill/hook to
+    # install). Used for main-session dispatch rules that target built-in agents
+    # (e.g. Explore). The snippet file is `claude_md.md` inside each named dir.
+    instructions_root = REPO_ROOT / "coding" / "instructions"
+    if instructions_root.exists():
+        for p in sorted(instructions_root.glob("*/claude_md.md")):
+            rel = p.relative_to(REPO_ROOT)
+            parts = rel.parts
+            items.append(
+                Item(
+                    kind="instructions",
+                    category=parts[0],
+                    subcategory="instructions",
                     name=parts[2],
                     src=p,
                 )
@@ -854,6 +877,12 @@ def install_item(item: Item, target_root: Path) -> str:
     if item.kind == "hooks":
         return install_standalone_hook(item, level)
 
+    if item.kind == "instructions":
+        # Snippet-only resource: inject the tagged block, nothing to symlink.
+        md = inject_claude_md(item, level)
+        record_install(item.kind, item.name, _claude_md_target(level))
+        return md or f"instructions/{item.name}: no snippet found"
+
     if item.kind == "plugins":
         result = install_plugin(item)
         md = inject_claude_md(item, level)
@@ -967,6 +996,16 @@ def update_item(kind: str, name: str, install_record: dict, all_items: list[Item
             subprocess.run(["claude", "plugin", "install", plugin_ref], check=True)
             return f"  ✓ updated plugins/{name}"
         return f"  ✗ plugins/{name}: unknown type '{ptype}'"
+
+    if kind == "instructions":
+        if match is None:
+            return f"  ✗ instructions/{name}: not found in repo (removed?)"
+        # No symlink — re-inject the snippet. Infer scope from the recorded
+        # CLAUDE.md target path (falls back to user).
+        recorded = install_record.get("target") or ""
+        level = "project" if recorded.startswith(str(Path.cwd())) else "user"
+        md = inject_claude_md(match, level)
+        return f"  ✓ refreshed instructions/{name}" + (f"\n    ↳ {md}" if md else "")
 
     # agents / skills / mcps — re-create symlink at recorded target
     target = install_record.get("target")

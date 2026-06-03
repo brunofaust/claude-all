@@ -97,38 +97,6 @@ hooks = [
 ]
 
 [[repos]]
-repo = "https://github.com/igorshubovych/markdownlint-cli"
-rev = "v0.48.0"
-hooks = [
-  {
-    id = "markdownlint-fix",
-    name = "📝 markdown · Fix markdown",
-    args = [
-      "--disable",
-      "MD013"
-    ]
-  }
-]
-
-[[repos]]
-repo = "https://github.com/hukkin/mdformat"
-rev = "1.0.0"
-hooks = [
-  {
-    id = "mdformat",
-    name = "📝 markdown · Format markdown",
-    additional_dependencies = [
-      "mdformat-mkdocs"
-    ],
-    # mdformat rewrites YAML frontmatter (--- fences) into a thematic break + ## heading,
-    # which destroys the `name:`/`description:` of every SKILL.md and breaks skill
-    # model-invocation. Agents are already excluded; skills/plugins/mcps/tools carry
-    # frontmatter or JSON that must not be reformatted, so exclude them too.
-    exclude = { glob = [".claude/**", "coding/agents/**", "coding/skills/**", "coding/plugins/**", "coding/mcps/**", "coding/tools/**"] }
-  }
-]
-
-[[repos]]
 repo = "https://github.com/asottile/pyupgrade"
 rev = "v3.21.2"
 hooks = [

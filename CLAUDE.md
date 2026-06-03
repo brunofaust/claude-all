@@ -10,21 +10,22 @@
 # Dev setup (installs prek)
 uv sync --dev
 
-# Lint (single entry point — runs ruff, mypy, markdownlint, typos)
+# Lint (single entry point — runs ruff, mypy, typos)
 prek run --all-files
 ```
 
 ## Repo structure
 
-| Path                                           | Purpose                                                          |
-| ---------------------------------------------- | ---------------------------------------------------------------- |
-| `claude-all` / `claude-all.py`                 | CLI installer — discovers and installs agents/skills/hooks       |
-| `coding/agents/<category>/<name>.md`           | Agent definitions (dispatched by the router)                     |
-| `coding/agents/<category>/<name>.claude_md.md` | Companion snippet injected into `~/.claude/CLAUDE.md` on install |
-| `coding/skills/<category>/<name>/SKILL.md`     | Skill definitions (invoked via Skill tool)                       |
-| `coding/hooks/`                                | Hook scripts (source — not yet active)                           |
-| `.claude/hooks/`                               | Active hooks for this repo's Claude sessions                     |
-| `.claude/agents/`                              | Sub-agent definitions scoped to this repo                        |
+| Path                                           | Purpose                                                                                                                       |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `claude-all` / `claude-all.py`                 | CLI installer — discovers and installs agents/skills/hooks                                                                    |
+| `coding/agents/<category>/<name>.md`           | Agent definitions (dispatched by the router)                                                                                  |
+| `coding/agents/<category>/<name>.claude_md.md` | Companion snippet injected into `~/.claude/CLAUDE.md` on install                                                              |
+| `coding/skills/<category>/<name>/SKILL.md`     | Skill definitions (invoked via Skill tool)                                                                                    |
+| `coding/instructions/<name>/claude_md.md`      | Standalone `~/.claude/CLAUDE.md` snippet (no agent/skill to install — e.g. dispatch rules for built-in agents like `Explore`) |
+| `coding/hooks/`                                | Hook scripts (source — not yet active)                                                                                        |
+| `.claude/hooks/`                               | Active hooks for this repo's Claude sessions                                                                                  |
+| `.claude/agents/`                              | Sub-agent definitions scoped to this repo                                                                                     |
 
 ## Adding a new agent or skill
 
@@ -147,6 +148,10 @@ content as a tagged block. Reinstalling is idempotent — the block is replaced.
 
 Agent `claude_md.md` naming: `coding/agents/<category>/<name>.claude_md.md`
 Skill/tool `claude_md.md` naming: inside the resource's directory.
+Standalone snippet naming: `coding/instructions/<name>/claude_md.md` — a resource
+whose ONLY effect is injecting that block (no agent/skill/hook to install). Use it
+for main-session dispatch rules that target built-in agents (e.g. routing broad
+searches to `Explore`). Install with `./claude-all install <name> --level user`.
 
 ### Rules
 
