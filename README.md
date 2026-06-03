@@ -114,10 +114,13 @@ Symlinks. Edits in this repo propagate to every project where the items are inst
 
 ### CLAUDE.md auto-injection
 
-Any resource directory may ship a `claude_md.md` snippet:
+Any resource may ship a `claude_md.md` snippet:
 
-- Agents (single file): `coding/agents/<cat>/<name>.claude_md.md`
+- Flat agent (single file): `coding/agents/<cat>/<name>.claude_md.md`
+- Folder agent (ships companions): `coding/agents/<cat>/<name>/claude_md.md` (alongside `agent.md`)
 - Skills / plugins / mcps (dir): `<resource-dir>/claude_md.md`
+
+Agents use a **hybrid layout**: a bare agent stays a single file `coding/agents/<cat>/<name>.md`; an agent that ships companions (a `claude_md.md` snippet and/or a `hook.py`/`hook.json`) becomes a folder `coding/agents/<cat>/<name>/` containing `agent.md` + those companions, so everything groups in one place. The installer discovers both forms.
 
 On install, the snippet is wrapped in tags and appended to the target `CLAUDE.md`:
 
