@@ -588,6 +588,12 @@ def inject_hook(item: Item, level: str) -> str | None:
         dest.unlink()
     os.symlink(py_path, dest)
 
+    # Claude Code execs the hook by bare path (the registered command is the
+    # script path), so the script MUST be executable or the shell fails with
+    # "Permission denied". Ensure the bit is set on the symlink target.
+    mode = py_path.stat().st_mode
+    py_path.chmod(mode | 0o111)
+
     # Merge into settings.json
     settings_file = _settings_path(level)
     settings_file.parent.mkdir(parents=True, exist_ok=True)
