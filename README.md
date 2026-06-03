@@ -312,11 +312,11 @@ Optional fields:
 
 - `post_install` — list of **typed steps** run after the main install. Each step is one of:
 
-    - `{"type": "pip", "package": "<pkg>"}` — pip-install `<pkg>` into the plugin's pipx venv via
+  - `{"type": "pip", "package": "<pkg>"}` — pip-install `<pkg>` into the plugin's pipx venv via
         `pipx inject` (optional: `"extras": ["x"]`, `"pin": "==1.2"`, `"target": "<other-app>"` to
         inject into a different venv than the plugin's own `package`).
-    - `{"type": "bash", "command": ["foo", "install"]}` — run a command (optional: `"pwd": "sub/dir"`).
-    - A bare argv list (e.g. `["foo", "install"]`) is still accepted as a legacy `bash` step.
+  - `{"type": "bash", "command": ["foo", "install"]}` — run a command (optional: `"pwd": "sub/dir"`).
+  - A bare argv list (e.g. `["foo", "install"]`) is still accepted as a legacy `bash` step.
 
     Example: `[{"type": "pip", "package": "igraph"}, {"type": "bash", "command": ["code-review-graph", "install"]}]`
 
@@ -412,6 +412,37 @@ Installed tools:
 - **Sonnet (sonnet-4-6)** — reasoning: code review, refactoring, debugging, incident response, doc updates. Tasks where the right answer depends on context.
 
 Opus is intentionally absent — these agents are for routine work, and Opus is reserved for sessions where reasoning depth justifies the cost.
+
+## Analyzing your session history
+
+The agents and dispatch rules here come from real usage — spotting commands that ran inline in the main (Opus) session when they should have been delegated. You can mine your own Claude Code history the same way.
+
+Claude Code stores one JSONL transcript per session under `~/.claude/projects/<sanitized-cwd>/<session-id>.jsonl`. The command below extracts a compact, shareable view — your prompts, assistant replies, and every tool call with its key input — while dropping the bulky tool *outputs* (file dumps, command stdout, tracebacks) where size and secrets live:
+
+```bash
+find ~/.claude/projects -name '*.jsonl' -mtime -60 -print0 \
+| xargs -0 cat \
+| jq -rc 'def render: if .type=="tool_use" then "«"+.name+": "+(( .input.command // .input.file_path // .input.pattern // .input.query // .input.description // (.input|tostring) )|tostring|gsub("\n";" ")|.[0:800])+"»" elif .type=="thinking" then "«thinking»" else (.text // "") end; select(.isSidechain != true) | select(.toolUseResult == null) | {t:.timestamp, role:.type, text:(.message.content | if type=="string" then . elif type=="array" then [.[]|render]|join(" ") else "" end)|.[0:3000]} | select(.text != "")' \
+> ~/claude-insights-60d.jsonl
+```
+
+- `-mtime -60` keeps the last 60 days (Claude Code's default retention is 30 — raise `cleanupPeriodDays` in settings to keep more).
+- Stripping outputs turns a multi-hundred-MB history into a few MB. Still **review it before sharing** — prompts themselves can contain proprietary detail.
+
+For the delegation question specifically, a frequency-ranked list of every distinct `Bash` command is the highest-signal artifact:
+
+```bash
+find ~/.claude/projects -name '*.jsonl' -mtime -60 -print0 \
+| xargs -0 cat \
+| jq -rc 'select(.toolUseResult==null) | .message.content // [] | (if type=="array" then .[] else empty end) | select(.type=="tool_use" and .name=="Bash") | .input.command' \
+| sort | uniq -c | sort -rn > ~/claude-bash-60d.txt
+```
+
+Then hand the extract to Claude with a prompt like:
+
+> Analyze this Claude Code session history (prompts + tool calls; outputs were stripped). Identify (1) **delegation gaps** — Bash/search/test/lint commands that ran inline in the main session but should route to a sub-agent; (2) **repeated manual sequences** worth turning into a skill or hook; (3) **agent-coverage holes**. Rank findings by token impact and propose concrete agent or dispatch-rule changes.
+
+The `test-runner` / `lint-fixer` routing and the rules in `coding/instructions/` came directly from runs of this analysis.
 
 ## Adding a new agent
 
