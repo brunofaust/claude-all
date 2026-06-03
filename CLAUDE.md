@@ -10,7 +10,7 @@
 # Dev setup (installs prek)
 uv sync --dev
 
-# Lint (single entry point — runs ruff, mypy, markdownlint, typos)
+# Lint (single entry point — runs ruff, mypy, typos)
 prek run --all-files
 ```
 
