@@ -19,12 +19,12 @@ prek run --all-files
 | Path                                           | Purpose                                                                                                                       |
 | ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | `claude-all` / `claude-all.py`                 | CLI installer — discovers and installs agents/skills/hooks                                                                    |
-| `coding/agents/<category>/<name>.md`           | Flat agent definition (no companions) — dispatched by the router                                                              |
-| `coding/agents/<category>/<name>/agent.md`     | Folder agent (ships companions) — `agent.md` + `claude_md.md` and/or `hook.py`/`hook.json` grouped in one dir                  |
-| `coding/agents/<category>/<name>.claude_md.md` | Companion snippet injected into `~/.claude/CLAUDE.md` on install (folder agents put it at `<name>/claude_md.md`)               |
-| `coding/skills/<category>/<name>/SKILL.md`     | Skill definitions (invoked via Skill tool)                                                                                    |
-| `coding/instructions/<name>/claude_md.md`      | Standalone `~/.claude/CLAUDE.md` snippet (no agent/skill to install — e.g. dispatch rules for built-in agents like `Explore`) |
-| `coding/hooks/`                                | Hook scripts (source — not yet active)                                                                                        |
+| `agents/<category>/<name>.md`           | Flat agent definition (no companions) — dispatched by the router                                                              |
+| `agents/<category>/<name>/agent.md`     | Folder agent (ships companions) — `agent.md` + `claude_md.md` and/or `hook.py`/`hook.json` grouped in one dir                  |
+| `agents/<category>/<name>.claude_md.md` | Companion snippet injected into `~/.claude/CLAUDE.md` on install (folder agents put it at `<name>/claude_md.md`)               |
+| `skills/<category>/<name>/SKILL.md`     | Skill definitions (invoked via Skill tool)                                                                                    |
+| `instructions/<name>/claude_md.md`      | Standalone `~/.claude/CLAUDE.md` snippet (no agent/skill to install — e.g. dispatch rules for built-in agents like `Explore`) |
+| `hooks/`                                | Hook scripts (source — not yet active)                                                                                        |
 | `.claude/hooks/`                               | Active hooks for this repo's Claude sessions                                                                                  |
 | `.claude/agents/`                              | Sub-agent definitions scoped to this repo                                                                                     |
 
@@ -32,8 +32,8 @@ prek run --all-files
 
 **Agent:**
 
-1. Bare agent → flat file `coding/agents/<category>/<name>.md`. Agent that ships
-   companions → folder `coding/agents/<category>/<name>/agent.md` (keep `agent.md` +
+1. Bare agent → flat file `agents/<category>/<name>.md`. Agent that ships
+   companions → folder `agents/<category>/<name>/agent.md` (keep `agent.md` +
    its `claude_md.md` / `hook.*` together)
 1. Optionally add a `claude_md.md` snippet — flat: `<name>.claude_md.md` beside the
    `.md`; folder: `<name>/claude_md.md` beside `agent.md`
@@ -41,7 +41,7 @@ prek run --all-files
 
 **Skill:**
 
-1. Create `coding/skills/<category>/<name>/SKILL.md`
+1. Create `skills/<category>/<name>/SKILL.md`
 1. Run `./claude-all install <name> --level user` to activate
 
 ## Naming conventions — always use generic placeholders
@@ -150,9 +150,9 @@ When `claude-all install <agent> --level user` runs, it looks for a
 `<agent>.claude_md.md` file next to the agent's `.md` file and injects its
 content as a tagged block. Reinstalling is idempotent — the block is replaced.
 
-Agent `claude_md.md` naming: flat `coding/agents/<category>/<name>.claude_md.md`, or folder `coding/agents/<category>/<name>/claude_md.md` (beside `agent.md`)
+Agent `claude_md.md` naming: flat `agents/<category>/<name>.claude_md.md`, or folder `agents/<category>/<name>/claude_md.md` (beside `agent.md`)
 Skill/tool `claude_md.md` naming: inside the resource's directory.
-Standalone snippet naming: `coding/instructions/<name>/claude_md.md` — a resource
+Standalone snippet naming: `instructions/<name>/claude_md.md` — a resource
 whose ONLY effect is injecting that block (no agent/skill/hook to install). Use it
 for main-session dispatch rules that target built-in agents (e.g. routing broad
 searches to `Explore`). Install with `./claude-all install <name> --level user`.

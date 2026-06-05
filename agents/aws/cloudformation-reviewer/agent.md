@@ -85,7 +85,7 @@ The 5 failure modes (CFN-flavored):
 **CloudFormation review — <template/stack/change-set>**
 
 ## 🆔 Identity churn
-- New `AWS::IAM::Role` `MyTaskRole` requires `CAPABILITY_NAMED_IAM`; trust policy allows whole account `111111111111`. Severity: HIGH.
+- New `AWS::IAM::Role` `MyTaskRole` requires `CAPABILITY_NAMED_IAM`; trust policy allows whole account `123456789012`. Severity: HIGH.
 
 ## 🔑 Secret exposure
 - Parameter `DbPassword` has `NoEcho: false` — value will appear in stack events. Severity: BLOCK.

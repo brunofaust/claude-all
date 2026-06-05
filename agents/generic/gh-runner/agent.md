@@ -80,9 +80,9 @@ Refused — gh-runner is read-only. Use the main session for mutations (gh pr cr
 ```
 **Repo:** brunofaust/myapp  •  **Open PRs:** 7
 
-- #287  feat(admin): bulk invite UI                       Bruno     2d ago   ✓ checks
-- #285  fix(billing): tax calc rounding                   Juan      4h ago   ✗ 1/12 failed
-- #284  refactor: drop check-environments end-to-end      Bruno     1d ago   ⊙ pending
+- #287  feat(admin): bulk invite UI                       João     2d ago   ✓ checks
+- #285  fix(billing): tax calc rounding                   Maria    4h ago   ✗ 1/12 failed
+- #284  refactor: drop check-environments end-to-end      João     1d ago   ⊙ pending
 - ... +4 more
 ```
 
@@ -94,8 +94,8 @@ If `--state closed/merged/all`, group by state.
 
 ```
 **PR #287:** feat(admin): bulk invite UI
-**Author:** Bruno Faust  •  **State:** open  •  **Branch:** feature/admin-bulk-invite → main
-**Checks:** ✓ 12/12 passing  •  **Reviews:** 1 approval (Juan), 0 changes requested
+**Author:** João Silva  •  **State:** open  •  **Branch:** feature/admin-bulk-invite → main
+**Checks:** ✓ 12/12 passing  •  **Reviews:** 1 approval (Maria), 0 changes requested
 **Files:** 8 changed  •  +423 / -27
 
 **Body (first 20 lines):**

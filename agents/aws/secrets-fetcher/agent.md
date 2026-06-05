@@ -41,10 +41,10 @@ Example output:
 
 ```
 **Secret:** myapp/dev/db-credentials
-**ARN:**    arn:aws:secretsmanager:us-east-1:169728770189:secret:myapp/dev/db-credentials-abc123
+**ARN:**    arn:aws:secretsmanager:us-east-1:123456789012:secret:myapp/dev/db-credentials-abc123
 **Version:** AWSCURRENT (id: 6e8d...)
 **Last rotated:** 2026-04-12T08:00:00Z  (next: 2026-07-12T08:00:00Z)
-**KMS key:**     arn:aws:kms:us-east-1:169728770189:key/...
+**KMS key:**     arn:aws:kms:us-east-1:123456789012:key/...
 **Top-level JSON keys:** ["username", "password", "host", "port", "dbname"]
 **Value length:** 247 chars
 ```
