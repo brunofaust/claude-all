@@ -7,7 +7,7 @@ description: >-
   is ignored, or hardening a hook so its own failure never breaks a session. Covers the hook events +
   matchers, the stdin/stderr/exit-code contract, the two archetypes (a guard that BLOCKS with exit 2
   vs a utility that must NEVER break a turn → exit 0), the resilient-shim pattern, exit-code capture,
-  the settings.json schema, and how to test a hook. References this repo's coding/hooks/ examples.
+  the settings.json schema, and how to test a hook. References this repo's hooks/ examples.
 disable-model-invocation: false
 user-invocable: true
 ---
@@ -97,7 +97,7 @@ exit_code=$(jq -r '.tool_response.exit_code // 0' <<<"$PAYLOAD")
 ```
 
 `--user` → `~/.claude/settings.json`; `--project` → `./.claude/settings.json`. In this repo, hook
-scripts live in `coding/hooks/`; the installer wires them in (see README "Hooks").
+scripts live in `hooks/`; the installer wires them in (see README "Hooks").
 
 ## Test a hook before shipping it
 
@@ -123,6 +123,6 @@ Run a battery of should-block / should-allow / should-warn cases (this is how
 
 ## Examples in this repo
 
-- `coding/hooks/destructive-command-guard.py` — a **guard** (exit 2, with allowlist + override).
-- `coding/hooks/config-protection.py` — a non-blocking guard (exit 1, asks for confirmation).
-- `coding/skills/*/hook.py` + `hook.json` — domain reminder hooks shipped with skills.
+- `hooks/destructive-command-guard.py` — a **guard** (exit 2, with allowlist + override).
+- `hooks/config-protection.py` — a non-blocking guard (exit 1, asks for confirmation).
+- `skills/*/hook.py` + `hook.json` — domain reminder hooks shipped with skills.

@@ -16,4 +16,7 @@ emits a per-dimension **scorecard** + a **ratcheting remediation roadmap**.
   checks (trend vs last baseline). For a single diff use `verification-loop`; for security-only use
   `security-audit` (repo-audit delegates dimension 12 to it). IaC → `cloudformation-reviewer` /
   `iam-auditor` / `aws-architecture` (dim 13); process tooling → `session-harvest` (dim 14).
+- **Per-project recommendations (dim 15):** repo-audit also profiles the project (stack / frameworks
+  / cloud / DB) and recommends which claude-all agents/skills/hooks to install for THAT repo, plus
+  net-new project-specific ones. Re-run it in each project for tailored suggestions.
 - Gate every *structural* roadmap step through `architecture-decision-guard` (containment > layering).

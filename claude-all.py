@@ -4,7 +4,7 @@ agents/skills/plugins/mcps to ~/.claude/ (user) or ./.claude/ (project).
 
 Usage:
     claude-all.py                       # interactive menu (all items)
-    claude-all.py coding aws            # filter to coding/aws
+    claude-all.py skills aws            # filter to skills/aws
     claude-all.py --list [filter...]    # list, no install
     claude-all.py --help
 
@@ -89,7 +89,7 @@ class Item:
 def discover(filters: list[str]) -> list[Item]:
     items: list[Item] = []
 
-    agent_root = REPO_ROOT / "coding" / "agents"
+    agent_root = REPO_ROOT / "agents"
     if agent_root.exists():
         for p in sorted(agent_root.rglob("*.md")):
             # CLAUDE.md snippets (flat `<name>.claude_md.md` or folder `claude_md.md`)
@@ -98,43 +98,43 @@ def discover(filters: list[str]) -> list[Item]:
                 continue
             rel = p.relative_to(REPO_ROOT)
             parts = rel.parts
-            # Two layouts (hybrid): a flat `<category>/<name>.md`, or a folder
-            # `<category>/<name>/agent.md` (used when the agent ships companions —
+            # Two layouts (hybrid): a flat `agents/<category>/<name>.md`, or a folder
+            # `agents/<category>/<name>/agent.md` (used when the agent ships companions —
             # claude_md.md / hook.py — so they group in one directory).
             if p.name == "agent.md":
                 name = p.parent.name
-            elif len(parts) == 4:
+            elif len(parts) == 3:
                 name = p.stem
             else:
                 continue  # stray nested .md (e.g. a reference) — not an agent
             items.append(
                 Item(
                     kind="agents",
-                    category=parts[0],
-                    subcategory=parts[2],
+                    category="coding",
+                    subcategory=parts[1],
                     name=name,
                     src=p,
                 )
             )
 
-    skill_root = REPO_ROOT / "coding" / "skills"
+    skill_root = REPO_ROOT / "skills"
     if skill_root.exists():
         for p in sorted(skill_root.rglob("SKILL.md")):
             rel = p.relative_to(REPO_ROOT)
             parts = rel.parts
-            if len(parts) < 4:
+            if len(parts) < 3:
                 continue
             items.append(
                 Item(
                     kind="skills",
-                    category=parts[0],
-                    subcategory=parts[2],
-                    name=parts[3],
+                    category="coding",
+                    subcategory=parts[1],
+                    name=parts[2],
                     src=p,
                 )
             )
 
-    plugin_root = REPO_ROOT / "coding" / "plugins"
+    plugin_root = REPO_ROOT / "plugins"
     if plugin_root.exists():
         for p in sorted(plugin_root.glob("*/plugin.json")):
             rel = p.relative_to(REPO_ROOT)
@@ -142,14 +142,14 @@ def discover(filters: list[str]) -> list[Item]:
             items.append(
                 Item(
                     kind="plugins",
-                    category=parts[0],
+                    category="coding",
                     subcategory="marketplace",
-                    name=parts[2],
+                    name=parts[1],
                     src=p,
                 )
             )
 
-    mcp_root = REPO_ROOT / "coding" / "mcps"
+    mcp_root = REPO_ROOT / "mcps"
     if mcp_root.exists():
         for p in sorted(mcp_root.glob("*/mcp.json")):
             rel = p.relative_to(REPO_ROOT)
@@ -157,14 +157,14 @@ def discover(filters: list[str]) -> list[Item]:
             items.append(
                 Item(
                     kind="mcps",
-                    category=parts[0],
+                    category="coding",
                     subcategory="stdio",
-                    name=parts[2],
+                    name=parts[1],
                     src=p,
                 )
             )
 
-    tool_root = REPO_ROOT / "coding" / "tools"
+    tool_root = REPO_ROOT / "tools"
     if tool_root.exists():
         for p in sorted(tool_root.glob("*/tool.json")):
             rel = p.relative_to(REPO_ROOT)
@@ -177,9 +177,9 @@ def discover(filters: list[str]) -> list[Item]:
             items.append(
                 Item(
                     kind="tools",
-                    category=parts[0],
+                    category="coding",
                     subcategory=subcategory,
-                    name=parts[2],
+                    name=parts[1],
                     src=p,
                 )
             )
@@ -188,7 +188,7 @@ def discover(filters: list[str]) -> list[Item]:
     # is to inject a tagged block into ~/.claude/CLAUDE.md (no agent/skill/hook to
     # install). Used for main-session dispatch rules that target built-in agents
     # (e.g. Explore). The snippet file is `claude_md.md` inside each named dir.
-    instructions_root = REPO_ROOT / "coding" / "instructions"
+    instructions_root = REPO_ROOT / "instructions"
     if instructions_root.exists():
         for p in sorted(instructions_root.glob("*/claude_md.md")):
             rel = p.relative_to(REPO_ROOT)
@@ -196,14 +196,14 @@ def discover(filters: list[str]) -> list[Item]:
             items.append(
                 Item(
                     kind="instructions",
-                    category=parts[0],
+                    category="coding",
                     subcategory="instructions",
-                    name=parts[2],
+                    name=parts[1],
                     src=p,
                 )
             )
 
-    hook_root = REPO_ROOT / "coding" / "hooks"
+    hook_root = REPO_ROOT / "hooks"
     hook_manifest = hook_root / "hooks.json"
     if hook_manifest.exists():
         try:
@@ -816,9 +816,9 @@ def _command_hook_basename(cmd: str) -> str:
 
 
 def install_standalone_hook(item: Item, level: str) -> str:
-    """Install a standalone ``coding/hooks/`` script: symlink + wire into settings.json.
+    """Install a standalone ``hooks/`` script: symlink + wire into settings.json.
 
-    Metadata (event / matcher / timeout) comes from ``coding/hooks/hooks.json``. The
+    Metadata (event / matcher / timeout) comes from ``hooks/hooks.json``. The
     symlink uses NO kind-prefix (``<name>.py``) to match the hand-wired convention, and
     the settings merge dedups by command basename across ALL events — so re-install
     cleanly replaces any prior entry for the same hook (incl. a hand-wired one) instead
@@ -829,7 +829,7 @@ def install_standalone_hook(item: Item, level: str) -> str:
         level: Installation scope — ``'user'`` or ``'project'``.
     """
     try:
-        manifest = json.loads((REPO_ROOT / "coding" / "hooks" / "hooks.json").read_text())
+        manifest = json.loads((REPO_ROOT / "hooks" / "hooks.json").read_text())
     except (json.JSONDecodeError, OSError):
         manifest = {}
     meta = manifest.get(item.name, {})

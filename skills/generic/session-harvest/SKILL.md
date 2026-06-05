@@ -87,10 +87,10 @@ extended to all five types):
 
 | Choose… | When the pattern is… | Built with |
 | --- | --- | --- |
-| **Hook** | a deterministic, mechanical mistake a script can block or auto-fix with no model judgment | `claude-hooks` skill → `coding/hooks/` |
-| **CLAUDE.md instruction** | a recurring convention/gotcha expressible as a short always-on rule (incl. dispatch rules for built-in agents) | `coding/instructions/<name>/claude_md.md` |
-| **Agent** | a recurring, well-scoped, output-heavy task to offload from the main session | `coding/agents/<cat>/<name>/` (`subagent-prompting`) |
-| **Skill** | a recurring multi-step methodology done inconsistently, invoked on demand | `coding/skills/<cat>/<name>/SKILL.md` |
+| **Hook** | a deterministic, mechanical mistake a script can block or auto-fix with no model judgment | `claude-hooks` skill → `hooks/` |
+| **CLAUDE.md instruction** | a recurring convention/gotcha expressible as a short always-on rule (incl. dispatch rules for built-in agents) | `instructions/<name>/claude_md.md` |
+| **Agent** | a recurring, well-scoped, output-heavy task to offload from the main session | `agents/<cat>/<name>/` (`subagent-prompting`) |
+| **Skill** | a recurring multi-step methodology done inconsistently, invoked on demand | `skills/<cat>/<name>/SKILL.md` |
 | **Settings change** | repeated permission prompts / env / harness behaviour | `update-config` / `fewer-permission-prompts` |
 
 Before proposing, check it doesn't already exist (`research-before-build`) — a duplicate is noise.
@@ -146,7 +146,7 @@ ______________________________________________________________________
 ## After the backlog — creating the resources
 
 Report-only stops here. To *act* on it, create each resource per this repo's conventions (see
-`CLAUDE.md` and `claude-all`): add the file under the right `coding/...` path, then
+`CLAUDE.md` and `claude-all`): add the file under the right `...` path, then
 `./claude-all install <name>`. Confirm before creating any **hook**, **settings** change, or
 **CLAUDE.md instruction** — those alter automatic behaviour (`config-protection`). Build the proposed
 resource with its matching skill: `claude-hooks` (hooks), `subagent-prompting` (agents),

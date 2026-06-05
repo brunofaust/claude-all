@@ -5,7 +5,10 @@ description: >-
   brunofaust-python-style standard and its enforcement stack (ruff, mypy strict, import-linter,
   banned-api, interrogate, vulture, bandit, gitleaks, skill_enforcer), plus an Infrastructure-as-Code
   pass (CloudFormation + Terraform: cfn-lint / tflint / checkov / tfsec) and a process-tooling pass
-  that mines assistant histories for missing skills/agents/hooks (session-harvest). Use when: onboarding a new
+  that mines assistant histories for missing skills/agents/hooks (session-harvest). Also profiles the
+  project (stack / frameworks / cloud / DB) and recommends which claude-all agents/skills/hooks to
+  install for THIS repo plus net-new project-specific ones — run it per-project for tailored
+  suggestions. Use when: onboarding a new
   colleague or inherited repo to the standard, running a first-time congruence audit on an existing
   product, establishing a quality baseline before adopting the gates, deciding what to fix first in a
   messy codebase, or doing a recurring (quarterly) health check. Produces a per-dimension scorecard
@@ -153,14 +156,84 @@ count-only. (`<src>` = the package root, e.g. `src/myapp`.)
 | 12 | **Security & secrets** | delegate to **`security-audit`** (deep mode): `gitleaks detect` (full history), `bandit -r <src>` | `security-audit` skill |
 | 13 | **Infrastructure-as-Code** | CFN: `cfn-lint <templates>` + `checkov -d . --framework cloudformation`. Terraform: `terraform fmt -check -recursive`, `terraform validate`, `tflint`, `checkov`/`tfsec`, `terraform plan -detailed-exitcode` (drift = exit 2) | `aws-architecture`, `aws-cost-optimization`, `iam-auditor` + `cloudformation-reviewer` agents |
 | 14 | **Assistant leverage / process tooling** | delegate to **`session-harvest`** — mine Claude Code / Cursor / Codex / Copilot histories → backlog of skills/agents/hooks/instructions (each with est. % improvement) | `session-harvest` skill |
+| 15 | **Project profile & resource fit** | profile the stack/frameworks/cloud/domain, then recommend which claude-all agents/skills/hooks to install + propose net-new project-specific ones (see section below) | `claude-all --list`, `research-before-build` |
 
 > Dimension 13 covers IaC *correctness, drift, and cost*; IaC *security* (open SGs, public buckets,
 > over-broad IAM) is shared with dimension 12 — run `checkov`/`tfsec` once and split findings by lens.
-> Dimension 14 audits the *development process*, not the code — the one dimension whose fix is new
-> tooling rather than a code change.
+> Dimensions 14 & 15 audit the *development setup*, not the code — their fix is new tooling, not a
+> code change. Dim 14 is *history-driven* (what you keep redoing); dim 15 is *project-driven* (what
+> this stack needs). Run them together for the full customization picture.
 
 > Per-layer coverage targets (dimension 10): utils/pure ≥ 90%, domain services ≥ 85%, handlers ≥ 80%,
 > orchestration ≥ 70%. Project gate default 80%. (From `code-review-discipline`.)
+
+______________________________________________________________________
+
+## Project profiling & resource recommendations (dimension 15)
+
+Beyond grading the code, the audit profiles **what this project is** and recommends the claude-all
+resources that fit it — so a colleague can run repo-audit in *any* project and get tailored
+suggestions. Repeatable per-project: each repo gets its own recommendation list.
+
+### Step A — profile the project
+
+Detect the stack from the files present (read manifests/configs, don't guess):
+
+| Profile axis | Detect from | Example signals |
+| --- | --- | --- |
+| Language / runtime | `pyproject.toml`, `package.json`, `go.mod`, `Cargo.toml` | Python 3.x, Node, Go |
+| Web framework | imports / deps | FastAPI, Django, Flask, Next.js, React |
+| Cloud / infra | `*.tf`, `*.yaml` (CFN/SAM/CDK), `serverless.yml` | AWS (which services), GCP |
+| Data / DB | deps, ORM models, migrations | SQLAlchemy + Alembic, Postgres, DynamoDB, Polars |
+| Async / messaging | imports | asyncio, SQS/SNS, Kafka |
+| Tests / CI | `tests/`, `.github/workflows`, `prek.toml` | pytest, jest, GH Actions |
+| AI / LLM | deps, prompt code | Anthropic/Claude, agents, RAG |
+
+### Step B — map the profile to claude-all resources
+
+Recommend installing what matches (catalog via `claude-all --list`), e.g.:
+
+| If the project has… | Recommend installing |
+| --- | --- |
+| Python (any) | `brunofaust-python-style`, `prek`, `verification-loop`, `code-review-discipline`, `lint-fixer`, `test-runner` |
+| FastAPI / API surface | `web-security`, `security-audit` |
+| React / frontend | `react-correctness`, `react-testing`, `web-design-guidelines`, `web-security`, `seo` |
+| AWS resources | `aws-architecture`, `aws-cost-optimization`, `iam-auditor`, `cloudformation-reviewer`, relevant `*-inspector` agents |
+| Terraform / CloudFormation | `cloudformation-reviewer` / `terraform-reviewer` agents, `aws-architecture` |
+| SQLAlchemy + Alembic | `alembic-migration` |
+| Postgres | `postgres-query` agent, `postgres` MCP |
+| LLM / agent code | `security-audit` (LLM trust-boundary lens), `subagent-prompting` |
+| Layered architecture / big refactor | `architecture-decision-guard`, `python-module-migration` |
+
+### Step C — propose net-new, project-specific resources
+
+Where no existing resource fits, propose creating one — scoped to this project (a project `CLAUDE.md`
+with conventions, a guard hook for a project footgun, a domain skill for a recurring workflow). Use
+the `session-harvest` resource-type rubric to pick skill vs agent vs hook vs instruction. Always
+`research-before-build` first — don't recommend installing or creating something that already exists.
+
+### Output — recommendation list
+
+```
+PROJECT PROFILE & RECOMMENDATIONS
+=================================
+Profile: Python 3.13 · FastAPI · AWS (S3/SQS/Lambda) · Postgres+Alembic · pytest · no IaC linting
+
+Install now (existing claude-all resources):
+  ✓ brunofaust-python-style, prek, verification-loop   — Python baseline
+  ✓ web-security, security-audit                        — FastAPI public surface
+  ✓ iam-auditor, aws-architecture                       — AWS footprint
+  ✓ alembic-migration, postgres-query                   — DB layer
+
+Create (project-specific, no existing fit):
+  + hook · protect-applied-migrations   block edits to already-applied Alembic revisions   (S)
+  + instruction · sqs-event-shape       document the SQS event contract for this service   (S)
+
+Out of scope: react-* (no frontend), terraform-reviewer (no Terraform)
+```
+
+Report-only: it recommends; the user runs `claude-all install <name>` for the picks and creates the
+proposals. Re-run per project — recommendations are specific to each repo's profile.
 
 ______________________________________________________________________
 
@@ -252,6 +325,7 @@ The audit reads a lot; keep the main session clean by delegating:
 | The security dimension (12) | `security-audit` skill | full six-layer + secrets-history pass |
 | The IaC dimension (13) | `cloudformation-reviewer` + `iam-auditor` agents, `aws-architecture` skill | CFN/Terraform correctness, IAM, cost |
 | The process-tooling dimension (14) | `session-harvest` skill | assistant histories → resource backlog with est. % improvement |
+| The project-profile dimension (15) | `Explore` agent + `claude-all --list` | profile the stack → recommend matching resources; `research-before-build` before proposing net-new |
 | Fixing findings (Phases 1, 3) — *after* the audit | `lint-fixer`, `python-module-migrator` | root-cause fixes, never during the audit |
 | Mining a single Claude transcript for one guard rule | `friction-analyzer` agent | narrower than `session-harvest` — one rule from one session |
 
@@ -271,6 +345,8 @@ ______________________________________________________________________
 | `security-audit` | owns dimension 12 (delegate, don't reimplement) |
 | `aws-architecture` / `aws-cost-optimization` / `iam-auditor` / `cloudformation-reviewer` | own dimension 13 (CloudFormation + Terraform correctness, cost, IAM) |
 | `session-harvest` | owns dimension 14 — mines assistant histories into a skills/agents/hooks/instructions backlog |
+| `claude-all --list` catalog | dimension 15 — the menu of installable resources to match against the project profile |
+| `research-before-build` | dimension 15 — confirm a recommended/net-new resource isn't a duplicate |
 | `architecture-decision-guard` | gate every structural phase-3 move (containment > layering) |
 | `python-module-migration` | executes layering / move-by-subject fixes safely |
 | `lint-fixer` / `test-author` | execute Phase 1/3 fixes + close coverage gaps (later PRs) |

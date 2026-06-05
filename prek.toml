@@ -141,7 +141,7 @@ hooks = [
     # misspellings + multi-language sample words; exclude it so typos doesn't flag or
     # rewrite those examples. (This is the skill's own "scope-exclude a path" lever,
     # applied to itself.)
-    exclude = { glob = ["coding/skills/generic/prek/**"] }
+    exclude = { glob = ["skills/generic/prek/**"] }
   }
 ]
 

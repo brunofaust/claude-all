@@ -7,4 +7,4 @@ When writing or debugging a Claude Code hook (a script Claude Code runs on `PreT
 - Read stdin defensively (catch JSON errors → exit 0); be fast (runs on every event); no secrets; prefer read-only.
 - **Test with a synthetic payload** before shipping: `echo '{"tool_name":"Bash","tool_input":{"command":"…"}}' | python3 hook.py; echo $?` — run a should-block/allow/warn battery.
 
-Hook scripts live in `coding/hooks/`; examples: `destructive-command-guard.py` (guard, exit 2) and `config-protection.py` (confirmation, exit 1).
+Hook scripts live in `hooks/`; examples: `destructive-command-guard.py` (guard, exit 2) and `config-protection.py` (confirmation, exit 1).
