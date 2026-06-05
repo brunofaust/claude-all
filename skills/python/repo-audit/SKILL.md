@@ -163,6 +163,11 @@ count-only. (`<src>` = the package root, e.g. `src/myapp`.)
 > Dimensions 14 & 15 audit the *development setup*, not the code — their fix is new tooling, not a
 > code change. Dim 14 is *history-driven* (what you keep redoing); dim 15 is *project-driven* (what
 > this stack needs). Run them together for the full customization picture.
+>
+> **No double-run:** repo-audit is the umbrella — running it executes `session-harvest` **once** as
+> dim 14. Don't also invoke `session-harvest` separately in the same pass. Run `session-harvest`
+> standalone only outside a repo-audit (history-only mining, or a non-Python repo where the code
+> dimensions don't apply).
 
 > Per-layer coverage targets (dimension 10): utils/pure ≥ 90%, domain services ≥ 85%, handlers ≥ 80%,
 > orchestration ≥ 70%. Project gate default 80%. (From `code-review-discipline`.)

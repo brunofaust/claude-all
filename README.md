@@ -156,29 +156,33 @@ Target settings file:
 
 ## First run — audit & customize per project
 
-After installing claude-all, the **first thing to run in each project** is the customization pass —
-two skills that profile the repo and tell you what to fix and what to install. Run them once per
-project; each gives suggestions tailored to *that* repo.
+After installing claude-all, the **first thing to run in each project** is the customization pass.
+The entry point is **`repo-audit`** — it's the umbrella that also runs `session-harvest` for you (as
+its dimension 14), so you don't invoke both. Run it once per project for suggestions tailored to
+*that* repo.
 
 ```bash
 cd ~/repos/my_project
-claude-all --project repo-audit session-harvest   # install the two setup skills here
+claude-all --project repo-audit session-harvest   # install both; repo-audit drives session-harvest
 ```
 
-Then, inside a Claude Code session in that project:
+Then, inside a Claude Code session in that project, run **`repo-audit`**. It audits the whole repo
+against the standard + enforcement stack (ruff, mypy, import-linter, complexity, structure, docs,
+tests, security, **IaC: CloudFormation + Terraform**) and, as part of the same pass:
 
-1. **`repo-audit`** — audits the whole repo against the standard + enforcement stack (ruff, mypy,
-   import-linter, complexity, structure, docs, tests, security, **IaC: CloudFormation + Terraform**),
-   and **profiles the project to recommend which claude-all agents/skills/hooks fit it** (plus
-   net-new project-specific ones). Output: a per-dimension **scorecard** + a **ratcheting roadmap** +
-   a **resource-recommendation list**. Re-run it in every project for per-project suggestions.
-2. **`session-harvest`** — mines your assistant histories (Claude Code / Cursor / Codex / Copilot)
-   into a prioritized backlog of skills/agents/hooks/instructions to create, each with an estimated
-   **% improvement**.
+- **dim 14 — `session-harvest`** mines your assistant histories (Claude Code / Cursor / Codex /
+  Copilot) into a backlog of skills/agents/hooks/instructions to create, each with an estimated **%
+  improvement**.
+- **dim 15 — project profile** recommends which existing claude-all agents/skills/hooks fit this
+  project, plus net-new project-specific ones.
 
-Together they answer "what's the state of this repo?" and "what tooling would most improve it?" —
-the customization setup for any existing/brownfield project. Both are **report-only**: they propose;
-you decide what to install or create.
+Output: a per-dimension **scorecard** + a **ratcheting roadmap** + a **resource-recommendation list**.
+Re-run it in every project for per-project suggestions. It's **report-only** — it proposes; you decide
+what to install or create.
+
+> **Run `session-harvest` on its own** only when you want history mining *without* a full code audit
+> — e.g. a non-Python repo (repo-audit's code dimensions assume Python), or a quick "what should I
+> automate next?" pass. Inside a `repo-audit` run it's already covered by dim 14 — don't run it twice.
 
 ## Coding
 

@@ -28,6 +28,12 @@ with a description and an **estimated % improvement** for the project.
 It **proposes**; it never auto-creates (hooks/settings/instructions need explicit confirmation — see
 `config-protection`). Read-only on the source side.
 
+> **Standalone vs. via repo-audit:** `repo-audit` already runs this skill as its dimension 14, so
+> during a full audit you don't invoke it separately (that double-runs the history mining). Run
+> `session-harvest` on its own when you want history mining *without* a full code audit — e.g. a
+> non-Python repo (repo-audit's code dimensions assume Python), or a quick "what should I automate
+> next?" pass.
+
 ______________________________________________________________________
 
 ## Prompt-defense baseline (read first)
