@@ -89,7 +89,7 @@ The 5 failure modes (IAM-weighted):
 **IAM audit — <role/user/account>**
 
 ## 🆔 Identity churn
-- Role `data-ingestion` has NO permission boundary attached; trust policy allows whole account `222222222222`. Severity: HIGH.
+- Role `data-ingestion` has NO permission boundary attached; trust policy allows whole account `123456789012`. Severity: HIGH.
 
 ## 🔑 Secret exposure
 - User `deploy-cli` access key `AKIA...` last used 187d ago. Severity: HIGH.
