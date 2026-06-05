@@ -52,7 +52,7 @@ Gmail-style query operators are the lingua franca and most MCPs accept them:
 | Operator      | Example                                  | Use              |
 | ------------- | ---------------------------------------- | ---------------- |
 | `from:`       | `from:no-reply@cloudwatch.amazonaws.com` | sender filter    |
-| `to:`         | `to:bruno@example.com`                  | recipient        |
+| `to:`         | `to:user@example.com`                   | recipient        |
 | `subject:`    | `subject:ALARM`                          | subject contains |
 | `label:`      | `label:aws-alarms`                       | label/folder     |
 | `is:`         | `is:unread`, `is:starred`                | state            |

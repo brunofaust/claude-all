@@ -86,7 +86,7 @@ A good EARS set is:
 
 ## Example: end-to-end
 
-Business intent: "BusyDone should generate embeddings for ticket text."
+Business intent: "MyApp should generate embeddings for ticket text."
 
 Criteria produced:
 

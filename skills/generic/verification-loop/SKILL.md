@@ -32,7 +32,7 @@ condition, and an output line for the final report.
 ### Phase 1 — Lint + Format
 
 ```bash
-# Python (Bruno's stack)
+# Python
 prek run --all-files                # covers ruff lint + format + typos + secrets + markdown
 
 # Node

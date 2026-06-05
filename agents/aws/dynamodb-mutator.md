@@ -47,7 +47,7 @@ If confirmation is MISSING or AMBIGUOUS, output a preview and stop:
 
 - table: myapp-dev-run-locks
 - region: us-east-1
-- account: 169728770189
+- account: 123456789012
 - op: DeleteItem
 - key: {"pk": {"S": "dispatcher"}}
 - destructive: yes (no undo)

@@ -6,7 +6,7 @@ non-blocking reminder per Claude Code session so Sonnet remembers the skill's
 conventions WITHOUT flooding the transcript with the same message on every edit.
 
 Session detection: Claude Code passes `session_id` in the hook input JSON.
-We flag `/tmp/claude-all-bruno-py-<session_id>` after the first emit; later
+We flag `/tmp/claude-all-brunofaust-py-<session_id>` after the first emit; later
 edits in the same session see the flag and exit silently.
 """
 
@@ -31,7 +31,7 @@ def main() -> int:
 
     # One reminder per session
     session_id = data.get("session_id") or "no-session"
-    flag = os.path.join(tempfile.gettempdir(), f"claude-all-bruno-py-{session_id}.flag")
+    flag = os.path.join(tempfile.gettempdir(), f"claude-all-brunofaust-py-{session_id}.flag")
     if os.path.exists(flag):
         return 0  # already reminded this session
     with contextlib.suppress(OSError), open(flag, "w", encoding="utf-8") as f:

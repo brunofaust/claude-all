@@ -92,7 +92,7 @@ The 5 failure modes (IAM-weighted):
 - Role `data-ingestion` has NO permission boundary attached; trust policy allows whole account `222222222222`. Severity: HIGH.
 
 ## 🔑 Secret exposure
-- User `bruno-cli` access key `AKIA...` last used 187d ago. Severity: HIGH.
+- User `deploy-cli` access key `AKIA...` last used 187d ago. Severity: HIGH.
 
 ## 💥 Blast radius
 - Inline policy `admin-emergency` on role `breakglass`: `Action: "*"`, `Resource: "*"`, no `Condition`. Severity: BLOCK.

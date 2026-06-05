@@ -123,11 +123,11 @@ If clean:
 
 ```
 **Branch:** feature/auth-refresh  •  **Commits shown:** 12 (newest first)
-- `a3f2b1c` (12m ago, Bruno) feat: add token refresh
-- `b4e8d22` (1h ago, Bruno) refactor: extract jwt helper
-- `c9f1a01` (3h ago, Juan) fix: handle missing exp claim
+- `a3f2b1c` (12m ago, Alex) feat: add token refresh
+- `b4e8d22` (1h ago, Alex) refactor: extract jwt helper
+- `c9f1a01` (3h ago, Sam) fix: handle missing exp claim
 - ... 9 more
-**Authors:** Bruno (8), Juan (4)
+**Authors:** Alex (8), Sam (4)
 ```
 
 ### `git diff` (or `git diff --cached`)
@@ -155,7 +155,7 @@ Same format as plain diff, header says the range.
 ### `git show <ref>`
 
 ```
-**Commit:** a3f2b1c  •  Bruno Faust  •  2026-05-18 14:22
+**Commit:** a3f2b1c  •  Alex Kim  •  2026-05-18 14:22
 **Subject:** feat: add token refresh
 **Body:** (first 3 lines)
 **Diff:** 4 files, +127 / -34
@@ -169,10 +169,10 @@ Summarize authorship by chunk (don't dump 500 lines):
 ```
 **File:** src/auth.py (1240 lines)
 **Authors (line count):**
-- Bruno Faust — 890 (72%)
-- Juan Tissone — 270 (22%)
+- Alex Kim — 890 (72%)
+- Sam Lee — 270 (22%)
 - Initial commit — 80 (6%)
-**Recent edits:** lines 45-127 by Bruno (12m ago, commit a3f2b1c)
+**Recent edits:** lines 45-127 by Alex (12m ago, commit a3f2b1c)
 ```
 
 If user asked about specific lines (`git blame -L 45,80 file`), return those lines verbatim with the author/commit prefix.
@@ -234,7 +234,7 @@ Group by status (A/M/D/R) when > 8 files. Truncate body of file list to ~20 entr
 For a single merge-base query:
 
 ```
-**Merge-base:** a1b2c3d4 (~2 days ago, Juan)
+**Merge-base:** a1b2c3d4 (~2 days ago, Sam)
 ```
 
 When asked "behind/ahead of main", combine:
