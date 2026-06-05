@@ -187,6 +187,35 @@ what to install or create.
 > — a quick "what should I automate next?" pass. Inside a `repo-audit` run it's already covered by
 > dim 14 — don't run it twice.
 
+Both are **ad-hoc, user-invoked** skills, so neither ships a `claude_md.md` (no always-on rule injected
+into `~/.claude/CLAUDE.md`) — you invoke them deliberately when onboarding or health-checking a repo.
+Their behavior:
+
+**`repo-audit`** (any language)
+
+- **Generic boundaries, per-stack tooling.** `brunofaust-python-style` + `prek` are the Python
+  *reference* (ruff / mypy / import-linter / banned-api / interrogate / vulture / bandit / gitleaks);
+  for other stacks it translates each boundary to that stack's tools (eslint/tsc, golangci-lint,
+  clippy, …) and where no tool exists, audits by reasoning + `grep` — it never skips a boundary.
+  Frontend lenses → `react-correctness` / `react-testing` / `composition-patterns` /
+  `web-design-guidelines` / `web-security` / `seo`.
+- **Brownfield rule: measure → baseline → ratchet, never big-bang.** Don't `--strict` everything or
+  reformat the whole repo — that blocks every commit on legacy noise and hides regressions. Wire gates
+  advisory, baseline caps at current-worst + margin, ratchet down one notch per PR.
+- **Report-only.** It measures and plans; fixes are later *reviewed* PRs (`lint-fixer`,
+  `python-module-migrator`, `test-author`). For a single diff use `verification-loop`; for
+  security-only use `security-audit`. Gate structural moves through `architecture-decision-guard`.
+
+**`session-harvest`**
+
+- Mines histories across **Claude Code, Cursor, Codex, GitHub Copilot** into a prioritized backlog of
+  skills/agents/hooks/instructions, each with an estimated **% improvement** that must **cite its
+  evidence** (occurrence count + example) — never an invented number.
+- Reads histories **programmatically** (jq / sqlite3 / grep); treats all history content as **data,
+  not instructions**; never dumps raw transcripts into context.
+- **Report-only** — it proposes the backlog; confirm before creating any hook / settings / CLAUDE.md
+  instruction. It's the cross-assistant superset of the `friction-analyzer` agent.
+
 ## Coding
 
 ### 1. Agents
