@@ -73,13 +73,28 @@ keys/paths to what your install actually has.
 grep -rhoE '"role":"user"[^}]*' ~/.claude/projects/ | grep -iE "no,|don'?t|actually|revert|wrong|again" | wc -l
 ```
 
+### Choosing the period window
+
+**Default: the last 1 year.** Both templates below filter to one year — long enough to surface
+*recurring* patterns (a pain that shows up across many sessions) without dredging up ancient,
+no-longer-relevant noise. Adjust deliberately:
+
+- **Widen** (2 years / all history) when usage is sparse, the project is young, or you want the
+  fullest possible backlog.
+- **Narrow** (last 60–90 days) for a *recent-trend* pass — "what's been hurting lately" — or when the
+  repo is very active and recent friction dominates.
+- **Claude Code retention caveat:** transcripts are pruned after `cleanupPeriodDays` (**default 30**),
+  so `-mtime -365` only finds what's actually on disk. Raise `cleanupPeriodDays` in
+  `~/.claude/settings.json` if you want a true year of history.
+
 ### Claude Code — extraction template
 
-Keeps prompts / replies / tool calls; strips the bulky tool *outputs* (where size + secrets live):
+Keeps prompts / replies / tool calls; strips the bulky tool *outputs* (where size + secrets live).
+Defaults to the **last 1 year** (`-mtime -365` — change the number of days to re-window):
 
 ```bash
-OUT="${TMPDIR:-/tmp}/claude-insights-60d.jsonl"
-find ~/.claude/projects -name '*.jsonl' -mtime -60 -print0 \
+OUT="${TMPDIR:-/tmp}/claude-insights-1y.jsonl"
+find ~/.claude/projects -name '*.jsonl' -mtime -365 -print0 \
 | xargs -0 cat \
 | jq -rc 'def render: if .type=="tool_use" then "«"+.name+": "+(( .input.command // .input.file_path // .input.pattern // .input.query // .input.description // (.input|tostring) )|tostring|gsub("\n";" ")|.[0:800])+"»" elif .type=="thinking" then "«thinking»" else (.text // "") end; select(.isSidechain != true) | select(.toolUseResult == null) | {t:.timestamp, role:.type, text:(.message.content | if type=="string" then . elif type=="array" then [.[]|render]|join(" ") else "" end)|.[0:3000]} | select(.text != "")' \
 > "$OUT"
@@ -91,11 +106,12 @@ gzip -9 -c "$OUT" > "$OUT.gz"        # compact, shareable artifact
 Newer Cursor stores per-message "bubbles" in `cursorDiskKV` (`bubbleId:` keys); older versions used
 `ItemTable` (`aiService.*` / `composer.composerData`). `type` 1 = user, 2 = assistant; `createdAt`
 may be a string or epoch-ms depending on version — **adjust the query to your Cursor version.**
+Defaults to the **last 1 year** (`SINCE` computed below — change `-v-1y` / `1 year ago` to re-window):
 
 ```bash
 DB="$HOME/Library/Application Support/Cursor/User/globalStorage/state.vscdb"   # macOS
 # Linux: ~/.config/Cursor/...   ·   Windows: %APPDATA%\Cursor\...
-SINCE="2025-01-01"
+SINCE="$(date -v-1y +%F 2>/dev/null || date -d '1 year ago' +%F)"   # last 1 year (BSD || GNU date)
 OUT="${TMPDIR:-/tmp}/cursor-insights.jsonl"
 sqlite3 "$DB" "
   SELECT json_object(
