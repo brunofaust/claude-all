@@ -53,7 +53,7 @@ Discover by globbing — paths vary by OS and tool version; treat these as best-
 | --- | --- | --- | --- |
 | **Claude Code** | `~/.claude/projects/**/*.jsonl`, `~/.claude/history.jsonl` | JSONL | `jq` / `grep` |
 | **Codex** (OpenAI CLI) | `~/.codex/sessions/**/rollout-*.jsonl`, `~/.codex/history.jsonl` | JSONL | `jq` / `grep` |
-| **Cursor** | `~/.config/Cursor/User/{workspaceStorage/*/,globalStorage/}state.vscdb` → `~/Library/Application Support/Cursor/...` → `%APPDATA%\Cursor\...` | SQLite (`ItemTable` keys: `aiService.prompts`, `aiService.generations`, `composer.composerData`, `workbench.panel.aichat.*.chatdata`) | `sqlite3 … "SELECT value FROM ItemTable WHERE key LIKE '%aiService%'"` → `jq` |
+| **Cursor** | macOS `~/Library/Application Support/Cursor/User/globalStorage/state.vscdb`; Linux `~/.config/Cursor/...`; Windows `%APPDATA%\Cursor\...` (also per-workspace `workspaceStorage/*/state.vscdb`) | SQLite — newer: `cursorDiskKV` (`bubbleId:` keys); older: `ItemTable` (`aiService.*`, `composer.composerData`) | `sqlite3` + `jq` (see template) |
 | **GitHub Copilot** (VS Code chat) | `<Code User>/workspaceStorage/*/chatSessions/*.json`, `chatEditingSessions/`; CLI: `~/.copilot/**/history*.json` | JSON | `jq` |
 
 ______________________________________________________________________
@@ -62,14 +62,64 @@ ______________________________________________________________________
 
 These files are large and contain secrets. Pull only the signal with `jq` / `sqlite3` / `grep` —
 counts, short snippets, timestamps — never cat a whole transcript or `.vscdb` into the conversation.
+Write the compact extract to a **tmp file**, review it for secrets, then work from that.
+
+The blocks below are **templates** — the on-disk schema differs by assistant *version* and OS (table
+and key names, the `type` enum, timestamp units). Treat them as starting points and adjust the
+keys/paths to what your install actually has.
 
 ```bash
-# Claude Code / Codex (JSONL) — user correction turns, recent window
+# Quick signal: count user-correction turns in a recent window (Claude Code / Codex JSONL)
 grep -rhoE '"role":"user"[^}]*' ~/.claude/projects/ | grep -iE "no,|don'?t|actually|revert|wrong|again" | wc -l
-
-# Cursor (SQLite) — pull just the AI prompt/generation blobs, then filter with jq
-sqlite3 "$DB" "SELECT value FROM ItemTable WHERE key LIKE '%aiService%';" | jq -r '..|.text?//empty' | head
 ```
+
+### Claude Code — extraction template
+
+Keeps prompts / replies / tool calls; strips the bulky tool *outputs* (where size + secrets live):
+
+```bash
+OUT="${TMPDIR:-/tmp}/claude-insights-60d.jsonl"
+find ~/.claude/projects -name '*.jsonl' -mtime -60 -print0 \
+| xargs -0 cat \
+| jq -rc 'def render: if .type=="tool_use" then "«"+.name+": "+(( .input.command // .input.file_path // .input.pattern // .input.query // .input.description // (.input|tostring) )|tostring|gsub("\n";" ")|.[0:800])+"»" elif .type=="thinking" then "«thinking»" else (.text // "") end; select(.isSidechain != true) | select(.toolUseResult == null) | {t:.timestamp, role:.type, text:(.message.content | if type=="string" then . elif type=="array" then [.[]|render]|join(" ") else "" end)|.[0:3000]} | select(.text != "")' \
+> "$OUT"
+gzip -9 -c "$OUT" > "$OUT.gz"        # compact, shareable artifact
+```
+
+### Cursor — extraction template
+
+Newer Cursor stores per-message "bubbles" in `cursorDiskKV` (`bubbleId:` keys); older versions used
+`ItemTable` (`aiService.*` / `composer.composerData`). `type` 1 = user, 2 = assistant; `createdAt`
+may be a string or epoch-ms depending on version — **adjust the query to your Cursor version.**
+
+```bash
+DB="$HOME/Library/Application Support/Cursor/User/globalStorage/state.vscdb"   # macOS
+# Linux: ~/.config/Cursor/...   ·   Windows: %APPDATA%\Cursor\...
+SINCE="2025-01-01"
+OUT="${TMPDIR:-/tmp}/cursor-insights.jsonl"
+sqlite3 "$DB" "
+  SELECT json_object(
+    't',    json_extract(value,'\$.createdAt'),
+    'role', CASE json_extract(value,'\$.type') WHEN 1 THEN 'user' WHEN 2 THEN 'assistant' ELSE 'other' END,
+    'text', substr(json_extract(value,'\$.text'),1,2000),
+    'tool', json_extract(value,'\$.toolFormerData.name'),
+    'args', substr(json_extract(value,'\$.toolFormerData.rawArgs'),1,300)
+  )
+  FROM cursorDiskKV
+  WHERE key LIKE 'bubbleId:%'
+    AND json_extract(value,'\$.createdAt') >= '$SINCE'
+    AND ( length(json_extract(value,'\$.text')) > 0
+          OR json_extract(value,'\$.toolFormerData.name') IS NOT NULL )
+" \
+| jq -c '.' > "$OUT"
+
+wc -l "$OUT"
+gzip -9 -c "$OUT" > "$OUT.gz"        # compact, shareable artifact
+du -h "$OUT.gz"
+```
+
+> **Review the extract for secrets before sharing** — prompts and tool args can contain proprietary
+> detail. Share the `.gz`, not the raw `.vscdb`/transcripts.
 
 ## Signals to mine
 
