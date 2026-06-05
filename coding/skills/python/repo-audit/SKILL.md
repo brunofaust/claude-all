@@ -3,7 +3,9 @@ name: repo-audit
 description: >-
   Whole-repo, point-in-time quality audit for an existing / brownfield Python codebase against the
   brunofaust-python-style standard and its enforcement stack (ruff, mypy strict, import-linter,
-  banned-api, interrogate, vulture, bandit, gitleaks, skill_enforcer). Use when: onboarding a new
+  banned-api, interrogate, vulture, bandit, gitleaks, skill_enforcer), plus an Infrastructure-as-Code
+  pass (CloudFormation + Terraform: cfn-lint / tflint / checkov / tfsec) and a process-tooling pass
+  that mines assistant histories for missing skills/agents/hooks (session-harvest). Use when: onboarding a new
   colleague or inherited repo to the standard, running a first-time congruence audit on an existing
   product, establishing a quality baseline before adopting the gates, deciding what to fix first in a
   messy codebase, or doing a recurring (quarterly) health check. Produces a per-dimension scorecard
@@ -149,6 +151,13 @@ count-only. (`<src>` = the package root, e.g. `src/myapp`.)
 | 10 | **Tests** | `pytest --cov --cov-report=term-missing` (%); tests mirror `src/`; `@pytest.mark.asyncio` / module-global mocks | `references/testing.md` |
 | 11 | **Config discipline** | `grep -rn "os.getenv" <src>` outside `settings.py`; hardcoded model names / timeouts / resource names at module level | `references/config.md` |
 | 12 | **Security & secrets** | delegate to **`security-audit`** (deep mode): `gitleaks detect` (full history), `bandit -r <src>` | `security-audit` skill |
+| 13 | **Infrastructure-as-Code** | CFN: `cfn-lint <templates>` + `checkov -d . --framework cloudformation`. Terraform: `terraform fmt -check -recursive`, `terraform validate`, `tflint`, `checkov`/`tfsec`, `terraform plan -detailed-exitcode` (drift = exit 2) | `aws-architecture`, `aws-cost-optimization`, `iam-auditor` + `cloudformation-reviewer` agents |
+| 14 | **Assistant leverage / process tooling** | delegate to **`session-harvest`** — mine Claude Code / Cursor / Codex / Copilot histories → backlog of skills/agents/hooks/instructions (each with est. % improvement) | `session-harvest` skill |
+
+> Dimension 13 covers IaC *correctness, drift, and cost*; IaC *security* (open SGs, public buckets,
+> over-broad IAM) is shared with dimension 12 — run `checkov`/`tfsec` once and split findings by lens.
+> Dimension 14 audits the *development process*, not the code — the one dimension whose fix is new
+> tooling rather than a code change.
 
 > Per-layer coverage targets (dimension 10): utils/pure ≥ 90%, domain services ≥ 85%, handlers ≥ 80%,
 > orchestration ≥ 70%. Project gate default 80%. (From `code-review-discipline`.)
@@ -241,8 +250,10 @@ The audit reads a lot; keep the main session clean by delegating:
 | Inventory layout, naming, where SDK calls live | `Explore` agent | broad fan-out search, returns conclusions not dumps |
 | Run lint/type/test count commands | `test-runner` / `code-quality` agents | absorb large output, return counts + verbatim errors |
 | The security dimension (12) | `security-audit` skill | full six-layer + secrets-history pass |
+| The IaC dimension (13) | `cloudformation-reviewer` + `iam-auditor` agents, `aws-architecture` skill | CFN/Terraform correctness, IAM, cost |
+| The process-tooling dimension (14) | `session-harvest` skill | assistant histories → resource backlog with est. % improvement |
 | Fixing findings (Phases 1, 3) — *after* the audit | `lint-fixer`, `python-module-migrator` | root-cause fixes, never during the audit |
-| Mining a session for recurring friction → guard rules | `friction-analyzer` agent | turns repeated mistakes into prek/CLAUDE.md rules |
+| Mining a single Claude transcript for one guard rule | `friction-analyzer` agent | narrower than `session-harvest` — one rule from one session |
 
 Return errors **verbatim** (file:line + message) per the repo's agent error-reporting rule — the
 roadmap needs the specifics, not "looks like some type errors".
@@ -258,6 +269,8 @@ ______________________________________________________________________
 | `code-review-discipline` | severity model, size/complexity gates, report-only rule |
 | `verification-loop` | the per-PR gate the roadmap leads toward — repo-audit is the macro, one-time map |
 | `security-audit` | owns dimension 12 (delegate, don't reimplement) |
+| `aws-architecture` / `aws-cost-optimization` / `iam-auditor` / `cloudformation-reviewer` | own dimension 13 (CloudFormation + Terraform correctness, cost, IAM) |
+| `session-harvest` | owns dimension 14 — mines assistant histories into a skills/agents/hooks/instructions backlog |
 | `architecture-decision-guard` | gate every structural phase-3 move (containment > layering) |
 | `python-module-migration` | executes layering / move-by-subject fixes safely |
 | `lint-fixer` / `test-author` | execute Phase 1/3 fixes + close coverage gaps (later PRs) |
