@@ -166,9 +166,12 @@ cd ~/repos/my_project
 claude-all --project repo-audit session-harvest   # install both; repo-audit drives session-harvest
 ```
 
-Then, inside a Claude Code session in that project, run **`repo-audit`**. It audits the whole repo
-against the standard + enforcement stack (ruff, mypy, import-linter, complexity, structure, docs,
-tests, security, **IaC: CloudFormation + Terraform**) and, as part of the same pass:
+Then, inside a Claude Code session in that project, run **`repo-audit`**. It works for **any language**
+(Python, TypeScript/frontend, Go, Rust, …): it audits the whole repo against generic quality
+boundaries — format/lint, type safety, complexity, layering & dependency direction, single-owner
+external systems, typed contracts, error handling, docs, dead code, tests, config, secrets/SAST,
+**IaC: CloudFormation + Terraform** — translating each boundary to the stack's own tooling
+(`brunofaust-python-style` + `prek` are the Python reference). As part of the same pass:
 
 - **dim 14 — `session-harvest`** mines your assistant histories (Claude Code / Cursor / Codex /
   Copilot) into a backlog of skills/agents/hooks/instructions to create, each with an estimated **%
@@ -181,8 +184,8 @@ Re-run it in every project for per-project suggestions. It's **report-only** —
 what to install or create.
 
 > **Run `session-harvest` on its own** only when you want history mining *without* a full code audit
-> — e.g. a non-Python repo (repo-audit's code dimensions assume Python), or a quick "what should I
-> automate next?" pass. Inside a `repo-audit` run it's already covered by dim 14 — don't run it twice.
+> — a quick "what should I automate next?" pass. Inside a `repo-audit` run it's already covered by
+> dim 14 — don't run it twice.
 
 ## Coding
 
