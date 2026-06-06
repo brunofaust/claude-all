@@ -1,6 +1,9 @@
-______________________________________________________________________
-
-## title: Defer Await Until Needed impact: HIGH impactDescription: avoids blocking unused code paths tags: async, await, conditional, optimization
+---
+title: Defer Await Until Needed
+impact: HIGH
+impactDescription: avoids blocking unused code paths
+tags: async, await, conditional, optimization
+---
 
 ## Defer Await Until Needed
 

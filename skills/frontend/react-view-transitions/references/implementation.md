@@ -97,7 +97,6 @@ export function DirectionalTransition({ children }: { children: React.ReactNode 
 This also becomes the single place to adjust if you add new transition types later.
 
 **Rules:**
-
 - Always pair `enter` with `exit` — without an exit animation, the old page disappears instantly while the new one animates in.
 - Always include `default: "none"` in type map objects and `default="none"` on the component — otherwise it fires on every transition.
 - Place the directional `<ViewTransition>` in each page component, not in a layout. Layouts persist across navigations and never trigger enter/exit.
@@ -124,7 +123,6 @@ For every `<Suspense>` boundary identified in Step 1, wrap the fallback and cont
 This example uses `slide-down` / `slide-up` for directional vertical motion. For a simpler reveal, a bare `<ViewTransition>` around the `<Suspense>` gives a cross-fade with zero configuration. Choose based on the spatial meaning — consult the "Choosing the Right Animation Style" table in the main skill file.
 
 **Rules:**
-
 - Always use `default="none"` on the content `<ViewTransition>` to prevent re-animation on revalidation or unrelated transitions.
 - Use simple string props (not type maps) on Suspense `<ViewTransition>`s — Suspense resolves fire as separate transitions with no type, so type-keyed props won't match.
 
@@ -149,7 +147,6 @@ The `share="morph"` class uses the morph recipe from `css-recipes.md` (controlle
 When list items contain shared elements, compose both patterns with two nested `<ViewTransition>` layers — see "Composing Shared Elements with List Identity" in `SKILL.md`.
 
 **Rules:**
-
 - Names must be globally unique — use prefixes like `photo-${id}`.
 - Add `default="none"` on list-side shared elements to prevent per-item cross-fades on filter/search updates.
 
@@ -165,7 +162,7 @@ Walk through every row in the navigation map from Step 1 and confirm:
 
 If any path produces no animation or competing animations, revisit the relevant step.
 
-______________________________________________________________________
+---
 
 ## Common Mistakes
 
@@ -180,6 +177,6 @@ ______________________________________________________________________
 - **Named VT in a reusable component** — if a component with a named VT is rendered in both a modal/popover *and* a page, both mount simultaneously and break the morph. Make the name conditional or move it to the specific consumer.
 - **`router.back()` for back navigation** — `router.back()` triggers synchronous `popstate`, incompatible with view transitions. Use `router.push()` with an explicit URL.
 
-______________________________________________________________________
+---
 
 For Next.js-specific implementation steps (config flag, `transitionTypes` on `<Link>`, same-route dynamic segments), see `nextjs.md`.

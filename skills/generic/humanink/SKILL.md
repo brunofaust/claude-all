@@ -1,6 +1,6 @@
 ---
 name: humanink
-description: Detects 35 AI writing patterns, scores AI probability 0-100, rewrites text to sound human. Supports 6 languages, style fingerprinting, context modes, and severity levels. Use when asked to humanize / de-AI text, make writing sound natural, or remove AI tells — in English, Brazilian Portuguese, or Spanish (also French, German, Japanese, Italian).
+description: Detects 35 AI writing patterns, scores AI probability 0-100, rewrites text to sound human. Supports 6 languages, style fingerprinting, context modes, and severity levels.
 disable-model-invocation: false
 user-invocable: true
 ---
@@ -645,17 +645,17 @@ The 35 patterns manifest differently across languages but the core disease is th
 
 ### Filler phrases by language
 
-**Portuguese:** "Com o intuito de" → Para | "Devido ao fato de que" → Porque | "É important ressaltar que" → (cut) | "No que diz respeito a" → Sobre
+**Portuguese:** "Com o intuito de" → Para | "Devido ao fato de que" → Porque | "É importante ressaltar que" → (cut) | "No que diz respeito a" → Sobre
 
-**Spanish:** "Con el fin de" → Para | "Debido al hecho de que" → Porque | "Es important señalar que" → (cut) | "En lo que respecta a" → Sobre
+**Spanish:** "Con el fin de" → Para | "Debido al hecho de que" → Porque | "Es importante señalar que" → (cut) | "En lo que respecta a" → Sobre
 
-**French:** "Afin de" → Pour | "Du fait que" → Parce que | "Il convient de noter que" → (cut) | "En ce qui concerne" → Sure
+**French:** "Afin de" → Pour | "Du fait que" → Parce que | "Il convient de noter que" → (cut) | "En ce qui concerne" → Sur
 
 **German:** "Um zu" → Für | "Aufgrund der Tatsache, dass" → Weil | "Es ist erwähnenswert, dass" → (cut) | "In Bezug auf" → Über
 
 **Japanese:** "〜を目的として" → 〜のため | "〜という事実を踏まえ" → 〜なので | "特筆すべきは" → (cut) | "〜に関して言えば" → 〜について
 
-**Italian:** "Al fine di" → Per | "A causa del fatto che" → Perché | "È important sottolineare che" → (cut) | "Per quanto riguarda" → Su
+**Italian:** "Al fine di" → Per | "A causa del fatto che" → Perché | "È importante sottolineare che" → (cut) | "Per quanto riguarda" → Su
 
 ---
 

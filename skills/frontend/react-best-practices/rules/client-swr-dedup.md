@@ -1,6 +1,9 @@
-______________________________________________________________________
-
-## title: Use SWR for Automatic Deduplication impact: MEDIUM-HIGH impactDescription: automatic deduplication tags: client, swr, deduplication, data-fetching
+---
+title: Use SWR for Automatic Deduplication
+impact: MEDIUM-HIGH
+impactDescription: automatic deduplication
+tags: client, swr, deduplication, data-fetching
+---
 
 ## Use SWR for Automatic Deduplication
 

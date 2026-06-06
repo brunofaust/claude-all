@@ -1,6 +1,9 @@
-______________________________________________________________________
-
-## title: Use Functional setState Updates impact: MEDIUM impactDescription: prevents stale closures and unnecessary callback recreations tags: react, hooks, useState, useCallback, callbacks, closures
+---
+title: Use Functional setState Updates
+impact: MEDIUM
+impactDescription: prevents stale closures and unnecessary callback recreations
+tags: react, hooks, useState, useCallback, callbacks, closures
+---
 
 ## Use Functional setState Updates
 
@@ -51,9 +54,9 @@ function TodoList() {
 **Benefits:**
 
 1. **Stable callback references** - Callbacks don't need to be recreated when state changes
-1. **No stale closures** - Always operates on the latest state value
-1. **Fewer dependencies** - Simplifies dependency arrays and reduces memory leaks
-1. **Prevents bugs** - Eliminates the most common source of React closure bugs
+2. **No stale closures** - Always operates on the latest state value
+3. **Fewer dependencies** - Simplifies dependency arrays and reduces memory leaks
+4. **Prevents bugs** - Eliminates the most common source of React closure bugs
 
 **When to use functional updates:**
 

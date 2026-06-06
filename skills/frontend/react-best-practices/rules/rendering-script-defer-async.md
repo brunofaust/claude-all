@@ -1,6 +1,9 @@
-______________________________________________________________________
-
-## title: Use defer or async on Script Tags impact: HIGH impactDescription: eliminates render-blocking tags: rendering, script, defer, async, performance
+---
+title: Use defer or async on Script Tags
+impact: HIGH
+impactDescription: eliminates render-blocking
+tags: rendering, script, defer, async, performance
+---
 
 ## Use defer or async on Script Tags
 
