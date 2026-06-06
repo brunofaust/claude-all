@@ -4,121 +4,104 @@
 
 ### Caching Pattern
 
-We should use a cache library (like cachetools or a custom one).
-Use module-level `TTLCache` (preferred) (or `LRUCache` if it fits better) instances with:
+Use **cachebox** — a Rust-backed caching library that is internally thread-safe and natively supports async functions. No external locks or custom async wrappers needed.
 
-- `@cached` decorator for sync functions
-- `@cachedmethod` decorator for class sync methods
-- a custom `@cached_async` decorator for async functions (or methods)
-
-We must use a lock to prevent race conditions in threads or async operations.
+Use module-level `TTLCache` (preferred) or `LRUCache` instances with the `@cachebox.cached` decorator for both sync and async functions.
 
 ```python
-from cachetools import cached, TTLCache
-from app.core.cache import cached_async
-from threading import Lock as ThreadLock
-from asyncio import Lock as AsyncLock
+import cachebox
+from cachebox import TTLCache
 
-get_configuration_cache: TTLCache = TTLCache(maxsize=10, ttl=CACHE_1_HOURS)
-get_data_cache: TTLCache = TTLCache(maxsize=10, ttl=CACHE_1_HOURS)
-get_value_cache: TTLCache = TTLCache(maxsize=10, ttl=CACHE_1_HOURS)
-get_method_value_cache: TTLCache = TTLCache(maxsize=10, ttl=CACHE_1_HOURS)
+get_configuration_cache: TTLCache = TTLCache(maxsize=10, global_ttl=CACHE_1_HOURS)
+get_data_cache: TTLCache = TTLCache(maxsize=10, global_ttl=CACHE_1_HOURS)
 
 
-@cached_async(cache=get_configuration_cache)
-async def get_configuration(self, config_name: str) -> Mapping[str, Any]:
+@cachebox.cached(get_configuration_cache)
+async def get_configuration(config_name: str) -> Mapping[str, Any]:
     """Retrieve application configuration with caching."""
     ...
 
 
-@cached(cache=get_data_cache, lock=ThreadLock())
-async def get_data(self, data_name: str) -> Mapping[str, Any]:
-    """Retrieve application data with caching in a multithreaded application."""
+@cachebox.cached(get_data_cache)
+async def get_data(data_name: str) -> Mapping[str, Any]:
+    """Retrieve application data with caching."""
     ...
-
-
-@cached(cache=get_value_cache, lock=AsyncLock())
-async def get_value(self, value_name: str) -> Mapping[str, Any]:
-    """Retrieve application configuration with caching in an async application."""
-    ...
-
-
-class something:
-    """Handles something on application."""
-
-    @cachedmethod(cache=lambda self: get_method_value_cache, lock=lambda self: AsyncLock())
-    async def get_method_value(self, method_value_name: str) -> Mapping[str, Any]:
-        """Retrieve application configuration with caching in an async application."""
-        ...
 ```
 
 - Define one cache per function at the module level
-- Use appropriate TTL durations: `CACHE_24_HOURS` for stable data and fewer hours for other kinds of data (like `CACHE_1_HOURS` or `CACHE_12_HOURS`, etc.)
+- cachebox is internally thread-safe (Rust mutex) — **no external locks needed**
+- `@cachebox.cached` works identically for sync and async — **no custom async decorator needed**
+- Use appropriate TTL durations: `CACHE_24_HOURS` for stable data, shorter for volatile data (e.g. `CACHE_1_HOURS`, `CACHE_12_HOURS`)
 
-#### cached_async Implementation
+#### Instance method caching
 
-This decorator wraps an async function so its result is stored in a `cachetools.TTLCache`.
-If not already in your project, create it:
+Instance methods need a callable that returns the cache per-instance (or a shared module-level cache):
 
 ```python
-import functools
-from collections.abc import Callable
-from typing import Any, ParamSpec, TypeVar
-from asyncio import Lock
-
-from cachetools import TTLCache
-from xxhash import xxh3_64_hexdigest
-
-P = ParamSpec("P")
-T = TypeVar("T")
+get_method_value_cache: TTLCache = TTLCache(maxsize=10, global_ttl=CACHE_1_HOURS)
 
 
-def cache_key64(data: Any) -> str:
-    """Generate a 64-bit hash key from arbitrary data for cache lookups."""
-    return xxh3_64_hexdigest(str(data))
+class DataService:
+    @cachebox.cached(lambda self: get_method_value_cache)
+    async def get_value(self, key: str) -> Mapping[str, Any]:
+        """Retrieve value with caching."""
+        ...
+```
 
+Or with an instance-level cache (isolated per object):
 
-def cached_async(
-    cache: TTLCache,
-    ignore_args: list[int] | None = None,
-) -> Callable[[Callable[P, T]], Callable[P, T]]:
-    """
-    Async-compatible caching decorator backed by cachetools TTLCache.
+```python
+class DataService:
+    def __init__(self) -> None:
+        self._cache: TTLCache = TTLCache(maxsize=10, global_ttl=CACHE_1_HOURS)
 
-    Args:
-        cache: A TTLCache instance to store results in.
-        ignore_args: Positional argument indices to exclude from the cache
-            key (e.g., [0] to ignore `self`).
+    @cachebox.cached(lambda self: self._cache)
+    async def get_value(self, key: str) -> Mapping[str, Any]:
+        """Retrieve value with caching."""
+        ...
+```
 
-    Returns:
-        A decorator that caches the result of an async function.
+#### Key generation
 
-    Examples:
-        >>> my_cache: TTLCache = TTLCache(maxsize=100, ttl=3600)
-        >>> @cached_async(cache=my_cache, ignore_args=[0])
-        ... async def get_user(self, user_id: str) -> dict:
-        ...     return await self._db.query(user_id)
-    """
-    _ignore = set(ignore_args or [])
+By default cachebox hashes positional args. For complex or unhashable arguments, pass a `key_maker`:
 
-    def decorator(func: Callable[P, T]) -> Callable[P, T]:
-        _lock: Lock | None = None
+```python
+from cachebox import make_hash_key, make_typed_key
 
-        @functools.wraps(func)
-        async def wrapper(*args: Any, **kwargs: Any) -> Any:
-            nonlocal _lock
-            if _lock is None:
-                _lock = Lock()
-            filtered_args = tuple(v for i, v in enumerate(args) if i not in _ignore)
-            key = cache_key64((filtered_args, tuple(sorted(kwargs.items()))))
-            async with _lock:
-                if key in cache:
-                    return cache[key]
-                result = await func(*args, **kwargs)
-                cache[key] = result
-            return result
+@cachebox.cached(get_data_cache, key_maker=make_hash_key)
+async def get_data(filters: Mapping[str, Any]) -> Sequence[Any]:
+    """Retrieve filtered data with caching."""
+    ...
+```
 
-        return wrapper
+Use `make_typed_key` when `1` and `True` must resolve to different cache entries.
 
-    return decorator
+#### Cache algorithms
+
+| Class        | Eviction            | Use when                              |
+| ------------ | ------------------- | ------------------------------------- |
+| `TTLCache`   | Time-based (global) | All cases with expiry — **default**   |
+| `VTTLCache`  | Time-based (per-entry) | Entries need different TTLs        |
+| `LRUCache`   | Least-recently-used | No expiry, bounded memory             |
+| `LFUCache`   | Least-frequently-used | Frequency-weighted retention        |
+| `FIFOCache`  | First-in-first-out  | Simple bounded queue                  |
+
+#### Cache bypass
+
+Skip the cache for a single call without invalidating it:
+
+```python
+result = get_configuration("my-config", cachebox__ignore=True)
+```
+
+#### Frozen (read-only) caches
+
+Wrap a pre-populated cache to prevent further writes at runtime:
+
+```python
+from cachebox import Frozen, LRUCache
+
+lookup_cache: LRUCache = LRUCache(maxsize=256)
+# ... populate lookup_cache at startup ...
+lookup = Frozen(lookup_cache)
 ```
