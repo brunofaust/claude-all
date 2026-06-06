@@ -81,7 +81,6 @@ def record_install(kind: str, name: str, target_path: Path | None) -> None:
 @dataclass
 class Item:
     kind: str  # agents | skills | plugins | mcps | tools | hooks | instructions
-    category: str  # coding
     subcategory: str  # aws | python | ...
     name: str
     src: Path  # source path (file for agents, SKILL.md for skills, plugin.json for plugins)
@@ -113,7 +112,6 @@ def discover(filters: list[str]) -> list[Item]:
             items.append(
                 Item(
                     kind="agents",
-                    category="coding",
                     subcategory=parts[1],
                     name=name,
                     src=p,
@@ -130,7 +128,6 @@ def discover(filters: list[str]) -> list[Item]:
             items.append(
                 Item(
                     kind="skills",
-                    category="coding",
                     subcategory=parts[1],
                     name=parts[2],
                     src=p,
@@ -145,7 +142,6 @@ def discover(filters: list[str]) -> list[Item]:
             items.append(
                 Item(
                     kind="plugins",
-                    category="coding",
                     subcategory="marketplace",
                     name=parts[1],
                     src=p,
@@ -160,7 +156,6 @@ def discover(filters: list[str]) -> list[Item]:
             items.append(
                 Item(
                     kind="mcps",
-                    category="coding",
                     subcategory="stdio",
                     name=parts[1],
                     src=p,
@@ -180,7 +175,6 @@ def discover(filters: list[str]) -> list[Item]:
             items.append(
                 Item(
                     kind="tools",
-                    category="coding",
                     subcategory=subcategory,
                     name=parts[1],
                     src=p,
@@ -199,7 +193,6 @@ def discover(filters: list[str]) -> list[Item]:
             items.append(
                 Item(
                     kind="instructions",
-                    category="coding",
                     subcategory="instructions",
                     name=parts[1],
                     src=p,
@@ -219,7 +212,6 @@ def discover(filters: list[str]) -> list[Item]:
                 items.append(
                     Item(
                         kind="hooks",
-                        category="coding",
                         subcategory="hooks",
                         name=name,
                         src=py,
