@@ -101,7 +101,7 @@ Wrap a pre-populated cache to prevent further writes at runtime:
 ```python
 from cachebox import Frozen, LRUCache
 
-_lookup: LRUCache = LRUCache(maxsize=256)
-# ... populate _lookup at startup ...
-lookup = Frozen(_lookup)
+lookup_cache: LRUCache = LRUCache(maxsize=256)
+# ... populate lookup_cache at startup ...
+lookup = Frozen(lookup_cache)
 ```
