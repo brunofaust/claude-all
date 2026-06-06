@@ -66,9 +66,7 @@ def apply_frontmatter(skill_md: Path, inject: dict[str, Any]) -> bool:
     except ValueError:
         return False
     existing = {ln.split(":", 1)[0].strip() for ln in lines[1:close] if ":" in ln}
-    additions = [
-        f"{key}: {yaml_scalar(val)}" for key, val in inject.items() if key not in existing
-    ]
+    additions = [f"{key}: {yaml_scalar(val)}" for key, val in inject.items() if key not in existing]
     if not additions:
         return False
     new_lines = [*lines[:close], *additions, *lines[close:]]
