@@ -73,13 +73,12 @@ from collections.abc import Mapping, Sequence
 from typing import Any, Literal, overload
 
 # 2. Third-party
+import cachebox
 import orjson
 import polars as pl
-from cachetools import TTLCache
 
 # 3. Local
 from app import CACHE_1_HOURS
-from app.core.cache import cached_async
 ```
 
 Rules: parenthesised imports for large groups, `TYPE_CHECKING` for type-only imports, **never** wildcard imports, **use** `from __future__ import annotations` for deferred, zero-cost annotations (PEP 563) on the 3.11–3.13 baseline — it becomes redundant once the project is on 3.14+ (PEP 649 makes annotations lazy by default). **Never alias an import to a `_`-prefixed name** (e.g. `import orjson as _orjson`) — module-level names never start with `_` (that's what `__all__` is for, see Visibility rule), and an alias must *mean something* (disambiguation, convention like `import polars as pl`), not act as a visibility hack. If you're aliasing to hide a name, you want `__all__` instead.
@@ -117,7 +116,7 @@ Multiple exceptions in one except: `except (ValueError, TypeError):` (parenthesi
 | Event loop           | **uvloop**      | default asyncio loop          |
 | Hashing (non-crypto) | **xxhash**      | hashlib                       |
 | AWS SDK              | **aiobotocore** | sync `boto3` in async code    |
-| Caching              | **cachetools**  | `functools.lru_cache`         |
+| Caching              | **cachebox**    | `functools.lru_cache`         |
 | Logging              | **structlog**   | stdlib logging with f-strings |
 | Dependencies         | **uv**          | pip                           |
 
