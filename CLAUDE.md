@@ -38,11 +38,27 @@ prek run --all-files
 1. Optionally add a `claude_md.md` snippet — flat: `<name>.claude_md.md` beside the
    `.md`; folder: `<name>/claude_md.md` beside `agent.md`
 1. Run `./claude-all install <name> --level user` to activate
+1. **Update `README.md`** — add a row to the relevant agent table (§ 1.x)
 
 **Skill:**
 
 1. Create `skills/<category>/<name>/SKILL.md`
 1. Run `./claude-all install <name> --level user` to activate
+1. **Update `README.md`** — add a row to the relevant skill table (§ 2.x)
+
+## Before raising a PR
+
+Always update **`README.md`** to reflect any additions or changes:
+
+- New agent → row in the correct § 1.x table
+- New skill → row in the correct § 2.x table
+- New hook → row in § 3
+- New plugin → row in § 4
+- New MCP → row in § 5
+- New tool → row in § 6 "Installed tools" table
+- Changed schema / installer behaviour → update the relevant schema block in § 4–6
+
+The README is the single source of truth for what's in the repo. A PR without a README update is incomplete.
 
 ## Naming conventions — always use generic placeholders
 
