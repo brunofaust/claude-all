@@ -2,7 +2,7 @@
 
 When writing or editing Python (`*.py`) files, follow the `brunofaust-python-style` skill:
 
-- Python 3.14+ syntax: pipe unions (`str | None`), `match` statements, `asyncio.TaskGroup`, `exception.add_note()`.
+- Python 3.11+ syntax: pipe unions (`str | None`), `match` statements, `asyncio.TaskGroup`, `exception.add_note()`, `ExceptionGroup` / `except*`. Keep `from __future__ import annotations` on the 3.11–3.13 baseline (deferred annotations, PEP 563).
 - Strict type hints — `TypedDict` for structured dicts, `Literal` for constrained values, `@overload` for polymorphism. Enforced with mypy (strict) + Ruff.
 - Structured logging via `structlog`.
 - Settings singleton (Pydantic) — don't sprinkle `os.getenv()` calls across modules.

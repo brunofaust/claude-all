@@ -34,12 +34,13 @@ def main() -> int:
     flag = os.path.join(tempfile.gettempdir(), f"claude-all-brunofaust-py-{session_id}.flag")
     if os.path.exists(flag):
         return 0  # already reminded this session
+    # best-effort flag write: if the FS is unwritable, skip the once-per-session dedup
     with contextlib.suppress(OSError), open(flag, "w", encoding="utf-8") as f:
         f.write(file_path)
 
     print(
         "Reminder (brunofaust-python-style, first Python edit this session): "
-        "Python 3.14+ syntax (pipe unions, match, asyncio.TaskGroup, exception.add_note); "
+        "Python 3.11+ syntax (pipe unions, match, asyncio.TaskGroup, exception.add_note); "
         "strict type hints (TypedDict, Literal, @overload); "
         "structured logging via structlog; "
         "settings singleton (Pydantic) — don't sprinkle os.getenv across code; "

@@ -60,14 +60,15 @@ except ValueError as e:
     logger.error("Invalid input", error=str(e))
     raise BadRequestError(str(e))
 
-# Pattern 4b: Multiple exceptions without parentheses (PEP 758, Python 3.14+)
-# Python 3.14 allows bare tuple syntax — no parentheses needed.
+# Pattern 4b: Multiple exceptions in one handler (parenthesised tuple)
+# On the 3.11–3.13 baseline use a parenthesised tuple. PEP 758's paren-less
+# form (`except ConnectionError, TimeoutError as e:`) is 3.14+ only.
 try:
     process()
-except ConnectionError, TimeoutError as e:
+except (ConnectionError, TimeoutError) as e:
     logger.warning("Transient failure, will retry", error=str(e))
     raise
-except ValueError, TypeError as e:
+except (ValueError, TypeError) as e:
     logger.error("Invalid input", error=str(e))
     raise BadRequestError(str(e))
 

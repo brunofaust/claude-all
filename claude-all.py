@@ -33,6 +33,9 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
+__all__ = ["main"]
+
+
 REPO_ROOT = Path(__file__).resolve().parent
 USER_CLAUDE_DIR = Path.home() / ".claude"
 STATE_DIR = Path.home() / ".claude-all"
@@ -78,7 +81,6 @@ def record_install(kind: str, name: str, target_path: Path | None) -> None:
 @dataclass
 class Item:
     kind: str  # agents | skills | plugins | mcps | tools | hooks | instructions
-    category: str  # coding
     subcategory: str  # aws | python | ...
     name: str
     src: Path  # source path (file for agents, SKILL.md for skills, plugin.json for plugins)
@@ -110,7 +112,6 @@ def discover(filters: list[str]) -> list[Item]:
             items.append(
                 Item(
                     kind="agents",
-                    category="coding",
                     subcategory=parts[1],
                     name=name,
                     src=p,
@@ -127,7 +128,6 @@ def discover(filters: list[str]) -> list[Item]:
             items.append(
                 Item(
                     kind="skills",
-                    category="coding",
                     subcategory=parts[1],
                     name=parts[2],
                     src=p,
@@ -142,7 +142,6 @@ def discover(filters: list[str]) -> list[Item]:
             items.append(
                 Item(
                     kind="plugins",
-                    category="coding",
                     subcategory="marketplace",
                     name=parts[1],
                     src=p,
@@ -157,7 +156,6 @@ def discover(filters: list[str]) -> list[Item]:
             items.append(
                 Item(
                     kind="mcps",
-                    category="coding",
                     subcategory="stdio",
                     name=parts[1],
                     src=p,
@@ -177,7 +175,6 @@ def discover(filters: list[str]) -> list[Item]:
             items.append(
                 Item(
                     kind="tools",
-                    category="coding",
                     subcategory=subcategory,
                     name=parts[1],
                     src=p,
@@ -196,7 +193,6 @@ def discover(filters: list[str]) -> list[Item]:
             items.append(
                 Item(
                     kind="instructions",
-                    category="coding",
                     subcategory="instructions",
                     name=parts[1],
                     src=p,
@@ -216,7 +212,6 @@ def discover(filters: list[str]) -> list[Item]:
                 items.append(
                     Item(
                         kind="hooks",
-                        category="coding",
                         subcategory="hooks",
                         name=name,
                         src=py,
@@ -246,7 +241,7 @@ def annotate_installed(items: list[Item]) -> None:
 # ---------------------- install ----------------------
 
 
-def _run_post_install_step(name: str, pip_package: str | None, step: object) -> None:
+def run_post_install_step(name: str, pip_package: str | None, step: object) -> None:
     """Execute one post_install step.
 
     A step is either a typed dict or a legacy bare argv list (kept for
@@ -366,7 +361,7 @@ def install_plugin(item: Item) -> str:
 
     # Post-install hooks (typed steps; legacy argv lists still accepted)
     for step in meta.get("post_install") or []:
-        _run_post_install_step(item.name, meta.get("package"), step)
+        run_post_install_step(item.name, meta.get("package"), step)
 
     msg = meta.get("post_install_message")
     if msg:
@@ -377,7 +372,7 @@ def install_plugin(item: Item) -> str:
     return result_msg
 
 
-def _keychain_subst(value: str) -> str:
+def keychain_subst(value: str) -> str:
     """Return a shell command substitution for a keychain ref, else the literal value."""
     if isinstance(value, str) and value.startswith("keychain:"):
         service = value[len("keychain:") :]
@@ -387,7 +382,7 @@ def _keychain_subst(value: str) -> str:
     return value
 
 
-def _shell_quote(s: str) -> str:
+def shell_quote(s: str) -> str:
     """POSIX shell single-quote a literal. Preserves any inner $(...) only when not wrapped here.
 
     Args:
@@ -436,23 +431,23 @@ def install_mcp(item: Item, level: str) -> str:
         # secrets in keychain only.
         env_inline_parts = []
         for k, v in raw_env.items():
-            substituted = _keychain_subst(v) if isinstance(v, str) else str(v)
+            substituted = keychain_subst(v) if isinstance(v, str) else str(v)
             # If it's a keychain subst we keep $(...) unquoted (must expand in shell).
             # If literal value, single-quote it.
             if isinstance(v, str) and v.startswith("keychain:"):
                 env_inline_parts.append(f"{k}={substituted}")
             else:
-                env_inline_parts.append(f"{k}={_shell_quote(str(v))}")
+                env_inline_parts.append(f"{k}={shell_quote(str(v))}")
 
         # Build the exec'd command + args. Single-quote literals; leave keychain
         # subst unquoted so the shell evaluates $(...).
-        exec_parts = [_shell_quote(command)]
+        exec_parts = [shell_quote(command)]
         for a in raw_args:
             if isinstance(a, str) and a.startswith("keychain:"):
                 # Wrap the subst in double quotes so spaces in the secret are safe as one arg.
-                exec_parts.append(f'"{_keychain_subst(a)}"')
+                exec_parts.append(f'"{keychain_subst(a)}"')
             else:
-                exec_parts.append(_shell_quote(str(a)))
+                exec_parts.append(shell_quote(str(a)))
 
         shell_line = (
             " ".join(env_inline_parts)
@@ -539,7 +534,7 @@ def install_tool(item: Item) -> str:
 
         # Post-install hooks (typed steps; legacy argv lists still accepted; e.g. `rtk init -g`)
         for step in meta.get("post_install") or []:
-            _run_post_install_step(item.name, meta.get("package"), step)
+            run_post_install_step(item.name, meta.get("package"), step)
 
         record_install(item.kind, item.name, None)
 
@@ -555,7 +550,7 @@ def install_tool(item: Item) -> str:
 # ---------------------- hook injection ----------------------
 
 
-def _hook_files(item: Item) -> tuple[Path, Path] | None:
+def hook_files(item: Item) -> tuple[Path, Path] | None:
     """Return (hook.json, hook.py) paths if both exist next to the resource.
 
     Args:
@@ -576,13 +571,13 @@ def _hook_files(item: Item) -> tuple[Path, Path] | None:
     return None
 
 
-def _settings_path(level: str) -> Path:
+def settings_path(level: str) -> Path:
     if level == "user":
         return Path.home() / ".claude" / "settings.json"
     return Path.cwd() / ".claude" / "settings.json"
 
 
-def _hook_symlink_dest(level: str, item: Item) -> Path:
+def hook_symlink_dest(level: str, item: Item) -> Path:
     if level == "user":
         base = Path.home() / ".claude" / "hooks"
     else:
@@ -599,7 +594,7 @@ def inject_hook(item: Item, level: str) -> str | None:
         item: The resource item whose hook files to install.
         level: Installation scope — ``'user'`` or ``'project'``.
     """
-    files = _hook_files(item)
+    files = hook_files(item)
     if files is None:
         return None
     json_path, py_path = files
@@ -614,7 +609,7 @@ def inject_hook(item: Item, level: str) -> str | None:
     timeout = int(hook_meta.get("timeout", 2000))
 
     # Symlink hook script
-    dest = _hook_symlink_dest(level, item)
+    dest = hook_symlink_dest(level, item)
     dest.parent.mkdir(parents=True, exist_ok=True)
     if dest.is_symlink() or dest.exists():
         dest.unlink()
@@ -627,7 +622,7 @@ def inject_hook(item: Item, level: str) -> str | None:
     py_path.chmod(mode | 0o111)
 
     # Merge into settings.json
-    settings_file = _settings_path(level)
+    settings_file = settings_path(level)
     settings_file.parent.mkdir(parents=True, exist_ok=True)
     if settings_file.exists():
         try:
@@ -673,8 +668,8 @@ def remove_hook(item: Item, level: str) -> str | None:
         item: The resource item whose hook to remove.
         level: Installation scope — ``'user'`` or ``'project'``.
     """
-    dest = _hook_symlink_dest(level, item)
-    settings_file = _settings_path(level)
+    dest = hook_symlink_dest(level, item)
+    settings_file = settings_path(level)
 
     removed_any = False
 
@@ -709,7 +704,7 @@ def remove_hook(item: Item, level: str) -> str | None:
 # ---------------------- CLAUDE.md injection ----------------------
 
 
-def _claude_md_snippet_path(item: Item) -> Path | None:
+def claude_md_snippet_path(item: Item) -> Path | None:
     """Return path to the optional ``claude_md.md`` snippet next to the resource.
 
     For agents (single-file): same dir as the agent .md, named ``<agent>.claude_md.md``.
@@ -727,13 +722,13 @@ def _claude_md_snippet_path(item: Item) -> Path | None:
     return candidate if candidate.exists() else None
 
 
-def _claude_md_target(level: str) -> Path:
+def claude_md_target(level: str) -> Path:
     if level == "user":
         return Path.home() / ".claude" / "CLAUDE.md"
     return Path.cwd() / "CLAUDE.md"
 
 
-def _snippet_tags(item: Item) -> tuple[str, str]:
+def snippet_tags(item: Item) -> tuple[str, str]:
     key = f"{item.kind}/{item.name}"
     return (
         f"<!-- claude-all:{key}:start -->",
@@ -751,14 +746,14 @@ def inject_claude_md(item: Item, level: str) -> str | None:
         item: The resource item whose claude_md snippet to inject.
         level: Target CLAUDE.md scope — ``'user'`` or ``'project'``.
     """
-    snippet_path = _claude_md_snippet_path(item)
+    snippet_path = claude_md_snippet_path(item)
     if snippet_path is None:
         return None
 
-    target = _claude_md_target(level)
+    target = claude_md_target(level)
     target.parent.mkdir(parents=True, exist_ok=True)
 
-    start_tag, end_tag = _snippet_tags(item)
+    start_tag, end_tag = snippet_tags(item)
     snippet_body = snippet_path.read_text().rstrip()
     block = f"\n{start_tag}\n{snippet_body}\n{end_tag}\n"
 
@@ -785,10 +780,10 @@ def remove_claude_md(item: Item, level: str) -> str | None:
         item: The resource item whose tagged block to remove.
         level: Target CLAUDE.md scope — ``'user'`` or ``'project'``.
     """
-    target = _claude_md_target(level)
+    target = claude_md_target(level)
     if not target.exists():
         return None
-    start_tag, end_tag = _snippet_tags(item)
+    start_tag, end_tag = snippet_tags(item)
     text = target.read_text()
     if start_tag not in text or end_tag not in text:
         return None
@@ -798,7 +793,7 @@ def remove_claude_md(item: Item, level: str) -> str | None:
     return f"CLAUDE.md stripped ({target})"
 
 
-def _command_hook_basename(cmd: str) -> str:
+def command_hook_basename(cmd: str) -> str:
     """Best-effort basename of the script a hook command runs (for dedup).
 
     Handles `"/abs/x.py"`, `$VAR/.claude/hooks/x.py`, and `python3 /abs/x.py`.
@@ -846,7 +841,7 @@ def install_standalone_hook(item: Item, level: str) -> str:
     cmd_str = str(dest)
     target_basename = f"{item.name}.py"
 
-    settings_file = _settings_path(level)
+    settings_file = settings_path(level)
     settings_file.parent.mkdir(parents=True, exist_ok=True)
     settings: dict = {}
     if settings_file.exists():
@@ -862,7 +857,7 @@ def install_standalone_hook(item: Item, level: str) -> str:
             block["hooks"] = [
                 h
                 for h in block.get("hooks", [])
-                if _command_hook_basename(h.get("command", "")) != target_basename
+                if command_hook_basename(h.get("command", "")) != target_basename
             ]
         settings["hooks"][ev] = [b for b in blocks if b.get("hooks")]
         if not settings["hooks"][ev]:
@@ -891,7 +886,7 @@ def install_item(item: Item, target_root: Path) -> str:
     if item.kind == "instructions":
         # Snippet-only resource: inject the tagged block, nothing to symlink.
         md = inject_claude_md(item, level)
-        record_install(item.kind, item.name, _claude_md_target(level))
+        record_install(item.kind, item.name, claude_md_target(level))
         return md or f"instructions/{item.name}: no snippet found"
 
     if item.kind == "plugins":
@@ -1141,6 +1136,8 @@ def draw(stdscr, state: TuiState):
         attr = curses.A_REVERSE if is_cursor else curses.A_NORMAL
         if it.selected and not is_cursor:
             attr |= curses.A_BOLD
+        # curses.addstr raises curses.error when writing to the last cell / past
+        # the screen edge; ignore — the clipped row is cosmetic, not an error.
         with contextlib.suppress(curses.error):
             stdscr.addstr(row, 0, label[:w].ljust(min(w, len(label[:w]))), attr)
         row += 1
@@ -1156,6 +1153,8 @@ def draw(stdscr, state: TuiState):
         f" selected {sel}/{total}  │  installed {inst}/{total}"
         f"  │  shown {shown}/{total}  │{scroll_info}"
     )
+    # Writing the footer to the bottom-right cell raises curses.error; ignore —
+    # it's the standard curses idiom for the last visible cell.
     with contextlib.suppress(curses.error):
         stdscr.addstr(h - 1, 0, footer[:w].ljust(w), curses.A_REVERSE)
 
@@ -1168,7 +1167,7 @@ TUI_UPDATE = "update"
 TUI_QUIT = "quit"
 
 
-def _tui_select_loop(stdscr, items: list[Item]) -> str:
+def tui_select_loop(stdscr, items: list[Item]) -> str:
     """Curses event loop for `tui_select` (run inside `curses.wrapper`).
 
     Returns TUI_INSTALL, TUI_UPDATE, or TUI_QUIT.
@@ -1241,7 +1240,7 @@ def tui_select(items: list[Item]) -> str:
     Args:
         items: All available items to display in the selection UI.
     """
-    return curses.wrapper(_tui_select_loop, items)
+    return curses.wrapper(tui_select_loop, items)
 
 
 def choose_level_tui() -> str | None:

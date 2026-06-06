@@ -10,7 +10,7 @@ for Ruff, mypy, and project metadata.
 ```toml
 [tool.ruff]
 line-length = 120
-target-version = "py314"
+target-version = "py311"
 
 [tool.ruff.lint]
 select = [
@@ -35,7 +35,7 @@ indent-style = "space"
 known-first-party = ["app"]
 
 [tool.mypy]
-python_version = "3.14"
+python_version = "3.11"
 strict = true
 warn_return_any = true
 warn_unused_ignores = true

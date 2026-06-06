@@ -57,6 +57,9 @@ import json
 import re
 import sys
 
+__all__ = ["main"]
+
+
 # `rm -rf <dir>` of these is routine cleanup — never block it.
 SAFE_RM_DIRS: frozenset[str] = frozenset(
     [
@@ -150,7 +153,7 @@ WARN_PATTERNS: list[tuple[re.Pattern[str], str]] = [
 ]
 
 
-def _rm_rf_targets_are_safe(command: str) -> bool:
+def rm_rf_targets_are_safe(command: str) -> bool:
     """True if every `rm -rf` target is a known build/cache dir (routine cleanup).
 
     Args:
@@ -191,7 +194,7 @@ def main() -> int:
         return 0  # explicit, auditable override
 
     # Allow routine `rm -rf <build-dir>` even though it matches a block/warn pattern.
-    rm_is_safe = ("rm " in command) and _rm_rf_targets_are_safe(command)
+    rm_is_safe = ("rm " in command) and rm_rf_targets_are_safe(command)
 
     for pattern, reason in BLOCK_PATTERNS:
         if pattern.search(command):
