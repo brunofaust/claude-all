@@ -1,6 +1,9 @@
-______________________________________________________________________
-
-## title: Initialize App Once, Not Per Mount impact: LOW-MEDIUM impactDescription: avoids duplicate init in development tags: initialization, useEffect, app-startup, side-effects
+---
+title: Initialize App Once, Not Per Mount
+impact: LOW-MEDIUM
+impactDescription: avoids duplicate init in development
+tags: initialization, useEffect, app-startup, side-effects
+---
 
 ## Initialize App Once, Not Per Mount
 

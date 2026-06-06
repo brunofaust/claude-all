@@ -1,6 +1,9 @@
-______________________________________________________________________
-
-## title: Defer State Reads to Usage Point impact: MEDIUM impactDescription: avoids unnecessary subscriptions tags: rerender, searchParams, localStorage, optimization
+---
+title: Defer State Reads to Usage Point
+impact: MEDIUM
+impactDescription: avoids unnecessary subscriptions
+tags: rerender, searchParams, localStorage, optimization
+---
 
 ## Defer State Reads to Usage Point
 

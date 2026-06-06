@@ -460,7 +460,7 @@ Supported languages: English, Portuguese, Spanish, French, German, Japanese, Ita
 
 | Language | Common AI tells |
 |----------|----------------|
-| :brazil: Portuguese | "Adicionalmente", "destaca-se", "fomentar", "paisagem" (abstract), "No mundo actual" |
+| :brazil: Portuguese | "Adicionalmente", "destaca-se", "fomentar", "paisagem" (abstract), "No mundo atual" |
 | :es: Spanish | "Adicionalmente", "panorama", "destacar", "fomentar", "En el mundo actual" |
 | :fr: French | "De plus", "mettre en lumiere", "au coeur de", "Dans le monde d'aujourd'hui" |
 | :de: German | "Daruber hinaus", "entscheidend", "Landschaft" (abstract), stacked subordinate clauses |

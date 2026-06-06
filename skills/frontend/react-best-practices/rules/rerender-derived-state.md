@@ -1,6 +1,9 @@
-______________________________________________________________________
-
-## title: Subscribe to Derived State impact: MEDIUM impactDescription: reduces re-render frequency tags: rerender, derived-state, media-query, optimization
+---
+title: Subscribe to Derived State
+impact: MEDIUM
+impactDescription: reduces re-render frequency
+tags: rerender, derived-state, media-query, optimization
+---
 
 ## Subscribe to Derived State
 

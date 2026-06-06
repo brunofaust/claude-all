@@ -34,11 +34,11 @@ stands/serves as, is a testament/reminder, a vital/significant/crucial/pivotal/k
 **Cross-language triggers:**
 | Language | Equivalents |
 |----------|------------|
-| Portuguese | "marcando um memento crucial", "servindo como um testemunho", "papel fundamental", "destaca a importância" |
+| Portuguese | "marcando um momento crucial", "servindo como um testemunho", "papel fundamental", "destaca a importância" |
 | Spanish | "representando un hito fundamental", "papel crucial/clave", "subraya la importancia" |
 | French | "marquant un tournant décisif", "témoignage de", "rôle crucial/clé" |
 | German | "markiert einen Wendepunkt", "Zeugnis für", "unterstreicht die Bedeutung" |
-| Italian | "segnando un memento cruciale", "testimonianza di", "ruolo fondamentale" |
+| Italian | "segnando un momento cruciale", "testimonianza di", "ruolo fondamentale" |
 | Japanese | "における画期的な", "重要な役割を果たす", "の重要性を浮き彫りにする" |
 
 ---
@@ -431,7 +431,7 @@ In today's world, In today's rapidly evolving, In the modern era, In an increasi
 **Cross-language triggers:**
 | Language | Equivalents |
 |----------|------------|
-| Portuguese | "No mundo actual", "Na era moderna", "Em um cenário em constante evolução" |
+| Portuguese | "No mundo atual", "Na era moderna", "Em um cenário em constante evolução" |
 | Spanish | "En el mundo actual", "En la era moderna", "En un panorama en constante cambio" |
 | French | "Dans le monde d'aujourd'hui", "À l'ère du numérique" |
 | German | "In der heutigen Welt", "Im Zeitalter der Digitalisierung" |
@@ -567,7 +567,7 @@ The classic AI invitation to the reader. Real writers don't announce they're abo
 - **PT:** "Vamos explorar", "Vamos mergulhar", "Sem mais delongas"
 - **ES:** "Vamos a explorar", "Sin más preámbulos", "Profundicemos"
 - **FR:** "Plongeons dans le sujet", "Explorons ensemble"
-- **DE:** "Tauchen wir in", "Schauen wir uns das genauer an"
+- **DE:** "Tauchen wir ein", "Schauen wir uns das genauer an"
 
 ---
 
@@ -595,8 +595,8 @@ Universal pattern — AI in all languages over-relies on bullet formatting.
 **Language-specific triggers:**
 - **PT:** Listas com "•" ou "-" onde um parágrafo faria mais sentido
 - **ES:** Viñetas con oraciones completas que funcionarían mejor como prosa
-- **FR:** Listed à puces pour des idées qui coulent naturellement en paragraphe
-- **DE:** Aufzählungen mit ganzen Sätzen, die also Fließtext besser wären
+- **FR:** Listes à puces pour des idées qui coulent naturellement en paragraphe
+- **DE:** Aufzählungen mit ganzen Sätzen, die als Fließtext besser wären
 - **JA:** 箇条書きの多用（文章で書いた方が自然な場合）
 
 ---

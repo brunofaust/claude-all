@@ -1,6 +1,9 @@
-______________________________________________________________________
-
-## title: Narrow Effect Dependencies impact: LOW impactDescription: minimizes effect re-runs tags: rerender, useEffect, dependencies, optimization
+---
+title: Narrow Effect Dependencies
+impact: LOW
+impactDescription: minimizes effect re-runs
+tags: rerender, useEffect, dependencies, optimization
+---
 
 ## Narrow Effect Dependencies
 

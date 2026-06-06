@@ -1,6 +1,9 @@
-______________________________________________________________________
-
-## title: Defer Non-Critical Work with requestIdleCallback impact: MEDIUM impactDescription: keeps UI responsive during background tasks tags: javascript, performance, idle, scheduling, analytics
+---
+title: Defer Non-Critical Work with requestIdleCallback
+impact: MEDIUM
+impactDescription: keeps UI responsive during background tasks
+tags: javascript, performance, idle, scheduling, analytics
+---
 
 ## Defer Non-Critical Work with requestIdleCallback
 

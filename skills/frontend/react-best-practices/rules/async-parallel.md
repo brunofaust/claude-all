@@ -1,6 +1,9 @@
-______________________________________________________________________
-
-## title: Promise.all() for Independent Operations impact: CRITICAL impactDescription: 2-10× improvement tags: async, parallelization, promises, waterfalls
+---
+title: Promise.all() for Independent Operations
+impact: CRITICAL
+impactDescription: 2-10× improvement
+tags: async, parallelization, promises, waterfalls
+---
 
 ## Promise.all() for Independent Operations
 

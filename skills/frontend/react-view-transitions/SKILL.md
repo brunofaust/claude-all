@@ -1,7 +1,6 @@
 ---
 name: vercel-react-view-transitions
-description: >-
-  Guide for implementing smooth, native-feeling animations using React's View Transition API (`<ViewTransition>` component, `addTransitionType`, and CSS view transition pseudo-elements). Use this skill whenever the user wants to add page transitions, animate route changes, create shared element animations, animate enter/exit of components, animate list reorder, implement directional (forward/back) navigation animations, or integrate view transitions in Next.js. Also use when the user mentions view transitions, `startViewTransition`, `ViewTransition`, transition types, or asks about animating between UI states in React without third-party animation libraries.
+description: Guide for implementing smooth, native-feeling animations using React's View Transition API (`<ViewTransition>` component, `addTransitionType`, and CSS view transition pseudo-elements). Use this skill whenever the user wants to add page transitions, animate route changes, create shared element animations, animate enter/exit of components, animate list reorder, implement directional (forward/back) navigation animations, or integrate view transitions in Next.js. Also use when the user mentions view transitions, `startViewTransition`, `ViewTransition`, transition types, or asks about animating between UI states in React without third-party animation libraries.
 license: MIT
 metadata:
   author: vercel
@@ -18,28 +17,28 @@ Every `<ViewTransition>` should communicate a spatial relationship or continuity
 
 Implement **all** applicable patterns from this list, in this order:
 
-| Priority | Pattern                            | What it communicates             |
-| -------- | ---------------------------------- | -------------------------------- |
-| 1        | **Shared element** (`name`)        | "Same thing — going deeper"      |
-| 2        | **Suspense reveal**                | "Data loaded"                    |
-| 3        | **List identity** (per-item `key`) | "Same items, new arrangement"    |
-| 4        | **State change** (`enter`/`exit`)  | "Something appeared/disappeared" |
-| 5        | **Route change** (layout-level)    | "Going to a new place"           |
+| Priority | Pattern | What it communicates |
+|----------|---------|---------------------|
+| 1 | **Shared element** (`name`) | "Same thing — going deeper" |
+| 2 | **Suspense reveal** | "Data loaded" |
+| 3 | **List identity** (per-item `key`) | "Same items, new arrangement" |
+| 4 | **State change** (`enter`/`exit`) | "Something appeared/disappeared" |
+| 5 | **Route change** (layout-level) | "Going to a new place" |
 
 This is an implementation order, not a "pick one" list. Implement every pattern that fits the app. Only skip a pattern if the app has no use case for it.
 
 ### Choosing Animation Style
 
-| Context                                 | Animation                                          | Why                          |
-| --------------------------------------- | -------------------------------------------------- | ---------------------------- |
-| Hierarchical navigation (list → detail) | Type-keyed `nav-forward` / `nav-back`              | Communicates spatial depth   |
-| Lateral navigation (tab-to-tab)         | Bare `<ViewTransition>` (fade) or `default="none"` | No depth to communicate      |
-| Suspense reveal                         | `enter`/`exit` string props                        | Content arriving             |
-| Revalidation / background refresh       | `default="none"`                                   | Silent — no animation needed |
+| Context | Animation | Why |
+|---------|-----------|-----|
+| Hierarchical navigation (list → detail) | Type-keyed `nav-forward` / `nav-back` | Communicates spatial depth |
+| Lateral navigation (tab-to-tab) | Bare `<ViewTransition>` (fade) or `default="none"` | No depth to communicate |
+| Suspense reveal | `enter`/`exit` string props | Content arriving |
+| Revalidation / background refresh | `default="none"` | Silent — no animation needed |
 
 Reserve directional slides for hierarchical navigation (list → detail) and ordered sequences (prev/next photo, carousel, paginated results). For ordered sequences, the direction communicates position: "next" slides from right, "previous" from left. Lateral/unordered navigation (tab-to-tab) should not use directional slides — it falsely implies spatial depth.
 
-______________________________________________________________________
+---
 
 ## Availability
 
@@ -47,13 +46,13 @@ ______________________________________________________________________
 - **Without Next.js:** Install `react@canary react-dom@canary` (`ViewTransition` is not in stable React).
 - Browser support: Chromium 111+, Firefox 144+, Safari 18.2+. Graceful degradation on unsupported browsers.
 
-______________________________________________________________________
+---
 
 ## Implementation Workflow
 
 When adding view transitions to an existing app, **follow `references/implementation.md` step by step.** Start with the audit — do not skip it. Copy the CSS recipes from `references/css-recipes.md` into the global stylesheet — do not write your own animation CSS.
 
-______________________________________________________________________
+---
 
 ## Core Concepts
 
@@ -71,12 +70,12 @@ React auto-assigns a unique `view-transition-name` and calls `document.startView
 
 ### Animation Triggers
 
-| Trigger    | When it fires                                                                                     |
-| ---------- | ------------------------------------------------------------------------------------------------- |
-| **enter**  | `<ViewTransition>` first inserted during a Transition                                             |
-| **exit**   | `<ViewTransition>` first removed during a Transition                                              |
+| Trigger | When it fires |
+|---------|--------------|
+| **enter** | `<ViewTransition>` first inserted during a Transition |
+| **exit** | `<ViewTransition>` first removed during a Transition |
 | **update** | DOM mutations inside a `<ViewTransition>`. With nested VTs, mutation applies to the innermost one |
-| **share**  | Named VT unmounts and another with same `name` mounts in the same Transition                      |
+| **share** | Named VT unmounts and another with same `name` mounts in the same Transition |
 
 Only `startTransition`, `useDeferredValue`, or `Suspense` activate VTs. Regular `setState` does not animate.
 
@@ -98,7 +97,7 @@ Only `startTransition`, `useDeferredValue`, or `Suspense` activate VTs. Regular 
 </div>
 ```
 
-______________________________________________________________________
+---
 
 ## Styling with View Transition Classes
 
@@ -121,7 +120,7 @@ If `default` is `"none"`, all triggers are off unless explicitly listed.
 
 See `references/css-recipes.md` for ready-to-use animation recipes.
 
-______________________________________________________________________
+---
 
 ## Transition Types
 
@@ -184,7 +183,7 @@ export function DirectionalTransition({ children }: { children: React.ReactNode 
 
 Types are available during navigation but **not** during subsequent Suspense reveals (separate transitions, no type). Use type maps for page-level enter/exit; use simple string props for Suspense reveals.
 
-______________________________________________________________________
+---
 
 ## Shared Element Transitions
 
@@ -205,7 +204,7 @@ Same `name` on two VTs — one unmounting, one mounting — creates a shared ele
 - `share` takes precedence over `enter`/`exit`. Think through each navigation path: when no matching pair forms (e.g., the target page doesn't have the same name), `enter`/`exit` fires instead. Consider whether the element needs a fallback animation for those paths.
 - Never use a fade-out exit on pages with shared morphs — use a directional slide instead.
 
-______________________________________________________________________
+---
 
 ## Common Patterns
 
@@ -259,7 +258,6 @@ The outer VT handles list reorder/enter animations. The inner VT handles the cro
 ### Suspense Fallback to Content
 
 Simple cross-fade:
-
 ```jsx
 <ViewTransition>
   <Suspense fallback={<Skeleton />}><Content /></Suspense>
@@ -267,7 +265,6 @@ Simple cross-fade:
 ```
 
 Directional reveal:
-
 ```jsx
 <Suspense fallback={<ViewTransition exit="slide-down"><Skeleton /></ViewTransition>}>
   <ViewTransition enter="slide-up" default="none"><Content /></ViewTransition>
@@ -276,7 +273,7 @@ Directional reveal:
 
 For more patterns, see `references/patterns.md`.
 
-______________________________________________________________________
+---
 
 ## How Multiple VTs Interact
 
@@ -297,19 +294,19 @@ They coexist because they fire at different moments. `default="none"` on both pr
 
 When a parent VT exits, nested VTs inside it do **not** fire their own enter/exit — only the outermost VT animates. Per-item staggered animations during page navigation are not possible today. See [react#36135](https://github.com/facebook/react/pull/36135) for an experimental opt-in fix.
 
-______________________________________________________________________
+---
 
 ## Next.js Integration
 
 For Next.js setup (`experimental.viewTransition` flag, `transitionTypes` prop on `next/link`, App Router patterns, Server Components), see `references/nextjs.md`.
 
-______________________________________________________________________
+---
 
 ## Accessibility
 
 Always add the reduced motion CSS from `references/css-recipes.md` to your global stylesheet.
 
-______________________________________________________________________
+---
 
 ## Reference Files
 

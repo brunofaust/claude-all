@@ -1,6 +1,9 @@
-______________________________________________________________________
-
-## title: Rule Title Here impact: MEDIUM impactDescription: brief description of impact tags: composition, components
+---
+title: Rule Title Here
+impact: MEDIUM
+impactDescription: brief description of impact
+tags: composition, components
+---
 
 ## Rule Title Here
 

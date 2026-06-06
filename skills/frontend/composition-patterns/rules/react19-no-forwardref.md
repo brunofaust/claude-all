@@ -1,6 +1,9 @@
-______________________________________________________________________
-
-## title: React 19 API Changes impact: MEDIUM impactDescription: cleaner component definitions and context usage tags: react19, refs, context, hooks
+---
+title: React 19 API Changes
+impact: MEDIUM
+impactDescription: cleaner component definitions and context usage
+tags: react19, refs, context, hooks
+---
 
 ## React 19 API Changes
 
