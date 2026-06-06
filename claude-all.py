@@ -1141,6 +1141,8 @@ def draw(stdscr, state: TuiState):
         attr = curses.A_REVERSE if is_cursor else curses.A_NORMAL
         if it.selected and not is_cursor:
             attr |= curses.A_BOLD
+        # curses.addstr raises curses.error when writing to the last cell / past
+        # the screen edge; ignore — the clipped row is cosmetic, not an error.
         with contextlib.suppress(curses.error):
             stdscr.addstr(row, 0, label[:w].ljust(min(w, len(label[:w]))), attr)
         row += 1
@@ -1156,6 +1158,8 @@ def draw(stdscr, state: TuiState):
         f" selected {sel}/{total}  │  installed {inst}/{total}"
         f"  │  shown {shown}/{total}  │{scroll_info}"
     )
+    # Writing the footer to the bottom-right cell raises curses.error; ignore —
+    # it's the standard curses idiom for the last visible cell.
     with contextlib.suppress(curses.error):
         stdscr.addstr(h - 1, 0, footer[:w].ljust(w), curses.A_REVERSE)
 

@@ -387,7 +387,10 @@ class thread:
 | Pure Python computation (< 1ms)        | No — overhead not worth it   |
 | `await client.get_object(...)`         | No — already async           |
 
-#### InterpreterPoolExecutor (Python 3.14+)
+#### InterpreterPoolExecutor (Python 3.14+ — not on the 3.11 baseline)
+
+> Not available on the 3.11–3.13 baseline; use `run_in_thread()` /
+> `ProcessPoolExecutor` until the project is on 3.14+. Documented here for that move.
 
 Python 3.14 introduced `concurrent.futures.InterpreterPoolExecutor` via PEP 734.
 Subinterpreters provide true parallelism (each has its own GIL) with lower

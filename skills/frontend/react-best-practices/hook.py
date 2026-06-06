@@ -28,6 +28,7 @@ def main() -> int:
     flag = os.path.join(tempfile.gettempdir(), f"claude-all-react-best-{session_id}.flag")
     if os.path.exists(flag):
         return 0
+    # best-effort flag write: if the FS is unwritable, skip the once-per-session dedup
     with contextlib.suppress(OSError), open(flag, "w", encoding="utf-8") as f:
         f.write(file_path)
 

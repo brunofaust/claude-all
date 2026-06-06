@@ -1,7 +1,7 @@
 ---
 name: brunofaust-python-style
 description: >-
-  Modern Python 3.14+ coding standards for async-first, type-safe production code. Use when: writing async Python code, building CDC pipelines, implementing data transformations, adding type hints, setting up pytest fixtures, designing dataclasses, reviewing code for Python best practices, optimizing async patterns, or creating data engineering features. Enforce for all Python coding tasks: new features, refactoring, bug fixes, type safety reviews, async/await patterns, structured logging, datalake silver/gold layer transformations.
+  Modern Python 3.11+ coding standards for async-first, type-safe production code. Use when: writing async Python code, building CDC pipelines, implementing data transformations, adding type hints, setting up pytest fixtures, designing dataclasses, reviewing code for Python best practices, optimizing async patterns, or creating data engineering features. Enforce for all Python coding tasks: new features, refactoring, bug fixes, type safety reviews, async/await patterns, structured logging, datalake silver/gold layer transformations.
 disable-model-invocation: false
 user-invocable: true
 ---
@@ -14,7 +14,7 @@ Production-grade async Python. Async-first, strict types, immutable parameter ty
 
 ## Core principles
 
-1. **Python 3.14+** — pipe unions (`str | None`), `match` statements, `asyncio.TaskGroup`, `exception.add_note()`.
+1. **Python 3.11+** — pipe unions (`str | None`), `match` statements, `asyncio.TaskGroup`, `exception.add_note()`, `ExceptionGroup` / `except*`.
 1. **Async everything** — custom functions are `async def`. Exceptions: `__init__`, `__iter__`, `__enter__`, other stdlib sync dunder methods.
 1. **Immutable parameter types** — `Mapping`/`Sequence` from `collections.abc`, not `dict`/`list`. Required for cached function inputs/outputs.
 1. **Type safety first** — full type hints, `TypedDict`, `Literal`, `@overload`. Enforced via mypy (strict) + Ruff.
@@ -82,11 +82,11 @@ from app import CACHE_1_HOURS
 from app.core.cache import cached_async
 ```
 
-Rules: parenthesised imports for large groups, `TYPE_CHECKING` for type-only imports, **never** wildcard imports, **never** `from __future__ import annotations` (deprecated in 3.14 per PEP 649). **Never alias an import to a `_`-prefixed name** (e.g. `import orjson as _orjson`) — module-level names never start with `_` (that's what `__all__` is for, see Visibility rule), and an alias must *mean something* (disambiguation, convention like `import polars as pl`), not act as a visibility hack. If you're aliasing to hide a name, you want `__all__` instead.
+Rules: parenthesised imports for large groups, `TYPE_CHECKING` for type-only imports, **never** wildcard imports, **use** `from __future__ import annotations` for deferred, zero-cost annotations (PEP 563) on the 3.11–3.13 baseline — it becomes redundant once the project is on 3.14+ (PEP 649 makes annotations lazy by default). **Never alias an import to a `_`-prefixed name** (e.g. `import orjson as _orjson`) — module-level names never start with `_` (that's what `__all__` is for, see Visibility rule), and an alias must *mean something* (disambiguation, convention like `import polars as pl`), not act as a visibility hack. If you're aliasing to hide a name, you want `__all__` instead.
 
 Full TYPE_CHECKING semantics + Protocol typing + generics → `references/type-hints.md`.
 
-## Modern Python idioms (3.14+)
+## Modern Python idioms (3.11+)
 
 ```python
 # Dict merging
@@ -106,7 +106,7 @@ logging.info(f"Loaded df: {round(df.estimated_size('mb'), 2)} MB")
 lf = df.lazy().filter(pl.col("active").eq(True)).select(["id", "name"])
 ```
 
-Multi-exception in one except (PEP 758, 3.14+): `except ValueError, TypeError:` — no parens needed. See `references/error-handling.md`.
+Multiple exceptions in one except: `except (ValueError, TypeError):` (parenthesised tuple). PEP 758's paren-less form (`except ValueError, TypeError:`) is 3.14+ only. See `references/error-handling.md`.
 
 ## Preferred libraries
 
@@ -189,7 +189,7 @@ Section headers for long files:
 - ❌ Business logic inside `lambda_handler` — sync handler is one line: `return uvloop.run(main(event))`, all logic in `async def main()`.
 - ❌ Wildcard imports.
 - ❌ Global mutable state → pass context objects.
-- ❌ `from __future__ import annotations` — deprecated post-PEP 649.
+- ❌ Dropping `from __future__ import annotations` on the 3.11–3.13 baseline — keep it for deferred annotations (PEP 563); it's only redundant on 3.14+ (PEP 649).
 - ❌ Committing secrets / API keys.
 
 ### Architecture

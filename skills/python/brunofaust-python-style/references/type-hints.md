@@ -73,11 +73,11 @@ if TYPE_CHECKING:
 else:
     from botocore.client import BaseClient as S3Client
 
-# NOTE: With Python 3.14 (PEP 649), annotations are evaluated lazily.
-# This means TYPE_CHECKING is NO LONGER needed for:
-#   - Forward references (class A referencing class B defined later)
-#   - Circular imports used only in annotations
-# TYPE_CHECKING is STILL needed for:
+# NOTE: On the 3.11–3.13 baseline, add `from __future__ import annotations`
+# (PEP 563) so annotations are stored as strings and evaluated lazily — this
+# lets forward references and TYPE_CHECKING-only imports work with zero runtime
+# cost. (On 3.14+, PEP 649 makes annotations lazy by default and the
+# future-import becomes redundant.) TYPE_CHECKING is STILL needed regardless for:
 #   - Runtime type swapping (as above — different type for static vs. runtime)
 #   - Imports that have heavy side effects you want to avoid at runtime
 ```
@@ -162,19 +162,28 @@ async def process_batch(
         ...
 ```
 
-#### Generic Functions and Classes (PEP 695)
+#### Generic Functions and Classes
 
-Python 3.12+ introduced inline type parameter syntax. Prefer the new syntax
-for application code — it's cleaner and avoids repeating the variable name.
+On the 3.11 baseline, declare type parameters with `TypeVar` / `ParamSpec` and
+`Generic[...]`. PEP 695's inline syntax (`def first[T]()`, `class Stack[T]`) is
+**3.12+** — adopt it once the project moves to 3.12+; it's cleaner and avoids
+repeating the variable name.
 
 ```python
-# Preferred — PEP 695 inline syntax (Python 3.12+)
-def first[T](items: Sequence[T]) -> T:
+# Baseline (3.11) — explicit TypeVar / ParamSpec
+from collections.abc import Sequence
+from typing import Generic, ParamSpec, TypeVar
+
+T = TypeVar("T")
+P = ParamSpec("P")
+
+
+def first(items: Sequence[T]) -> T:
     """Return the first item from a sequence."""
     return items[0]
 
 
-class Stack[T]:
+class Stack(Generic[T]):
     """A generic stack."""
 
     def __init__(self) -> None:
@@ -189,18 +198,25 @@ class Stack[T]:
         return self._items.pop()
 
 
-# With bounds and constraints
+# With bounds and constraints — constrained TypeVar
+Serializable = TypeVar("Serializable", str, bytes)
+
+
+def serialize(value: Serializable) -> Serializable:
+    """Serialize a value constrained to str or bytes."""
+    ...
+```
+
+```python
+# 3.12+ upgrade — PEP 695 inline syntax (same semantics, less boilerplate)
+def first[T](items: Sequence[T]) -> T:
+    """Return the first item from a sequence."""
+    return items[0]
+
+
 def serialize[T: (str, bytes)](value: T) -> T:
     """Serialize a value constrained to str or bytes."""
     ...
-
-
-# Old style — still acceptable in utility/decorator code where
-# TypeVar or ParamSpec must be reused across multiple functions
-from typing import TypeVar, ParamSpec
-
-P = ParamSpec("P")
-T = TypeVar("T")
 ```
 
 #### Naming for Types
