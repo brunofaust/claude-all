@@ -229,7 +229,7 @@ All agents follow the same pattern: a detailed `description` so Claude Code's au
 | `code-quality`        | haiku-4-5  | Runs all available quality gates (prek, pre-commit, ruff, mypy, pytest, eslint, prettier, tsc, vitest). Reports failures only. Never auto-fixes.                                                                                                                                                                                                                                                                                                                                                                                                     |
 | `lint-fixer`          | sonnet-4-6 | FIXES quality-gate findings (ruff, mypy, eslint, tsc, codecongruence). Clears the mechanical tier with `ruff --fix`/`ruff format`, then fixes judgment findings (types, complexity, semantic dedup) at the ROOT CAUSE — no `# type: ignore`/`# noqa`/config-loosening/`--no-verify`. Verifies with the gate + tests after each category. Pairs with `code-quality` (finds) + `test-runner` (confirms).                                                                                                                                               |
 | `git-committer`       | haiku-4-5  | Stages changes, generates a Conventional Commits message, commits to current branch (optionally pushes). Never branches, merges, or rebases.                                                                                                                                                                                                                                                                                                                                                                                                         |
-| `git-runner`          | haiku-4-5  | Read-only git inspection (log, diff, status, blame, show, branch, stash list). Returns tight summaries — author/file counts, not raw multi-page output. Prefers `rtk` wrapper if installed. Refuses any write/destructive git command.                                                                                                                                                                                                                                                                                                               |
+| `git-runner`          | haiku-4-5  | Read-only git inspection (log, diff, status, blame, show, branch, stash list). Returns tight summaries — author/file counts, not raw multi-page output. Uses `lean-ctx` or `rtk` wrapper if installed. Refuses any write/destructive git command.                                                                                                                                                                                                                                                                                                               |
 | `log-filter`          | haiku-4-5  | Filters, summarizes, formats raw logs from any source (structlog JSON, CloudWatch output, stdout). Works on logs already in hand.                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | `docs-updater`        | sonnet-4-6 | Updates README, CLAUDE.md, ARCHITECTURE.md, CHANGELOG.md after code changes. Detects which doc needs the update; proposes diffs.                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | `docker-runner`       | haiku-4-5  | Executes docker / docker compose commands (build, run, exec, logs, ps, compose up/down/restart/logs). Returns concise summary — image tag/size for builds, container state for ps, error chain for failures. Refuses destructive ops (rm/rmi/volume rm/prune/push/down -v) without explicit confirmation.                                                                                                                                                                                                                                            |
@@ -451,14 +451,22 @@ Schema:
 
 ```json
 {
-  "name": "rtk",
-  "github": "...",
+  "name": "mytool",
+  "github": "https://github.com/org/mytool",
   "type": "brew",
-  "package": "rtk",
-  "tap": "rtk-ai/rtk",
-  "post_install": [["rtk", "init", "-g"]],
-  "post_install_message": "..."
+  "tap": "org/mytool",
+  "package": "mytool",
+  "post_install": [
+    {"type": "bash", "command": ["mytool", "init", "--global"]}
+  ],
+  "post_install_message": "Restart your shell so the hook activates."
 }
+```
+
+A tool may also ship a `config_append.toml` companion — a TOML fragment appended to the tool's own config file during install. Reference it from a `post_install` bash step:
+
+```json
+{"type": "bash", "command": ["sh", "-c", "cat tools/mytool/config_append.toml >> \"$HOME/.config/mytool/config.toml\""]}
 ```
 
 Installer:
@@ -466,14 +474,15 @@ Installer:
 - Checks `brew` on PATH (errors with `https://brew.sh/` link if missing)
 - `brew tap <tap>` (only if not already tapped)
 - `brew install <package>` (skipped if already installed)
-- Runs each `post_install` command (e.g. `rtk init -g`)
+- Runs each `post_install` step in order
 - Injects optional `claude_md.md` into `~/.claude/CLAUDE.md` or `./CLAUDE.md` (per `--user` / `--project`)
 
-Installed tools:
+Installed tools (pick one — they are alternatives, not complementary):
 
-| Tool  | Source                                      | Install path                       | Purpose                                                                                                                                                                                                                                               |
-| ----- | ------------------------------------------- | ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `rtk` | [rtk-ai/rtk](https://github.com/rtk-ai/rtk) | `brew install rtk` + `rtk init -g` | Rust Token Killer — wraps `git`, `grep`, `cat`, `find`, `ls`, `aws`, `make`, `terraform`, `pytest`, `gh`, `npm`, `eslint`, `playwright`, `psql`, `wc` to cut output token cost 60-90%. Ships `rtk discover --all --since 30` to find missed adoption. |
+| Tool       | Source                                                    | Install                                                       | Purpose                                                                                                                                                                                                                                                                          |
+| ---------- | --------------------------------------------------------- | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `rtk`      | [rtk-ai/rtk](https://github.com/rtk-ai/rtk)               | `brew install rtk` + `rtk init -g`                            | Rust Token Killer — explicit prefix model (`rtk git log`, `rtk aws …`). Wraps `git`, `grep`, `cat`, `find`, `ls`, `aws`, `make`, `terraform`, `pytest`, `gh`, `npm`, `eslint`, `playwright`, `psql`, `wc` to cut output token cost 60-90%.                                      |
+| `lean-ctx` | [yvgude/lean-ctx](https://github.com/yvgude/lean-ctx)     | `brew tap yvgude/lean-ctx` + `brew install lean-ctx` + `lean-ctx onboard` | Context Engineering Layer — auto-compresses shell output via hooks (no prefix needed), exposes 69 MCP tools (`ctx_read`, `ctx_search`, `ctx_shell`, …) in 10 read modes, archives large tool results. Check savings with `lean-ctx gain`. |
 
 ## Model strategy
 

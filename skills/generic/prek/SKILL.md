@@ -502,6 +502,39 @@ hooks = [
 #   }
 # ]
 
+# ── Optional: JS/TS dead code (knip) ─────────────────────────────────────────
+# Knip finds unused exports, files, and dependencies in JS/TS projects.
+# No official pre-commit hook exists — integrate as a local `system` hook.
+# Requires knip installed in the project (e.g. `npm add -D knip` or `pnpm add -D knip`).
+#
+# ⚠️  Runs at `pre-push` (NOT `pre-commit`) — knip must traverse the full
+# dependency graph and cannot operate on staged files only; too slow per-commit.
+#
+# Config: use `knip.json` or `knip.jsonc` at the repo root.
+# Avoids creating `knip.config.ts` or adding a `"knip"` key to `package.json`.
+#
+# [[repos]]
+# repo = "local"
+# hooks = [
+#   {
+#     id = "knip",
+#     name = "⚛️ JS/TS · Dead code / unused exports (knip)",
+#     entry = "npx knip --no-progress --production --cache",
+#     language = "system",
+#     pass_filenames = false,
+#     files = ".*\\.(ts|tsx|js|jsx|mts|cts|mjs|cjs)$",
+#     stages = ["pre-push"]
+#   }
+# ]
+#
+# Minimal knip.json (use instead of knip.config.ts or package.json "knip" key):
+# {
+#   "entry": ["src/index.ts"],
+#   "project": ["src/**/*.ts"],
+#   "ignore": ["**/*.test.ts", "scripts/**"],
+#   "ignoreDependencies": ["some-runtime-dep-knip-cannot-detect"]
+# }
+
 # ── Optional: Local project hooks ────────────────────────────────────────────
 # `language = "system"` hooks shell out to a project script (which resolves the
 # venv, runs frontend tooling, etc.). Use them for checks no upstream hook covers.
@@ -699,6 +732,7 @@ Trade-offs to plan for:
 | `bandit` | fix the risk | `# nosec B101` (scoped) · `[tool.bandit] skips = ["B101"]` (e.g. assert_used in tests) | `[tool.bandit] exclude_dirs` |
 | `interrogate` | add the docstring | `[tool.interrogate]` `ignore-init-method` / `ignore-magic` / `fail-under` | `[tool.interrogate] exclude = [...]` |
 | `vulture` | delete dead code | used-dynamically → add to `vulture_whitelist.py` | hook `exclude` glob |
+| `knip` | delete the dead export/file/dependency | `ignoreExportsUsedInFile = true` · add to `ignoreDependencies` in `knip.json` for runtime-detected deps | `ignore` patterns in `knip.json` (generated files, test fixtures) |
 | `markdownlint` | fix the markdown | `--disable MD013` (rule) · `<!-- markdownlint-disable MD033 -->` inline | `--config pyproject.toml` exclusions |
 | `mdformat` | let it auto-format | (it's a formatter — no per-finding allowlist) | hook `exclude` glob (generated docs) |
 | `pyupgrade` | let it auto-rewrite | — | per-file `exclude` glob (generated models / SDK base needing old syntax) |
