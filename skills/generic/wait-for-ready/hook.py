@@ -24,19 +24,22 @@ import os
 import re
 import sys
 
+__all__ = ["main"]
+
+
 # Long fixed sleeps (seconds) are worth flagging on their own.
 SLEEP_THRESHOLD_SECONDS = 5.0
 
-_SLEEP_RE = re.compile(r"\bsleep\s+(\d+(?:\.\d+)?)")
+SLEEP_RE = re.compile(r"\bsleep\s+(\d+(?:\.\d+)?)")
 # Readiness probes that, when paired with any sleep, indicate a poll-by-delay loop.
-_PROBE_RE = re.compile(
+PROBE_RE = re.compile(
     r"\b(curl|wget|nc\s+-z|pg_isready|psql|redis-cli\s+ping|grpc_health_probe|"
     r"docker\s+(inspect|ps)[^\n]*health|wait-for-it|healthcheck|until\b|while\b)",
     re.IGNORECASE,
 )
 
 
-def _nudge(message: str) -> int:
+def nudge(message: str) -> int:
     """Emit a non-error reminder into Claude's context, then allow the tool."""
     json.dump(
         {"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": message}},
@@ -61,11 +64,11 @@ def main() -> int:
     if not command:
         return 0
 
-    sleeps = [float(m) for m in _SLEEP_RE.findall(command)]
+    sleeps = [float(m) for m in SLEEP_RE.findall(command)]
     if not sleeps:
         return 0
 
-    has_probe = bool(_PROBE_RE.search(command))
+    has_probe = bool(PROBE_RE.search(command))
     long_sleep = any(s >= SLEEP_THRESHOLD_SECONDS for s in sleeps)
     if not (has_probe or long_sleep):
         return 0  # short, standalone sleep — fine
@@ -74,7 +77,7 @@ def main() -> int:
         reason = "a fixed `sleep` paired with a readiness probe (poll-by-delay)"
     else:
         reason = f"a blocking `sleep {max(sleeps):g}` in the main session"
-    return _nudge(
+    return nudge(
         f"[wait-for-ready] Detected {reason}. Fixed-delay waits stall the session and are flaky "
         "(too short → probe fails; too long → wasted wait). Use the `wait-for-ready` skill to poll "
         "the URL/container until it is actually healthy (with a timeout + interval) instead of a "

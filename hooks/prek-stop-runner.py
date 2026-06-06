@@ -31,6 +31,9 @@ import sys
 import tempfile
 from pathlib import Path
 
+__all__ = ["main"]
+
+
 # Stages run at end-of-turn. Order matters for output ordering only; both run.
 # `pre-commit` is the default + most common stage.
 # `pre-push` catches heavier hooks (mypy, import-linter, tsc) that opt out of
@@ -64,7 +67,7 @@ def find_project_root(file_path: str) -> Path | None:
 COMMIT_CEREMONY_HOOKS: tuple[str, ...] = ("no-commit-to-branch",)
 
 
-def _run_prek_stage(root: Path, files: list[str], stage: str) -> subprocess.CompletedProcess[str]:
+def run_prek_stage(root: Path, files: list[str], stage: str) -> subprocess.CompletedProcess[str]:
     """Run prek for a single hook stage and return the CompletedProcess.
 
     Commit-ceremony hooks (see ``COMMIT_CEREMONY_HOOKS``) are skipped via the ``SKIP``
@@ -91,7 +94,7 @@ def _run_prek_stage(root: Path, files: list[str], stage: str) -> subprocess.Comp
     )
 
 
-def _is_real_failure(combined: str) -> bool:
+def is_real_failure(combined: str) -> bool:
     """Return True if the prek output contains real failures.
 
     Filters out the `check-added-large-files` exit 128 (prek 0.4.1 bug in
@@ -160,12 +163,12 @@ def main() -> int:
     exit_code = 0
     for root, root_files in roots.items():
         for stage in STAGES:
-            result = _run_prek_stage(root, root_files, stage)
+            result = run_prek_stage(root, root_files, stage)
             if result.returncode == 0:
                 continue
 
             combined = result.stdout + result.stderr
-            if not _is_real_failure(combined):
+            if not is_real_failure(combined):
                 continue
 
             print(

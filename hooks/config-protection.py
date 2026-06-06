@@ -24,8 +24,10 @@ from __future__ import annotations
 import json
 import sys
 
+__all__ = ["main"]
 
-def _remind(message: str) -> int:
+
+def remind(message: str) -> int:
     """Emit a non-error reminder into Claude's context, then allow the tool.
 
     Prints PreToolUse JSON to stdout (exit 0) so the message appears as a system
@@ -94,14 +96,14 @@ def main() -> int:
     if ("/.claude/hooks/" in file_path) or (
         in_claude and filename in {"settings.json", "settings.local.json"}
     ):
-        return _remind(
+        return remind(
             f"[config-protection] STOP — `{filename}` is a Claude Code hook/settings file "
             "(the safety/quality gate). Do NOT edit, disable, or rewire it without explicit user "
             "confirmation. Surface the request to the user and wait for their yes before retrying."
         )
 
     if filename in CONFIRM_REQUIRED:
-        return _remind(
+        return remind(
             f"[config-protection] STOP — do not edit `{filename}` without user confirmation. "
             f"Ask: 'Do you want me to modify {filename}? "
             "This is a linter/hook config.' "
@@ -109,7 +111,7 @@ def main() -> int:
         )
 
     if filename in WARNED:
-        return _remind(
+        return remind(
             f"[config-protection] Warning: editing `{filename}`. "
             "If you're fixing a lint error, fix the CODE instead of loosening the config rule. "
             "Proceed only if this is a legitimate project-metadata or dependency change."
