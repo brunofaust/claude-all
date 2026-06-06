@@ -1,0 +1,88 @@
+{
+  "_comment": "Registry of resources vendored (copied) from third-party repos. Drives scripts/vendor_sync.py and documents provenance/attribution. See the vendored-sources skill. Keep vendored files byte-identical to upstream; put local additions in local_only so the sync preserves them.",
+  "vendored": [
+    {
+      "id": "humanink",
+      "kind": "skill",
+      "path": "skills/generic/humanink",
+      "vendor_mode": "files",
+      "source": {
+        "repo": "https://github.com/sirambrosio/humanink",
+        "ref": "main",
+        "path": "."
+      },
+      "license": "MIT",
+      "author": "Andre Ambrósio (sirambrosio)",
+      "files": ["SKILL.md", "PATTERNS.md", "STYLEGUIDE.md", "README.md", "LICENSE"],
+      "local_only": ["ATTRIBUTION.md"],
+      "frontmatter_inject": {
+        "disable-model-invocation": false,
+        "user-invocable": true
+      },
+      "last_synced": { "date": "2026-06-05", "commit": null }
+    },
+    {
+      "id": "vercel-react-best-practices",
+      "kind": "skill",
+      "path": "skills/frontend/react-best-practices",
+      "vendor_mode": "dir",
+      "source": {
+        "repo": "https://github.com/vercel-labs/agent-skills",
+        "ref": "main",
+        "path": "skills/react-best-practices"
+      },
+      "license": "MIT",
+      "author": "Vercel",
+      "local_only": ["ATTRIBUTION.md", "claude_md.md", "hook.py", "hook.json"],
+      "frontmatter_inject": {},
+      "last_synced": { "date": "2026-06-06", "commit": null }
+    },
+    {
+      "id": "vercel-composition-patterns",
+      "kind": "skill",
+      "path": "skills/frontend/composition-patterns",
+      "vendor_mode": "dir",
+      "source": {
+        "repo": "https://github.com/vercel-labs/agent-skills",
+        "ref": "main",
+        "path": "skills/composition-patterns"
+      },
+      "license": "MIT",
+      "author": "Vercel",
+      "local_only": ["ATTRIBUTION.md", "claude_md.md", "hook.py", "hook.json"],
+      "frontmatter_inject": {},
+      "last_synced": { "date": "2026-06-06", "commit": null }
+    },
+    {
+      "id": "vercel-react-view-transitions",
+      "kind": "skill",
+      "path": "skills/frontend/react-view-transitions",
+      "vendor_mode": "dir",
+      "source": {
+        "repo": "https://github.com/vercel-labs/agent-skills",
+        "ref": "main",
+        "path": "skills/react-view-transitions"
+      },
+      "license": "MIT",
+      "author": "Vercel",
+      "local_only": ["ATTRIBUTION.md", "claude_md.md", "hook.py", "hook.json"],
+      "frontmatter_inject": {},
+      "last_synced": { "date": "2026-06-06", "commit": null }
+    },
+    {
+      "id": "web-design-guidelines",
+      "kind": "skill",
+      "path": "skills/frontend/web-design-guidelines",
+      "vendor_mode": "reference",
+      "source": {
+        "repo": "https://github.com/vercel-labs/web-interface-guidelines",
+        "ref": "main",
+        "path": "command.md"
+      },
+      "license": "MIT",
+      "author": "Vercel Labs",
+      "notes": "Local wrapper skill that fetches upstream guidelines live at runtime — nothing vendored, so the sync script skips it (always latest).",
+      "last_synced": { "date": null, "commit": null }
+    }
+  ]
+}

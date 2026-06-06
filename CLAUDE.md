@@ -96,6 +96,18 @@ allowed in `prek.toml` because that file is functional config, not documentation
 But their names must not appear in skill documentation examples — use
 `myorg/myhook` as the placeholder in SKILL.md files.
 
+## Vendored (third-party) resources
+
+Some skills/agents are copied from upstream repos (e.g. Vercel `agent-skills`, `humanink`). They are
+tracked in `vendored.json` (repo root) and refreshed with `python scripts/vendor_sync.py`. Rules (full
+detail in the `vendored-sources` skill):
+
+- Keep vendored files **byte-identical to upstream** — local additions go in `local_only` sidecars
+  (`ATTRIBUTION.md`, `claude_md.md`, `hook.*`); the only in-file change is `frontmatter_inject`.
+- Every vendored dir has an **`ATTRIBUTION.md`**; vendor the upstream **`LICENSE` verbatim** if it has
+  one. Never fabricate a copyright notice. Only vendor permissive licenses (MIT/Apache/BSD/ISC).
+- Add a `vendored.json` entry for anything imported so it's attributed and updatable.
+
 ## Agent error reporting — verbatim by default
 
 Agents exist to absorb large output so the main session stays clean. But when
