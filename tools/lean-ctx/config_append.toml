@@ -1,0 +1,54 @@
+
+# ─── Hook redirect exclusions ────────────────────────────────────────────────
+# Prevent lean-ctx from intercepting style/hook config files
+redirect_exclude = [
+    ".claude/**",
+    "CLAUDE.md",
+    "*.toml",
+    ".pre-commit-config.yaml",
+]
+
+# ─── Memory subsystem ────────────────────────────────────────────────────────
+[memory.knowledge]
+max_facts    = 400    # double the default — many projects in rotation
+max_patterns = 100    # more Python/AWS patterns to retain
+
+[memory.episodic]
+max_episodes = 1000   # more session history across projects
+
+[memory.lifecycle]
+stale_days           = 60     # keep facts longer across project switches
+decay_rate           = 0.005  # slower decay — you context-switch between projects
+similarity_threshold = 0.85
+
+# ─── Tool result archive (zero-loss compression) ─────────────────────────────
+[archive]
+enabled         = true
+threshold_chars = 4096
+max_age_hours   = 72    # keep archives 3 days
+max_disk_mb     = 1000  # generous disk budget
+
+# ─── Autonomy (background optimizations) ─────────────────────────────────────
+[autonomy]
+enabled                   = true
+auto_preload              = true   # pre-cache imported files after ctx_read
+auto_dedup                = true
+auto_related              = true   # suggest related files via import graph
+auto_consolidate          = true
+silent_preload            = true   # no noise in tool output
+dedup_threshold           = 8
+consolidate_every_calls   = 25
+consolidate_cooldown_secs = 120
+
+# ─── Secret detection custom patterns ────────────────────────────────────────
+[secret_detection]
+enabled         = true
+redact          = true
+custom_patterns = [
+    "AKIA[0-9A-Z]{16}",      # AWS Access Key
+    "sk-[a-zA-Z0-9]{48}",    # OpenAI / Anthropic keys
+]
+
+# ─── Cloud telemetry — off ───────────────────────────────────────────────────
+[cloud]
+contribute_enabled = false
