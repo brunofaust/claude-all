@@ -7,24 +7,9 @@
   "post_install": [
     {"type": "bash", "command": ["lean-ctx", "onboard"]},
     {"type": "bash", "command": ["lean-ctx", "config", "init"]},
-    {"type": "bash", "command": ["lean-ctx", "config", "set", "compression_level", "standard"]},
-    {"type": "bash", "command": ["lean-ctx", "config", "set", "profile", "coder"]},
-    {"type": "bash", "command": ["lean-ctx", "config", "set", "shell_activation", "agents-only"]},
-    {"type": "bash", "command": ["lean-ctx", "config", "set", "memory_profile", "performance"]},
-    {"type": "bash", "command": ["lean-ctx", "config", "set", "bm25_max_cache_mb", "256"]},
-    {"type": "bash", "command": ["lean-ctx", "config", "set", "max_ram_percent", "8"]},
-    {"type": "bash", "command": ["lean-ctx", "config", "set", "memory_cleanup", "shared"]},
-    {"type": "bash", "command": ["lean-ctx", "config", "set", "checkpoint_interval", "10"]},
-    {"type": "bash", "command": ["lean-ctx", "config", "set", "minimal_overhead", "false"]},
-    {"type": "bash", "command": ["lean-ctx", "config", "set", "cloud.contribute_enabled", "false"]},
-    {"type": "bash", "command": ["lean-ctx", "config", "set", "secret_detection.enabled", "true"]},
-    {"type": "bash", "command": ["lean-ctx", "config", "set", "secret_detection.redact", "true"]},
-    {"type": "bash", "command": ["lean-ctx", "config", "set", "rules_scope", "both"]},
-    {"type": "bash", "command": ["lean-ctx", "config", "set", "tee_mode", "failures"]},
-    {"type": "bash", "command": ["lean-ctx", "config", "set", "slow_command_threshold_ms", "3000"]},
-    {"type": "bash", "command": ["sh", "-c", "cat tools/lean-ctx/config_append.toml >> \"$HOME/.config/lean-ctx/config.toml\""]},
+    {"type": "bash", "command": ["python3", "tools/lean-ctx/setup.py"]},
     {"type": "bash", "command": ["lean-ctx", "config", "validate"]}
   ],
   "post_install_message": "lean-ctx installed and configured. Shell hooks active (agents-only). RESTART Claude Code so the MCP tools register. Check savings with `lean-ctx gain`.",
-  "description": "Context Engineering Layer for AI Coding — 69 MCP tools, 10 read modes. Replaces RTK: auto-compresses shell output via hooks (no prefix needed), provides ctx_read/ctx_search/ctx_shell MCP tools for native AI access, and archives large tool results. `lean-ctx onboard` connects to Claude Code, Cursor, VS Code, Codex, and more."
+  "description": "Context Engineering Layer for AI Coding — auto-compresses shell output via hooks (no prefix needed), exposes 69 MCP tools (ctx_read/ctx_search/ctx_shell/…) in 10 read modes, archives large tool results. `lean-ctx onboard` connects to Claude Code, Cursor, VS Code, Codex, and more."
 }
