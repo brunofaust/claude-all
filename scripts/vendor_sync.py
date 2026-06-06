@@ -27,6 +27,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+__all__ = ["main"]
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 REGISTRY = REPO_ROOT / "vendored.json"
 
@@ -65,7 +67,7 @@ def apply_frontmatter(skill_md: Path, inject: dict[str, Any]) -> bool:
         return False
     existing = {ln.split(":", 1)[0].strip() for ln in lines[1:close] if ":" in ln}
     additions = [
-        f"{key}: {_yaml_scalar(val)}" for key, val in inject.items() if key not in existing
+        f"{key}: {yaml_scalar(val)}" for key, val in inject.items() if key not in existing
     ]
     if not additions:
         return False
@@ -74,7 +76,7 @@ def apply_frontmatter(skill_md: Path, inject: dict[str, Any]) -> bool:
     return True
 
 
-def _yaml_scalar(val: Any) -> str:
+def yaml_scalar(val: Any) -> str:
     """Render a Python value as a YAML scalar."""
     if isinstance(val, bool):
         return "true" if val else "false"
