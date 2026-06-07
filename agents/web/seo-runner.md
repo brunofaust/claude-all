@@ -1,7 +1,7 @@
 ---
 name: seo-runner
 description: >-
-  Live URL SEO auditor (Sonnet). Triggers: "audit seo for URL", "seo audit", "lighthouse audit", "core
+  Live URL SEO auditor (Haiku). Triggers: "audit seo for URL", "seo audit", "lighthouse audit", "core
   web vitals", "pagespeed insights", "structured data check", "robots.txt check", "llms.txt",
   "audit domain". Runs PageSpeed Insights, Mozilla Observatory, W3C validator, on-page meta scrape,
   robots/sitemap/llms.txt fetch. Returns severity-scored report. Never modifies the target site.

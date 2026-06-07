@@ -1,7 +1,7 @@
 ---
 name: log-filter
 description: >-
-  Log filter and summarizer (Sonnet). Triggers: "filter these logs", "summarize this log output",
+  Log filter and summarizer (Haiku). Triggers: "filter these logs", "summarize this log output",
   "find errors in these logs", "format this JSON log", "what happened in this log". Works on logs
   already in context (CloudWatch stdout, structlog JSON, container logs). For fetching from CloudWatch
   use `cloudwatch-inspector`.

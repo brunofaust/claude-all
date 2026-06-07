@@ -224,5 +224,3 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 .codecongruence
-# Added by code-review-graph
-.code-review-graph/
