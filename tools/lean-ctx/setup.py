@@ -6,6 +6,7 @@ tomllib, deep-merges our values (ours win on conflict), and writes it
 back. Handles scalar and array types — no third-party deps required.
 """
 
+import json
 import sys
 import tomllib
 from pathlib import Path
@@ -89,9 +90,12 @@ def toml_val(v: object) -> str:
     if isinstance(v, float):
         return str(v)
     if isinstance(v, str):
-        return f'"{v}"'
+        # json.dumps escaping (\" \\ \n \t \uXXXX) is valid TOML basic-string escaping
+        return json.dumps(v)
     if isinstance(v, list):
-        items = "\n".join(f'    "{x}",' if isinstance(x, str) else f"    {x}," for x in v)
+        if any(isinstance(x, (dict, list)) for x in v):
+            raise TypeError("Arrays of tables / nested arrays are not supported")
+        items = "\n".join(f"    {toml_val(x)}," for x in v)
         return f"[\n{items}\n]"
     raise TypeError(f"Unsupported TOML type: {type(v)}")
 
@@ -104,8 +108,9 @@ def serialise(data: dict, prefix: str = "") -> list[str]:
         lines.append(f"{k} = {toml_val(v)}")
     for k, v in tables.items():
         header = f"{prefix}.{k}" if prefix else k
-        # skip empty intermediate section headers (e.g. [memory] when it only has subtables)
-        if any(not isinstance(sv, dict) for sv in v.values()):
+        # skip intermediate section headers (e.g. [memory] when it only has subtables),
+        # but keep genuinely empty tables so the round-trip doesn't drop them
+        if not v or any(not isinstance(sv, dict) for sv in v.values()):
             lines.append(f"\n[{header}]")
         lines.extend(serialise(v, header))
     return lines
@@ -117,7 +122,13 @@ def main() -> None:
     with open(CONFIG, "rb") as f:
         existing = tomllib.load(f)
     merged = deep_merge(existing, DESIRED)
-    CONFIG.write_text("\n".join(serialise(merged)) + "\n")
+    output = "\n".join(serialise(merged)) + "\n"
+    try:
+        # self-check: never overwrite the existing config with invalid TOML
+        tomllib.loads(output)
+    except tomllib.TOMLDecodeError as exc:
+        sys.exit(f"serialised config is not valid TOML — aborting without writing: {exc}")
+    CONFIG.write_text(output)
     print(f"lean-ctx config merged → {CONFIG}")
 
 
