@@ -1,9 +1,4 @@
-## Python module migration — python-module-migration skill
+## Python module migration — `python-module-migration` skill
+Apply when relocating Python modules/packages and repointing imports.
 
-When relocating Python modules / packages and repointing imports (containment refactors, `git mv` + import rewrites, splitting a module into a package), apply the `python-module-migration` skill.
-
-- Use `perl` with a negative-lookbehind (no double-nesting), **not** `sed` substring replace; quote vars + `while IFS= read -r f`; `mkdir -p` the dest dir before `git mv`.
-- `pytest --collect-only` catches broken imports but **not** stale `patch("old.path")` targets — grep + repoint those too. Check for untracked destinations after the move.
-- Verify gate: zero residual references to the old path + `collect-only` green, before committing.
-
-Delegate the mechanical execution to the `python-module-migrator` agent; lock the new layout with import-linter afterward.
+Key rules: use `perl` with negative-lookbehind (not `sed` substring replace); `pytest --collect-only` catches broken imports but NOT stale `patch("old.path")` targets — grep and repoint those too. Gate: zero residual refs + collect-only green before committing. Delegate mechanical execution to `python-module-migrator` agent.

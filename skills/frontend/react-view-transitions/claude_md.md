@@ -1,3 +1,2 @@
-## React animations — vercel-react-view-transitions
-
-When adding page/route transitions, shared-element animations, list reorder animations, or any `<ViewTransition>` / `startViewTransition` / `addTransitionType` work, apply the `vercel-react-view-transitions` skill before introducing a third-party animation library.
+## React animations — `react-view-transitions` skill
+Apply when adding page/route transitions, shared-element animations, list reorder animations, or any `<ViewTransition>`/`startViewTransition` work — before introducing a third-party animation library.

@@ -1,13 +1,10 @@
 ---
 name: debugger
 description: >-
-  Use this agent for root-cause analysis of bugs, errors, failing tests, production incidents, and
-  distributed-system issues. Triggers on "why is this failing", "debug this error", "what's causing
-  this exception", "this test fails intermittently", "trace this issue", "find the root cause", "the
-  pipeline is broken". Forms hypotheses, reads logs/code/configs across multiple services, designs
-  verification steps, and proposes fixes. Use this when the cause is NOT obvious — for clear bugs you
-  can fix yourself, use the main session. For incident response across MULTIPLE services with time
-  correlation, use incident-responder instead. This agent is for diving deep into ONE root cause.
+  Root cause analysis agent (Sonnet). Triggers: "why is this failing", "debug this error", "what's
+  causing this exception", "this test fails intermittently", "find the root cause". Forms hypotheses,
+  reads logs/code/configs across multiple services, designs verification steps, proposes fixes. For
+  cross-service production incidents use `incident-responder`.
 model: claude-sonnet-4-6
 tools:
   - Bash

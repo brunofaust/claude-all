@@ -1,16 +1,10 @@
 ---
 name: python-refactorer
 description: >-
-  Use this agent to REFACTOR Python code to modern, idiomatic, async-first, type-safe patterns
-  following the brunofaust-python-style skill conventions. Triggers on "refactor this Python",
-  "modernize this code", "convert to async", "add type hints", "improve this Python", "make this more
-  pythonic", "apply our style guide", "convert this to PEP 695 generics", "use asyncio.TaskGroup".
-  Reads existing code and produces refactored code with explanations of what changed and why. Applies:
-  PEP 695 generics, asyncio.TaskGroup, structlog patterns, strict typing, async patterns, proper error
-  handling, dataclass/Pydantic best practices. Does NOT auto-apply changes — proposes diffs for
-  review. Use when code WORKS but needs to be improved; for new code generation, just use the main
-  session with the skill active. Do NOT use this for bug fixes (use debugger), tests (use main
-  session), or non-Python languages.
+  Python code modernizer (Sonnet). Triggers: "refactor this Python", "modernize this code", "convert
+  to async", "add type hints", "make this more Pythonic", "apply our style guide". Applies
+  brunofaust-python-style conventions (PEP 695, asyncio.TaskGroup, strict typing). Proposes diffs for
+  review — never auto-applies. For bugs use `debugger`; for new code just use main session.
 model: claude-sonnet-4-6
 tools:
   - Bash

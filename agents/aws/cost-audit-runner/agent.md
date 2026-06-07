@@ -1,25 +1,10 @@
 ---
 name: cost-audit-runner
 description: >-
-  Use this agent to hunt for WASTE across many AWS services in one read-only pass and produce a
-  structured, prioritized cost-reduction report. This is the "where is money leaking" sweep —
-  distinct from `cost-explorer` (which only queries the Cost Explorer API for spend totals/trends).
-  cost-audit-runner fans out read-only describe/list calls across Lambda (old published versions,
-  provisioned concurrency, oversized memory), idle/unattached resources (unassociated EIPs, unused
-  ENIs, detached EBS volumes, idle NAT gateways, idle load balancers), CloudWatch (high-retention or
-  never-read log groups, unused dashboards/alarms), RDS/Aurora (idle instances, over-provisioned,
-  un-deleted manual snapshots), S3 (no-lifecycle buckets, incomplete-multipart cruft), DynamoDB
-  (provisioned tables at low utilization), Secrets Manager (unused/duplicate secrets), Lightsail,
-  Elastic IPs, and NAT-gateway data-processing — then emits per-finding `fix_commands` as NON-EXECUTED
-  strings the user can review and run themselves. Explicit trigger phrases (match any): "audit AWS
-  cost", "where is the money going in <account>", "find AWS waste", "cost optimization sweep", "what
-  can I delete to save money", "idle resources audit", "unused resources in dev/prod", "cost cleanup",
-  "trim the AWS bill", "find orphaned resources", "what's costing money that we don't use". The agent
-  is STRICTLY READ-ONLY — it NEVER runs create/update/delete/put/disable/detach/release, NEVER
-  `get-secret-value`, and NEVER executes the fix_commands it suggests. It surfaces them for the user
-  to run with their own confirmation. Do NOT use for: spend totals / trends / forecast (use
-  `cost-explorer`), actually deleting resources (main session with explicit per-resource confirmation,
-  via the right deployer agent), or anything that mutates state.
+  AWS resource waste hunter (Sonnet). Triggers: "find AWS waste", "audit AWS cost", "idle/orphaned
+  resources", "cost cleanup sweep", "what can I delete to save money". Fans out read-only describe/list
+  calls across Lambda/EC2/CloudWatch/RDS/S3/DynamoDB/Secrets and returns prioritized findings with
+  non-executed `fix_commands`. Strictly read-only — never executes the fixes it suggests.
 model: claude-sonnet-4-6
 tools:
   - Bash

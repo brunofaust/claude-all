@@ -1,13 +1,9 @@
 ---
 name: ecr-manager
 description: >-
-  Use this agent to inspect and manage AWS ECR (Elastic Container Registry) repositories — list repos,
-  list images and tags, check image sizes, find untagged or old images, and prune them (with explicit
-  confirmation). Triggers on "check ECR", "list images in <repo>", "what's the latest tag", "find old
-  ECR images", "prune ECR", "how big is this ECR repo". Read operations run freely; delete operations
-  REQUIRE explicit user confirmation in the prompt (e.g. "delete confirmed", "yes prune"). Use for
-  cost optimization, deployment verification, and repository hygiene. Do NOT use this to push images
-  (that's a CI/CD job) or modify lifecycle policies (Sonnet session).
+  ECR repository inspector and pruner (Haiku). Triggers: "check ECR", "list images in repo", "what's
+  the latest tag", "find old ECR images", "prune ECR", "how big is this ECR repo". Read ops run freely;
+  delete ops require explicit confirmation ("delete confirmed", "yes prune").
 model: claude-haiku-4-5
 tools:
   - Bash

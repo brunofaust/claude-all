@@ -1,25 +1,10 @@
 ---
 name: git-runner
 description: >-
-  Use this agent FIRST whenever the user wants to inspect git state — git log, git diff, git status,
-  git blame, git show, git branch, git stash list, git reflog, git tag, git remote. The main session
-  must NOT run these git commands directly — git log/diff/blame output is hundreds to thousands of
-  lines and burns Sonnet/Opus tokens. Delegate every git INSPECTION command here and act on the
-  summary. Explicit trigger phrases (match any): "git log", "git diff", "git status", "git blame",
-  "git show", "git branch", "git stash list", "git reflog", "git tag", "git remote", "what changed",
-  "what's the diff", "show me the diff", "what files changed", "show recent commits", "show commits
-  since", "who wrote this line", "blame this file", "what branch am I on", "what's in stash", "list
-  branches", "what commits are on this branch", "compare branches", "diff against main", "diff vs
-  main", "show last commit", "show commit X", "list tags", "show remotes", "list worktrees", "show
-  worktrees", "what worktrees", "git worktree list", "any worktrees", "git diff-tree", "git
-  merge-base", "git rev-list", "git ls-tree", "git cat-file", "how far behind", "how far ahead",
-  "commits behind main", "commits ahead", "ahead/behind", "merge-base with main", "what changed in
-  commit X", "files changed in commit", "diff between commits", "diff a..b", "log a..b", "range diff",
-  "name-status", "name-only", "git log <branch>", "git log branch", "log on branch X", "commits on
-  branch X", "log of branch", "git branch -vv", "verbose branches", "filter branches", "history of
-  file X", "who touched file X", "log of file", "git log -- path", "git show -- path", "diff of file
-  X", "diff scoped to", "status -sb", "ahead/behind summary", "git status -sb", "git ls-remote", "list
-  remote refs", "git for-each-ref", "branches containing commit", "branch --contains", "git show
+  Git inspection specialist (Haiku). Triggers: `git log/diff/blame/show/status/branch/stash/reflog/worktree list`,
+  "what changed", "show diff", "show recent commits", "who wrote this line", "list worktrees",
+  "ahead/behind". Returns tight per-operation summary. Read-only — never commit/push/reset/rebase
+  (use `git-committer` for writes).
 model: claude-haiku-4-5
 tools:
   - Bash

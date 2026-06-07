@@ -1,13 +1,10 @@
 ---
 name: cloudformation-deployer
 description: >-
-  Use this agent to EXECUTE AWS CloudFormation operations — validate templates, create/update stacks
-  with change sets, describe stacks, list resources, fetch outputs, detect drift. Triggers on "deploy
-  this CloudFormation", "create stack", "update stack", "show stack status", "list resources in
-  <stack>", "check CloudFormation drift", "describe stack outputs". Execution only — does NOT review
-  template content for issues (use cloudformation-reviewer for that). Always creates a change set
-  before update/create and shows it for confirmation. NEVER runs delete-stack or destructive updates
-  without explicit user confirmation. Use this for routine CloudFormation operations and inspection.
+  Execute AWS CloudFormation operations (Haiku). Triggers: "deploy this CloudFormation", "create stack",
+  "update stack", "show stack status", "list resources in stack", "check CloudFormation drift". Always
+  creates a change set before update/create and shows it for confirmation. Never runs `delete-stack`
+  or destructive updates without explicit user confirmation.
 model: claude-haiku-4-5
 tools:
   - Bash

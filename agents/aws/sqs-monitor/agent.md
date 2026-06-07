@@ -1,23 +1,10 @@
 ---
 name: sqs-monitor
 description: >-
-  Use this agent FIRST whenever the user wants to inspect AWS SQS queues — `aws sqs list-queues`, `aws   sqs get-queue-attributes`, `aws sqs get-queue-url`, DLQ peek (`aws sqs receive-message   --visibility-timeout 0`), DLQ redrive (`aws sqs start-message-move-task` — requires explicit
-  confirmation). The main session must NOT run these directly — SQS JSON responses include
-  base64-encoded message bodies and verbose attribute maps that burn Sonnet/Opus tokens. Delegate
-  every SQS read here. Explicit trigger phrases (match any): "check SQS", "queue depth", "is the queue
-  backed up", "any backlog", "how many in DLQ", "DLQ count", "DLQ growing", "oldest message age",
-  "messages in flight", "is the consumer keeping up", "what's in the DLQ", "peek at DLQ", "list SQS
-  queues", "show queue attributes", "FIFO message groups", "aws sqs", "redrive DLQ", "move DLQ back",
-  "start-message-move-task", "queue url for", "approximate number of messages". Returns a TIGHT
-  summary — per-queue depth + in-flight + DLQ depth + oldest message age + last redrive task status.
-  For DLQ peeks: per-message VERBATIM error attributes + body (truncated at 1 KB). NEVER runs
-  destructive ops without explicit confirmation in the user's prompt — that means `send-message`,
-  `delete-message`, `purge-queue`, `set-queue-attributes`,
-  `start-message-move-task`/`cancel-message-move-task` (DLQ redrive needs "yes redrive" / "redrive
-  confirmed"), `create-queue`/`delete-queue`. `receive-message` only with `--visibility-timeout 0` for
-  DLQ peek (no consumption). Do NOT use for: processing messages (main session with explicit
-  ownership), publishing messages (main session), creating/modifying queues (Terraform via
-  `terraform-deployer`).
+  SQS queue inspector (Haiku). Triggers: `aws sqs list-queues/get-queue-attributes`, DLQ peek
+  (`receive-message --visibility-timeout 0`), "queue depth", "DLQ growing", "oldest message age",
+  "what's in the DLQ". Returns per-queue depth + in-flight + DLQ depth + oldest message age. DLQ
+  redrive (`start-message-move-task`) requires explicit "yes redrive" confirmation.
 model: claude-haiku-4-5
 tools:
   - Bash

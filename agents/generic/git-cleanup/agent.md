@@ -1,22 +1,10 @@
 ---
 name: git-cleanup
 description: >-
-  Use this agent at the END of a Claude Code session to clean up the local git
-  repository — prevents uncommitted-work loss, worktree explosion, and branch
-  accumulation across sessions. Runs a safety scan before touching anything:
-  skips worktrees/branches with uncommitted changes or unpushed commits (noise
-  files like .DS_Store, __pycache__, *.pyc are filtered out); flags active
-  Claude sessions. Proceeds with everything else: removes safe worktrees,
-  deletes merged and stale local + remote branches, prunes dead tracking refs,
-  pulls latest main — then returns a warning list for anything skipped. One
-  confirmation, one pass, clean state. Explicit trigger phrases (match any): "cleanup git", "cleanup the
-  repo", "session cleanup", "end of session cleanup", "git cleanup", "clean the
-  repo", "cleanup before leaving", "repo is a mess", "too many branches",
-  "too many worktrees", "clean up after session", "let's cleanup", "wrap up the
-  repo", "tidy the repo", "clean session", "prepare for next session". Do NOT
-  use for: single-branch inspection (use git-runner), creating commits (use
-  git-committer), broad branch audit with PR cross-reference only (use
-  git-audit).
+  End-of-session git cleanup (Haiku). Triggers: "session cleanup", "clean the repo", "too many
+  branches/worktrees", "end of session cleanup". Runs safety scan first — skips worktrees/branches
+  with uncommitted changes or unpushed commits. One confirmation, then removes safe worktrees + merged
+  and stale branches, prunes dead refs, pulls latest main.
 model: claude-haiku-4-5
 tools:
   - Bash

@@ -1,17 +1,10 @@
 ---
 name: lint-fixer
 description: >-
-  Use this agent to FIX linter / type-checker / quality-gate findings — ruff, mypy, eslint, prettier,
-  tsc, codecongruence, and the rest of a prek/pre-commit chain. Triggers on "fix the lint errors",
-  "fix the ruff issues", "fix mypy", "fix the type errors", "resolve the codecongruence violation",
-  "make prek pass", "clean up the linter findings", "fix the quality gate". Most of these are
-  Sonnet-class judgment fixes (type errors, complexity, semantic duplication) — they should NOT burn
-  the main Opus session. The agent clears the pure-mechanical tier with `ruff --fix` / `ruff format`
-  first, then fixes the judgment findings at the ROOT CAUSE, one category at a time, and verifies each
-  fix actually resolves the finding AND doesn't break the tests. Do NOT use for: reporting findings
-  without fixing (use `code-quality`, read-only), proactive style modernization (use
-  `python-refactorer`), writing tests (use `test-author`), or root-causing a runtime bug (use
-  `debugger`). Pairs with `code-quality` (finds) and `test-runner` (confirms no regression).
+  Lint/type/quality finding fixer (Sonnet). Triggers: "fix lint/ruff/mypy/eslint/tsc errors", "resolve
+  codecongruence", "make prek pass". Clears mechanical tier with `ruff --fix`/`ruff format` first,
+  then fixes judgment findings root-cause only, one category at a time. Max 2 attempts per category
+  then surfaces verbatim. Never silences findings with `# noqa`/`# type: ignore`/`--no-verify`.
 model: claude-sonnet-4-6
 tools:
   - Bash

@@ -1,22 +1,10 @@
 ---
 name: rds-postgres-query
 description: >-
-  Use this agent FIRST whenever the user wants to query an AWS RDS PostgreSQL or Aurora Postgres
-  database — any `SELECT`, `EXPLAIN [ANALYZE]`, `SHOW`, or `pg_*` introspection. The main session must
-  NOT run `psql` directly — inline `PGPASSWORD=... psql -h ...` LEAKS CREDENTIALS into the transcript
-  AND skips Secrets Manager / IAM auth. Delegate every RDS / Aurora read here. Explicit trigger
-  phrases (match any): "query RDS", "query Aurora", "select from <table>", "psql against RDS",
-  "EXPLAIN this query", "check RDS table size", "what's in the myapp DB", "how many rows in
-  <table>", "verify the migration ran", "check the user count", "Postgres production", "RDS query",
-  "psql -h myapp-dev", "PGPASSWORD=", "connect to the RDS Postgres", "find the row where
-  <key>=<val>", "did the dispatcher write the row", "is the ticket in extracted_documents", "EXPLAIN
-  ANALYZE on <q>". Handles auth via Secrets Manager (`aws secretsmanager get-secret-value --secret-id
-  <id>`) or IAM token (`aws rds generate-db-auth-token`) — never inline passwords. Returns a TIGHT
-  summary — row count + first N rows + query plan top operators. NEVER runs
-  INSERT/UPDATE/DELETE/DDL/COPY/TRUNCATE/VACUUM (or any non-read SQL). For non-AWS Postgres (local
-  Docker, Supabase, Neon, self-hosted), use `postgres-query` agent instead. Do NOT use for: writes
-  (main session with explicit ownership + transaction wrap), schema changes (Alembic migrations via
-  the `alembic-migration` skill + `migration-reviewer`).
+  AWS RDS/Aurora Postgres read-only query runner (Haiku). Triggers: `psql` against RDS/Aurora,
+  SELECT/EXPLAIN/SHOW/pg_* on AWS Postgres, "query RDS", "verify migration ran", "how many rows in
+  table X". Resolves auth via Secrets Manager or IAM — never inline passwords. Read-only (SELECT/EXPLAIN/SHOW/pg_*
+  only). For non-AWS Postgres use `postgres-query`.
 model: claude-haiku-4-5
 tools:
   - Bash
