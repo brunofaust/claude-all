@@ -1,23 +1,10 @@
 ---
 name: terraform-deployer
 description: >-
-  Use this agent FIRST whenever the user wants to EXECUTE Terraform — `terraform   init/fmt/validate/plan/apply/destroy/state`, OR project Makefile wrappers around Terraform (`make   tf-init`, `make tf-plan`, `make tf-apply`, `make tf-destroy`, `make terraform-*`, `make tofu-*`,
-  `make ENV=dev tf-init`). The main session must NOT run these directly — terraform init/plan output
-  is hundreds of lines and burns Sonnet/Opus tokens. Explicit trigger phrases (match any): "run
-  terraform plan", "deploy with terraform", "apply this terraform", "destroy <module>", "init
-  terraform", "show terraform state", "terraform init", "terraform plan", "terraform apply",
-  "terraform destroy", "tf plan", "tf apply", "tf init", "make tf-init", "make tf-plan", "make
-  tf-apply", "make tf-destroy", "make terraform", "tofu init", "tofu plan", "tofu apply", "terraform
-  output", "terraform state list", "terraform state show", "terraform fmt", "terraform validate", "is
-  the plan clean", "what will terraform do", "terraform output -raw <name>", "terraform output -json",
-  "get the lambda ARN from terraform", "what's the RDS endpoint", "show me the outputs", "terraform
-  state list", "is X in terraform state", "tf workspace", "tf providers", "tf graph". ALSO use for
-  CHEAP READ-ONLY introspection — `terraform output [-json] [-raw <name>]`, `terraform state list`,
-  `terraform state show <addr>`, `terraform providers`, `terraform workspace list/show`, `terraform   validate`. These reads run in ~1 second and don't need the full plan ceremony — but they STILL must
-  run through this agent (so the caller doesn't end up with raw multi-page `terraform.tfstate` JSON
-  dumps). Execution only — does NOT review code, suggest changes, or evaluate security/cost. For
-  review, use terraform-reviewer (Sonnet). Always shows plan output before apply. NEVER runs `apply`
-  or `destroy` without explicit user confirmation in the prompt. Produces a structured summary — for
+  Terraform executor (Haiku). Triggers: `terraform init/fmt/validate/plan/apply/destroy/state`, `make
+  tf-init/tf-plan/tf-apply`, "run terraform plan", "deploy with terraform", "terraform output", "is X
+  in terraform state". Shows plan before apply. Never runs `apply`/`destroy` without explicit confirmation.
+  Also handles cheap reads: `terraform output`, `state list/show`, `workspace list`.
 model: claude-haiku-4-5
 tools:
   - Bash

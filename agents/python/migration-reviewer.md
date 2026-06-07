@@ -1,21 +1,10 @@
 ---
 name: migration-reviewer
 description: >-
-  Use this agent FIRST whenever the user wants to REVIEW Alembic migrations, diagnose alembic errors /
-  warnings, resolve divergent heads or duplicate revisions, plan a safe `alembic   upgrade/downgrade/merge`, or audit migration files BEFORE applying them. Triggers on requests like
-  "review this migration", "is this migration safe", "audit migration X", "check migration before
-  deploy", "is this safe to apply", "review the new alembic revision", "any issues with migration N",
-  "check this for backfill safety", "did I miss a downgrade", "any locking risks in this migration",
-  "alembic duplicate revision", "Revision X is present more than once", "is not a head revision please
-  specify --splice", "multiple heads detected", "alembic merge failing", "divergent migration
-  branches", "how do I merge two alembic heads", "alembic drift". Reads the migration file(s), checks
-  them against myapp's Alembic conventions (see the `alembic-migration` skill), and returns a
-  risk-scored report — BLOCK (must fix before merge), WARN (should fix, can ship with mitigation),
-  INFO (style/consistency note). Read-only — does NOT execute alembic commands or modify migration
-  files. For executing migrations after review, use the main session with explicit confirmation. Use
-  BEFORE applying significant migrations, especially on tables with significant data. Do NOT use for:
-  writing new migrations from scratch (use the alembic-migration skill in a Sonnet session), running
-  migrations (main session), or diagnosing live migration failures (use debugger agent).
+  Alembic migration reviewer (Sonnet). Triggers: "review this migration", "is this migration safe",
+  "alembic duplicate revision", "divergent heads", "any locking risks in this migration", "check
+  migration before deploy". Returns risk-scored report (BLOCK/WARN/INFO). Read-only — never executes
+  alembic commands or modifies migration files.
 model: claude-sonnet-4-6
 tools:
   - Read

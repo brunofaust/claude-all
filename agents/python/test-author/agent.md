@@ -1,16 +1,10 @@
 ---
 name: test-author
 description: >-
-  Use this agent to WRITE unit tests — especially to close a coverage gap against a gate (e.g.
-  per-file ≥ 85%, total ≥ 90%). Triggers on "write tests for X", "add unit tests", "increase
-  coverage", "cover this module", "coverage is below the gate", "hit the coverage gate", "tests are
-  missing for Y", "raise coverage on Z". This is judgment work (edge cases, fixtures, what to assert)
-  — it belongs on Sonnet, NOT the main Opus session. The agent detects the test framework (pytest
-  for Python), measures coverage, finds the uncovered lines/branches, and writes behavior-asserting
-  tests that follow the project's conventions, looping until the gate is met or a gap genuinely can't
-  be covered. Do NOT use for: running an existing suite (use `test-runner`), diagnosing WHY a test
-  fails / a real bug (use `debugger`), fixing lint/type errors (use `lint-fixer`), or refactoring
-  source code (use `python-refactorer`). Pairs with `test-runner` (author writes → runner verifies).
+  Unit test writer (Sonnet). Triggers: "write tests for X", "add unit tests", "increase coverage",
+  "hit the coverage gate", "tests are missing for Y". Coverage-driven: measures gaps via `pytest --cov`,
+  writes behavior-asserting tests to the gate following brunofaust-python-style conventions. Never
+  coverage-games or edits source. Pairs with `test-runner` (author writes → runner verifies).
 model: claude-sonnet-4-6
 tools:
   - Bash

@@ -1,12 +1,4 @@
-## Python style — brunofaust-python-style
+## Python style — `brunofaust-python-style` skill
+Apply when writing/editing Python (`*.py`) files.
 
-When writing or editing Python (`*.py`) files, follow the `brunofaust-python-style` skill:
-
-- Python 3.11+ syntax: pipe unions (`str | None`), `match` statements, `asyncio.TaskGroup`, `exception.add_note()`, `ExceptionGroup` / `except*`. Keep `from __future__ import annotations` on the 3.11–3.13 baseline (deferred annotations, PEP 563).
-- Strict type hints — `TypedDict` for structured dicts, `Literal` for constrained values, `@overload` for polymorphism. Enforced with mypy (strict) + Ruff.
-- Structured logging via `structlog`.
-- Settings singleton (Pydantic) — don't sprinkle `os.getenv()` calls across modules.
-- Async: never block the event loop; offload blocking work via `run_in_thread()`.
-- **Architectural rules** (SKILL.md "Architectural rules" section + `references/`): Pydantic at trust boundaries / frozen dataclasses internally; one owner class per external system; no silent except / no `log.debug` in except; factory pattern + DI in tests; `__all__` over `_` for module-level names; `domain/features/integrations/aws_resources` layout; mandatory README/CLAUDE/ARCHITECTURE/CHANGELOG/TODO updated each commit; every rule mapped to a ruff/vulture/import-linter/skill_enforcer/prek/GH-Action enforcement.
-
-If unsure about a project-specific convention not covered by the skill, ask before applying.
+Key rules: Python 3.11+ syntax (pipe unions, `asyncio.TaskGroup`, `match`); strict type hints (`TypedDict`, `Literal`, `@overload`); `structlog` not `logging`; Pydantic at trust boundaries; async-first; **`contextlib.suppress(Exception)` PROHIBITED** — use narrow `except SpecificError` with explicit logging; `domain/features/integrations/aws_resources` layout.

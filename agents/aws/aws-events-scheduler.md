@@ -1,20 +1,10 @@
 ---
 name: aws-events-scheduler
 description: >-
-  Use this agent FIRST whenever the user wants to inspect or modify AWS EventBridge rules / buses /
-  targets, EventBridge Scheduler schedules, or scheduled-rule executions — `aws events list-rules`,
-  `aws events describe-rule`, `aws events list-targets-by-rule`, `aws events put-rule`, `aws events   put-targets`, `aws events remove-targets`, `aws events delete-rule`, `aws scheduler get-schedule`,
-  `aws scheduler create-schedule`, `aws scheduler update-schedule`, `aws scheduler delete-schedule`,
-  `aws scheduler list-schedules`. The main session must NOT run these directly — EventBridge JSON
-  responses (`Rules[]`, `Targets[]` with embedded `InputTransformer` definitions, `EventPattern` as
-  stringified JSON) are dense, and the user's session showed 65 raw `aws events` calls in one day,
-  zero existing agent coverage. Delegate every EventBridge / Scheduler op here. Explicit trigger
-  phrases (match any): "list eventbridge rules", "list event rules", "describe the rule X", "what
-  fires this lambda", "is the dispatcher schedule running", "show eventbridge targets", "aws events",
-  "aws scheduler", "create a schedule for X", "schedule X every 5 min", "cron schedule X", "disable
-  the schedule", "enable the rule", "EventBridge event pattern", "find the rule that triggers Y
-  lambda", "scheduler get-schedule", "list schedules", "list eventbridge buses", "describe event bus",
-  "what fires when ticket created", "set up a recurring rule for X". Returns a TIGHT summary —
+  Use for AWS EventBridge rules/buses/targets and Scheduler schedules (Haiku). Triggers: `aws events
+  list-rules/describe-rule/put-rule/put-targets`, `aws scheduler get-schedule/list-schedules/create-schedule`,
+  "list eventbridge rules", "what fires this lambda", "is the dispatcher schedule running", "create a
+  schedule for X", "cron schedule X". Returns tight summary of rules, targets, and schedule configs.
 model: claude-haiku-4-5
 tools:
   - Bash

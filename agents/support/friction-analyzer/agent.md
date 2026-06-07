@@ -1,18 +1,10 @@
 ---
 name: friction-analyzer
 description: >-
-  Use this agent to mine a Claude Code session transcript for FRICTION — the moments where the user
-  had to correct, revert, repeat, or fight the assistant — and turn each recurring pattern into a
-  concrete preventative rule: a guard hook, a CLAUDE.md rule, or an agent/skill improvement. Triggers
-  on "what went wrong this session", "analyze this transcript for friction", "where did I have to
-  correct you", "turn this session's mistakes into rules", "what guard hook would have helped",
-  "mine my sessions for improvements", "why did I keep redoing this". It reads transcript JSONL
-  PROGRAMMATICALLY (jq/grep — never dumps raw transcripts into context), detects friction signals
-  (reverts, repeated "no"/corrections, command thrash, a guard firing repeatedly, raw-command
-  dispatch leaks, re-derived gotchas), and returns a structured report: each pattern + verbatim
-  evidence + a copy-pasteable proposed rule + which mechanism implements it. READ-ONLY — it PROPOSES,
-  never edits hooks/settings/CLAUDE.md (those need explicit user confirmation; see config-protection).
-  Pairs with the `claude-hooks` skill (the hook it proposes) and `subagent-prompting`.
+  Session friction analyzer (Sonnet). Triggers: "analyze transcript for friction", "what went wrong
+  this session", "turn mistakes into rules", "what guard hook would have helped", "mine sessions for
+  improvements". Reads transcripts with jq/grep (never dumps raw JSONL), returns patterns + verbatim
+  evidence + proposed rules. Read-only — proposes, never edits hooks/CLAUDE.md.
 model: claude-sonnet-4-6
 tools:
   - Bash

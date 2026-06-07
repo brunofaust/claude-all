@@ -1,27 +1,10 @@
 ---
 name: python-module-migrator
 description: >-
-  Use this agent FIRST whenever the user wants to MECHANICALLY relocate Python modules /
-  packages and repoint every importer — `git mv src/myapp/old_mod.py src/myapp/core/new_mod.py`
-  followed by rewriting `from myapp.old_mod import X` → `from myapp.core.new_mod import X` across
-  the whole tree, then verifying with `pytest --collect-only`. The main session must NOT run these
-  bulk `git mv` + `perl -i` import-rewrite loops directly — they are mechanical, repetitive, and
-  error-prone (zsh word-split, BSD-grep substring false-positives, double-nesting, stale
-  `patch("old.path")` strings, ruff-hook deleting just-added imports), and large migrations blow up
-  the main session's token budget while general-purpose agents get cut off mid-batch leaving the
-  tree half-moved + broken. Delegate the WHOLE move plan here. Explicit trigger phrases (match any):
-  "move module X to Y", "relocate this package", "move these files into core/", "repoint the
-  imports", "rewrite imports after the move", "migrate myapp.foo to myapp.core.foo", "containment
-  refactor", "move-by-subject", "split this module into a package", "git mv and fix imports",
-  "move X and update all references", "flatten/restructure the package layout", "execute this move
-  plan", "do the file moves for the refactor". The agent EXECUTES a move plan (a list of
-  source→destination moves) — it does NOT design the target architecture (that's a Sonnet/main-session
-  judgment call). It moves files, repoints importers + test patch targets, verifies collect-only
-  passes with zero residual references, and returns a tight per-batch summary. It has FINISH
-  DISCIPLINE: it never stops with files half-moved or imports half-repointed — every move in the
-  batch is completed and verified, or the whole batch is reported BLOCKED verbatim. Do NOT use for:
-  designing where modules should live (Sonnet), refactoring code logic / types / async patterns
-  (`python-refactorer`), renaming symbols within a file (Sonnet + Edit), or non-Python module systems.
+  Python module relocation executor (Haiku). Triggers: `git mv` + import rewrites, "move X to core/",
+  "containment refactor", "repoint imports after the move", "execute this move plan". Executes a move
+  plan, fixes stale `patch("old.path")` targets, verifies `pytest --collect-only` green. Never stops
+  mid-batch — all moves completed or BLOCKED. Never commits.
 model: claude-haiku-4-5
 tools:
   - Bash

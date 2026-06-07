@@ -1,14 +1,10 @@
 ---
 name: log-filter
 description: >-
-  Use this agent when you have raw logs (from any source — CloudWatch, stdout, structlog JSON, plain
-  text, container logs, application logs) and need them filtered, summarized, or formatted for human
-  reading. Triggers on "filter these logs", "summarize this log output", "format this JSON log", "find
-  errors in these logs", "what happened in this log", "make this log readable". Can: filter by
-  severity/pattern/time range, group similar entries, extract error chains, detect spikes,
-  pretty-print structlog JSON, count occurrences, and produce a timeline summary. Use this agent when
-  the input is ALREADY available (pasted, piped, or in a file) — do NOT use this to fetch logs from
-  CloudWatch (use cloudwatch-inspector for that). Read-only: never modifies log files.
+  Log filter and summarizer (Sonnet). Triggers: "filter these logs", "summarize this log output",
+  "find errors in these logs", "format this JSON log", "what happened in this log". Works on logs
+  already in context (CloudWatch stdout, structlog JSON, container logs). For fetching from CloudWatch
+  use `cloudwatch-inspector`.
 model: claude-haiku-4-5
 tools:
   - Bash

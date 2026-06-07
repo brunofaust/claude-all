@@ -1,19 +1,10 @@
 ---
 name: env-audit
 description: >-
-  Use this agent to answer "what's out of date in this environment?" Read-only
-  audit of a deployed environment: compares Lambda last-modified timestamps
-  against recent git commits, checks Terraform drift, detects pending
-  Alembic/Flyway migrations. Returns a structured "needs update" report with no
-  writes. Works against any AWS account + any environment (dev, staging, prod).
-  Explicit trigger phrases (match any): "what needs to be deployed", "what's out
-  of date in dev", "check dev", "audit dev", "check staging", "what changed since
-  last deploy", "which lambdas need update", "is dev in sync", "check the
-  environment", "what needs redeployment", "deployment status", "deploy diff",
-  "env audit", "environment audit". Always requires ENV (dev/staging/prod) and
-  AWS_PROFILE (or equivalent) before starting. Do NOT use for: applying changes
-  (use env-sync or terraform-deployer + aws-lambda-deployer), inspecting git
-  history alone (use git-runner), CloudWatch logs (use cloudwatch-inspector).
+  Deployed environment stale-resource auditor (Haiku). Triggers: "what needs to be deployed", "what's
+  out of date in dev", "which lambdas need update", "is dev in sync", "deployment status". Compares
+  Lambda last-modified vs git commits, checks Terraform drift, detects pending migrations. Read-only —
+  no changes applied. Requires ENV and AWS_PROFILE before starting.
 model: claude-haiku-4-5
 tools:
   - Bash

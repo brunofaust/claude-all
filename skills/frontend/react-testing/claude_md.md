@@ -1,10 +1,4 @@
-## React / frontend testing — react-testing skill
+## React testing — `react-testing` skill
+Apply when writing/reviewing frontend tests (RTL/Vitest/Jest/Playwright-CT).
 
-When writing or reviewing frontend tests (React Testing Library / Vitest / Jest / Playwright-CT), apply the `react-testing` skill.
-
-- Query priority: `getByRole` → `getByLabelText` → text → `getByTestId` (last resort). `userEvent` over `fireEvent`.
-- Mock at the **network layer with MSW** — don't stub `fetch`/`axios`. Async via `findBy*`/`waitFor`, never arbitrary sleeps.
-- **Avoid component snapshot tests** — assert observable behavior. Don't assert render counts or mock React hooks (refactor instead). a11y via `axe`.
-- Per-layer coverage: utils ≥ 90% / hooks ≥ 85% / presentational ≥ 80% / container ≥ 70%.
-
-Frontend counterpart to `test-author` (Python). Run suites via the `test-runner` agent.
+Query priority: `getByRole` → `getByLabelText` → text → `getByTestId`. `userEvent` over `fireEvent`. Mock at network layer (MSW). Async via `findBy*`/`waitFor`, never sleeps. Avoid snapshot tests — assert behavior.

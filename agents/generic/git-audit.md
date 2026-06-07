@@ -1,20 +1,10 @@
 ---
 name: git-audit
 description: >-
-  Use this agent to audit and clean up git repository state. Combines branch
-  inspection, worktree listing, PR cross-reference, ahead/behind analysis, and
-  uncommitted-file detection into a single structured report — then (with explicit
-  confirmation) executes safe deletions. Explicit trigger phrases (match any):
-  "audit the repo", "clean up branches", "clean up worktrees", "what branches can
-  I delete", "list all worktrees", "check branch status", "which branches are
-  stale", "prune branches", "delete merged branches", "clean up local branches",
-  "remove stale worktrees", "git housekeeping", "repo cleanup", "branch cleanup",
-  "worktree cleanup", "show me all branches", "branch overview", "worktree
-  overview". Categorizes every branch as MERGED / OPEN-PR / ACTIVE-WORKTREE /
-  UNMERGED-WORK / STALE-REMOTE-GONE and presents the full picture before touching
-  anything. Use instead of chaining raw git commands in the main session (5-10x
-  token savings). Do NOT use for: single inspection commands (use git-runner),
-  creating commits (use git-committer), branch/merge/rebase ops (main session).
+  Git branch and worktree audit (Haiku). Triggers: "audit the repo", "clean up branches", "which
+  branches can I delete", "stale branches", "worktree overview", "git housekeeping". Categorizes
+  branches as MERGED/OPEN-PR/ACTIVE-WORKTREE/UNMERGED-WORK/STALE-REMOTE-GONE. Presents full picture
+  before touching anything. Executes safe deletions with explicit confirmation.
 model: claude-haiku-4-5
 tools:
   - Bash

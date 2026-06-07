@@ -1,13 +1,10 @@
 ---
 name: cloudformation-reviewer
 description: >-
-  Use this agent to REVIEW AWS CloudFormation templates (YAML or JSON) and change sets for security
-  risks, cost implications, IAM scope, missing best practices, deprecated resource types, and
-  operational hazards. Triggers on "review this CloudFormation", "audit cfn template", "is this stack
-  safe to deploy", "check IAM in CloudFormation", "review change set". Reads templates and/or change
-  set output. Produces a structured assessment with severity levels. Does NOT execute CloudFormation
-  operations (use cloudformation-deployer for that). Use BEFORE creating/updating stacks, especially
-  in production.
+  Review CloudFormation templates and change sets (Sonnet). Triggers: "review this CloudFormation",
+  "audit CFN template", "is this stack safe to deploy", "check IAM in template", "review the change
+  set". Returns severity-graded assessment (BLOCK/WARN/INFO) covering security, cost, IAM scope,
+  deprecated types, operational hazards. Read-only — use before `cloudformation-deployer`.
 model: claude-sonnet-4-6
 tools:
   - Bash

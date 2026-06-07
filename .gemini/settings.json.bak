@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "code-review-graph": {
+      "command": "uvx",
+      "args": [
+        "code-review-graph",
+        "serve"
+      ],
+      "cwd": "/Users/bfaust/Library/CloudStorage/OneDrive-Personal/Documents/My Git/claude-all/.claude/worktrees/feat+compact-context"
+    }
+  }
+}

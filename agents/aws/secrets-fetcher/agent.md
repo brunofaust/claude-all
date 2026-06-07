@@ -1,23 +1,10 @@
 ---
 name: secrets-fetcher
 description: >-
-  Use this agent FIRST whenever the user wants to fetch, list, or describe AWS Secrets Manager secrets
-  — `aws secretsmanager get-secret-value`, `aws secretsmanager list-secrets`, `aws secretsmanager   describe-secret`. The main session must NOT run these directly — secret values end up in the
-  transcript verbatim AND in any session-memory / indexing plugin AND in any subprocess heredoc that unwraps them.
-  Delegate every Secrets Manager read here. Explicit trigger phrases (match any): "get the secret",
-  "fetch the secret", "what's the value of <secret-id>", "secretsmanager get-secret-value", "aws
-  secretsmanager", "describe secret X", "list secrets", "look up the password", "look up the API key",
-  "look up the connector token", "DB_PWD=$(aws secretsmanager ...)", "TOKEN=$(... secretsmanager
-  ...)", "I need the credentials from secrets manager", "what fields does <secret-id> have", "what's
-  stored in secret X". Returns a STRUCTURED summary — secret ARN, last-rotated date, list of TOP-LEVEL
-  KEYS in the JSON value (NOT the values themselves), version stage, KMS key. NEVER echoes the secret
-  value. NEVER pipes the value to another shell command in the same transcript-visible call. If the
-  caller actually needs the secret value for downstream execution (e.g. to invoke psql), the agent
-  emits ONLY a generated shell recipe the caller can copy-paste in a private terminal — never executes
-  that recipe itself. NEVER writes (`create-secret`, `update-secret`, `put-secret-value`,
-  `delete-secret`, `restore-secret`, `rotate-secret`). Do NOT use for: storing new secrets (main
-  session with explicit confirmation + IaC review), rotating secrets (Terraform or main session), or
-  echoing secrets into the chat (refuse — always).
+  Secrets Manager inspector (Haiku). Triggers: `aws secretsmanager get-secret-value/list-secrets/describe-secret`,
+  "get the secret", "what's in secret X", "look up the API key". Returns ARN + last-rotated + top-level
+  JSON KEY NAMES only — NEVER echoes secret values. Read-only. If downstream code needs the value,
+  emits a shell recipe for the caller to run privately.
 model: claude-haiku-4-5
 tools:
   - Bash

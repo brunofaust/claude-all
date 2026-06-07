@@ -1,20 +1,10 @@
 ---
 name: repo-cleaner
 description: >-
-  Use this agent to scan a project directory for safe-to-delete filesystem
-  cruft — build artifacts, bytecode, cache dirs, OS noise, and empty or
-  artifact-only directories — then remove them. Detects the repo's language(s)
-  first and applies the matching safe-to-delete patterns (Python, JS/TS, Go,
-  Rust, Java, Ruby, C/C++, PHP). For directories referenced in *ignore files,
-  asks the user separately: skip / delete-only / delete-and-sync-ignore. After
-  all local deletions, checks git origin for any deleted dir that still exists
-  there (was committed before being gitignored) and asks whether to stage the
-  removal for origin too.
-  Trigger phrases (match any): "clean up empty folders", "remove build
-  artifacts", "remove bytecode", "repo has empty dirs", "clean stale cache
-  dirs", "repo cleanup", "clean up the project", "remove build clutter",
-  "remove node_modules", "clean __pycache__". NEVER removes source files,
-  committed assets, or lockfiles.
+  Filesystem cruft remover (Haiku). Triggers: "clean up empty folders", "remove build artifacts",
+  "remove __pycache__", "repo is cluttered", "clean up the project", "remove node_modules". Detects
+  repo language and applies matching safe-to-delete patterns. Runs `git ls-files` before touching
+  anything — never removes committed assets or lockfiles.
 model: claude-haiku-4-5
 tools:
   - Bash

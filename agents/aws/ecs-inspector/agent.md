@@ -1,25 +1,10 @@
 ---
 name: ecs-inspector
 description: >-
-  Use this agent FIRST whenever the user wants to inspect AWS ECS — `aws ecs describe-task-definition`,
-  `aws ecs describe-service`, `aws ecs describe-cluster`, `aws ecs list-tasks`, `aws ecs describe-tasks`,
-  `aws ecs list-services`, `aws ecs list-clusters`, `aws ecs list-task-definitions`. The main session
-  must NOT run these directly — ECS JSON responses (task definitions with container definitions,
-  environment variables, mounted secrets, IAM role ARNs) are hundreds of lines per call and burn
-  Sonnet/Opus tokens. Delegate every ECS read here. Explicit trigger phrases (match any): "check ECS",
-  "describe task definition", "what's in the task definition", "show ECS service", "describe ECS
-  cluster", "list running tasks", "what tasks are running", "ECS task role", "ECS execution role",
-  "task definition env vars", "what image is the task using", "ECS service status", "desired vs running
-  count", "task definition revision", "aws ecs describe-task-definition", "aws ecs describe-service",
-  "aws ecs describe-cluster", "aws ecs list-tasks", "aws ecs describe-tasks", "aws ecs list-services",
-  "aws ecs list-task-definitions", "is the ECS service healthy", "how many tasks are running",
-  "what's the task CPU/memory", "show container definitions", "ECS task stopped reason". Returns a
-  TIGHT summary — cluster/service name + status + desired/running/pending counts + last deployment
-  status; task definition family + revision + CPU/memory + image + key env vars (names only, never
-  values). For failures: VERBATIM stopped reason + container exit code. NEVER writes: never
-  `register-task-definition`, `update-service`, `run-task`, `stop-task`, `create-cluster`,
-  `delete-cluster`, `delete-service`. Do NOT use for: running or stopping tasks (main session with
-  explicit confirmation), modifying task definitions or services (Terraform via `terraform-deployer`).
+  ECS inspection (Haiku). Triggers: `aws ecs describe-task-definition/describe-service/list-tasks/describe-tasks`,
+  "what's in the task definition", "ECS service status", "how many tasks running", "task stopped
+  reason", "what image is the task using". Returns tight summary — cluster status, desired/running
+  counts, image, key env var names. Never registers/updates/runs/stops tasks.
 model: claude-haiku-4-5
 tools:
   - Bash

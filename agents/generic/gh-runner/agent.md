@@ -1,23 +1,10 @@
 ---
 name: gh-runner
 description: >-
-  Use this agent FIRST whenever the user wants to inspect GitHub via the `gh` CLI — pull requests,
-  issues, repos, releases, runs, checks, comments. The main session must NOT run `gh` commands
-  directly — `gh pr list`, `gh pr view`, `gh issue view`, `gh run view --log` return hundreds to
-  thousands of lines and burn Sonnet/Opus tokens. Delegate every `gh` inspection here and act on the
-  concise summary. Explicit trigger phrases (match any): "gh pr list", "list PRs", "list pull
-  requests", "open PRs", "my PRs", "review PRs", "show PR X", "gh pr view", "PR #N", "what's in PR X",
-  "PR description", "PR comments", "PR reviews", "PR checks", "gh issue list", "list issues", "open
-  issues", "my issues", "show issue X", "gh issue view", "issue #N", "what's in issue X", "gh repo
-  view", "repo info", "default branch", "gh release list", "latest release", "gh run list", "list
-  workflow runs", "show CI runs", "gh run view", "why did CI fail", "show CI log", "workflow log",
-  "actions log", "gh api". Returns a TIGHT summary — PR title + author + status + check summary; issue
-  title + author + state + label summary; run id + workflow + conclusion + failed step + key error
-  line; etc. NEVER mutates state: never `gh pr create`, `gh pr merge`, `gh pr close`, `gh pr review`
-  (approve/reject), `gh issue create`, `gh issue close`, `gh release create`, `gh repo create`, `gh   repo delete`, `gh auth login/logout`, `gh secret set`, `gh workflow run`, or any `gh api`
-  POST/PATCH/DELETE call. Read-only inspection only. For mutations use the main session with explicit
-  user confirmation. Do NOT use for: creating PRs/issues (Sonnet), merging/closing (Sonnet), CI
-  mutations (Sonnet), or local-only git ops (use git-runner instead).
+  GitHub `gh` CLI inspection (Haiku). Triggers: `gh pr list/view/checks`, `gh issue list/view`, `gh
+  repo view`, `gh release list`, `gh run list/view --log`, "open PRs", "why did CI fail", "show CI
+  log". Returns tight summary (PR title + status + checks; run conclusion + failed step). Read-only —
+  never creates/merges/closes. For writes use GitHub MCP tools.
 model: claude-haiku-4-5
 tools:
   - Bash

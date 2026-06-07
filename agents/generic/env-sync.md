@@ -1,21 +1,10 @@
 ---
 name: env-sync
 description: >-
-  Use this agent to bring a NON-PROD environment up to date with the current
-  codebase. Orchestrates the full cycle: audit (what's stale) → plan (tf-plan +
-  migration heads) → confirm with user → execute in correct order (tf-apply →
-  Lambda deploy → migrations → frontend → smoke test). HARD BLOCKS on any
-  environment whose name contains "prod", "production", or "prd" — those require
-  explicit specialized deployers with manual confirmation at each step. Explicit
-  trigger phrases (match any): "sync dev", "update dev", "deploy to dev", "bring
-  dev up to date", "deploy everything to dev", "redeploy dev", "sync staging",
-  "update staging", "deploy to staging", "refresh the environment", "deploy all
-  changes", "env sync", "environment sync", "sync the environment", "deploy what
-  changed". Always confirms the full deploy plan with the user before executing
-  anything. Do NOT use for: prod deployments (use terraform-deployer +
-  aws-lambda-deployer directly with explicit prod confirmation), read-only checks
-  (use env-audit), single-resource deploys (use aws-lambda-deployer or
-  terraform-deployer).
+  Non-prod environment sync orchestrator (Sonnet). Triggers: "sync dev", "deploy to dev", "bring dev
+  up to date", "sync staging", "deploy all changes". Orchestrates: audit → tf-plan → confirm → tf-apply
+  → Lambda deploy → migrations → smoke test. Always confirms plan with user before executing. Hard
+  blocks on prod/production/prd environments.
 model: claude-sonnet-4-6
 tools:
   - Bash

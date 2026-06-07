@@ -1,19 +1,10 @@
 ---
 name: http-runner
 description: >-
-  Use this agent FIRST whenever the user wants to make an HTTP request — curl, wget, or hit an API
-  endpoint — and act on the result. The main session must NOT run `curl`/`wget` directly: raw
-  response bodies (JSON dumps, HTML pages) plus `-v` header noise run to hundreds of lines and burn
-  Sonnet/Opus tokens. Delegate every HTTP call here and act on the concise summary. Explicit trigger
-  phrases (match any): "curl", "hit the endpoint", "call the API", "GET /...", "POST to", "check the
-  health endpoint", "is the API up", "what does this endpoint return", "fetch this URL", "test the
-  webhook", "send a request to", "check the response", "what's the status code", "inspect the
-  headers", "ping the service". The agent runs the request, follows redirects when sensible, and
-  returns a TIGHT summary: status code, the few relevant response headers (content-type, location,
-  rate-limit, set-cookie presence), timing, and a trimmed/jq-extracted body (first relevant fields,
-  NOT the full payload). On a health check it returns a single line. NEVER prints secrets verbatim
-  (mask Authorization/tokens). Do NOT use for: downloading large files to disk, long-polling /
-  streaming endpoints, or `curl | sh` installs (that is a shell action, not an inspection).
+  HTTP request executor (Haiku). Triggers: `curl`, `wget`, hit an API endpoint, "check the health
+  endpoint", "is the API up", "what does this endpoint return", "test the webhook". Returns status
+  code + key headers + trimmed body. Masks credentials. Not for `curl | sh` installs or large file
+  downloads.
 model: claude-haiku-4-5
 tools:
   - Bash
