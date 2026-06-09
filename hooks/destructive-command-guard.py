@@ -116,8 +116,8 @@ BLOCK_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     ),
     (re.compile(r"\bgit\s+reset\s+--hard\b"), "git reset --hard (discards uncommitted work)"),
     (
-        re.compile(r"\bgit\s+clean\s+-[a-z]*f[a-z]*d|--force[^\n]*-d"),
-        "git clean -fd (deletes untracked files)",
+        re.compile(r"\bgit\s+clean\s+[^\n]*(?:-[a-z]*f[a-z]*\b|--force\b)"),
+        "git clean -f (deletes untracked files)",
     ),
     (
         re.compile(r"\bdocker\s+system\s+prune\b[^\n]*(--volumes|-a)"),
@@ -140,7 +140,7 @@ BLOCK_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     ),
 ]
 
-# (compiled regex, human reason) — WARN only (exit 1, non-blocking).
+# (compiled regex, human reason) — WARN only (exit 0 + additionalContext, non-blocking).
 WARN_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"\brm\s+(-[a-z]*\s+)*-?[a-z]*[rf][a-z]*\s"), "broad recursive delete (rm -rf)"),
     (re.compile(r"\bchmod\s+-R\s+777\b"), "chmod -R 777 (world-writable)"),
