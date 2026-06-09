@@ -301,7 +301,7 @@ def run_post_install_step(name: str, pip_package: str | None, step: object) -> N
         return
 
     if stype == "bash":
-        cmd = step.get("command")
+        cmd = step.get("command", [])
         if not isinstance(cmd, list) or not cmd:
             print(f"  ! {name}: bash post_install step missing 'command' list", file=sys.stderr)
             return
@@ -1003,6 +1003,21 @@ def update_item(kind: str, name: str, install_record: dict, all_items: list[Item
             return f"  ✓ updated plugins/{name}"
         return f"  ✗ plugins/{name}: unknown type '{ptype}'"
 
+    if kind == "tools":
+        if match is None:
+            return f"  ✗ tools/{name}: not found in repo (removed?)"
+        try:
+            msg = install_tool(match)
+            return f"  ✓ refreshed {msg}"
+        except subprocess.CalledProcessError as e:
+            return f"  ✗ tools/{name}: install command failed ({e.returncode})"
+
+    if kind == "hooks":
+        if match is None:
+            return f"  ✗ hooks/{name}: not found in repo (removed?)"
+        # Re-install at user scope by default (hooks don't track scope in state)
+        return f"  ✓ refreshed {install_standalone_hook(match, 'user')}"
+
     if kind == "instructions":
         if match is None:
             return f"  ✗ instructions/{name}: not found in repo (removed?)"
@@ -1013,7 +1028,7 @@ def update_item(kind: str, name: str, install_record: dict, all_items: list[Item
         md = inject_claude_md(match, level)
         return f"  ✓ refreshed instructions/{name}" + (f"\n    ↳ {md}" if md else "")
 
-    # agents / skills / mcps — re-create symlink at recorded target
+    # agents / skills — re-create symlink at recorded target
     target = install_record.get("target")
     if not target:
         return f"  ✗ {kind}/{name}: missing target path in state"
@@ -1045,8 +1060,8 @@ def update_item(kind: str, name: str, install_record: dict, all_items: list[Item
         extras.append(hk)
 
     msg = f"  ✓ refreshed {kind}/{name} ({target_path})"
-    for e in extras:
-        msg += f"\n    ↳ {e}"
+    for extra in extras:
+        msg += f"\n    ↳ {extra}"
     return msg
 
 
@@ -1350,6 +1365,7 @@ def main(argv: list[str]) -> int:
         print("Nothing selected.")
         return 0
 
+    level: str | None
     if args.user:
         level = "user"
     elif args.project:
