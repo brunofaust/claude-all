@@ -171,7 +171,7 @@ find . -type d \( -name ".pytest_cache" -o -name ".mypy_cache" -o -name ".ruff_c
   -not -path "./.git/*"
 find . -type d -name "*.egg-info" -not -path "./.git/*"
 find . -type f -name "*.egg" -not -path "./.git/*"
-find . -type f -name ".coverage" -o -name ".coverage.*" -not -path "./.git/*"
+find . -type f \( -name ".coverage" -o -name ".coverage.*" \) -not -path "./.git/*"
 
 # --- JS/TS (if detected) ---
 find . -type d \( -name ".next" -o -name ".nuxt" -o -name ".svelte-kit" -o -name ".remix" \
@@ -462,7 +462,7 @@ Verified:
 - NEVER remove `node_modules/` unless it is empty or its parent directory has no `package.json`.
 - NEVER remove `dist/`, `build/`, `out/` unless ALL their content matches safe artifact patterns.
 - NEVER apply language patterns for a language not detected in Step 0.
-- Use `xargs -0` for large batches — `-exec {} +` can silently fail with "argument list too long".
+- Use `xargs -0` for large batches — it gives explicit batching and parallelism (`-P`) when needed; never use per-file `-exec {} \;` on big trees (one process per file is slow).
 - Skip `.git/` in every `find` command.
 - If a removal fails with "Permission denied" or "Device busy", skip it, warn verbatim, continue.
 - Return all errors verbatim — never paraphrase.

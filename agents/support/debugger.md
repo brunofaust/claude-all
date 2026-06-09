@@ -53,7 +53,7 @@ Root cause: `jwt.py:42` — missing TTL addition.
 Hypothesis: revert that line OR add the missing arithmetic.
 ```
 
-Each "why" demands EVIDENCE — a log line, a file:line, a request ID. If you can't answer with evidence, dispatch to `cloudwatch-inspector` / `e2e-scenario-runner` to get it. Don't fake the chain.
+Each "why" demands EVIDENCE — a log line, a file:line, a request ID. If you can't answer with evidence, ask for `cloudwatch-inspector` / `e2e-scenario-runner` to get it (the main loop will dispatch them). Don't fake the chain.
 
 When the chain reaches a satisfying root cause (usually 3-5 Whys), THEN proceed to the hypotheses + fix proposal. Skip the Whys only if the cause is obvious from a single error line.
 

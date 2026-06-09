@@ -122,7 +122,7 @@ aws cloudwatch get-metric-statistics \
   --namespace "$NS" \
   --metric-name "$METRIC" \
   --dimensions Name=<DimName>,Value=<DimValue> \
-  --start-time "$(date -u -v-30M +%Y-%m-%dT%H:%M:%SZ)" \
+  --start-time "$(date -u -d '30 minutes ago' +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -v-30M +%Y-%m-%dT%H:%M:%SZ)" \
   --end-time   "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
   --period 300 \
   --statistics "$STAT" \

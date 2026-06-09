@@ -45,6 +45,7 @@ Filter to functions matching the project/env prefix (e.g., `myapp-dev-`, `myapp-
 ## Step 3 — Terraform drift (if terraform or make tf-drift exists)
 
 ```bash
+set -o pipefail
 # Try make target first (project-specific)
 make tf-drift ENV=<env> 2>/dev/null | tail -20 ||
 # Fall back to raw terraform

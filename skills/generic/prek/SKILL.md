@@ -171,8 +171,7 @@ ______________________________________________________________________
 
 ## Full annotated prek.toml — merged pattern
 
-Merge of multiple projects (e.g. myapp, datalake, claude-all). Pick the sections relevant to your project and remove the rest.
-Pick the sections relevant to your project and remove the rest.
+Merge of multiple projects (e.g. myapp, my-service). Pick the sections relevant to your project and remove the rest.
 
 ````toml
 # ── Global ───────────────────────────────────────────────────────────────────
@@ -463,12 +462,12 @@ hooks = [
   # requires vulture_whitelist.py at repo root for intentional unused symbols
 ]
 
-# ── codecongruence (semantic consistency) ────────────────────────────────────
+# ── semantic-consistency hook (private repo example) ─────────────────────────
 [[repos]]
-repo = "https://github.com/brunofaust/codecongruence"
+repo = "https://github.com/myorg/myhook"
 rev = "v0.1.0"
 hooks = [
-  { id = "codecongruence", name = "🧠 semantic · codecongruence" }
+  { id = "myhook", name = "🧠 semantic · myhook" }
 ]
 
 # ── Optional: Makefile linting ───────────────────────────────────────────────

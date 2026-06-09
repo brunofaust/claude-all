@@ -92,7 +92,7 @@ Then:
 Extraction recipe:
 
 ```bash
-psql "$DSN" -c "EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) <query>" | jq '
+psql "$DSN" -tA -c "EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) <query>" | jq '
   .. | objects | select(.["Node Type"] == "Seq Scan")
   | {table: .["Relation Name"], rows: .["Actual Rows"], filter: .["Filter"]}
 '

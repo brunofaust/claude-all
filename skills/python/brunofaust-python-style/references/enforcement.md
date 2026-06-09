@@ -8,7 +8,7 @@ Every rule in this skill has an enforcement mechanism. If a rule has no enforcem
 | ------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------ |
 | Pydantic on boundaries                | mypy strict + `skill_enforcer.py` rule `no_dict_any_in_signatures` | per-file allow list                        |
 | Frozen dataclasses internally         | `skill_enforcer.py` rule `dataclass_must_be_frozen`                | `# skill-allow: mutable-dataclass` comment |
-| No raw boto3 outside aws_resources/   | ruff `banned-api` (TID251)                                         | `[per-file-ignores]` in pyproject.toml     |
+| No raw boto3 outside core/aws/        | ruff `banned-api` (TID251)                                         | `[per-file-ignores]` in pyproject.toml     |
 | No raw httpx outside integrations/    | ruff `banned-api` (TID251)                                         | `[per-file-ignores]` in pyproject.toml     |
 | No silent except                      | ruff `BLE001`, `skill_enforcer.py` rule `no_debug_in_except`       | `# noqa: BLE001` with explanation          |
 | Public names only (`__all__` not `_`) | vulture + `skill_enforcer.py` rule `no_module_underscore_names`    | add to `__all__`                           |
@@ -104,8 +104,8 @@ message = "Use Pydantic model or dataclass, not dict[str, Any]"
 [rules.banned_imports]
 enabled = true
 "httpx" = "src/*/integrations/**"
-"boto3" = "src/*/aws_resources/**"
-"aioboto3" = "src/*/aws_resources/**"
+"boto3" = "src/*/core/aws/**"
+"aioboto3" = "src/*/core/aws/**"
 "atlassian" = "src/*/integrations/jira/**"
 
 [rules.no_module_underscore_names]

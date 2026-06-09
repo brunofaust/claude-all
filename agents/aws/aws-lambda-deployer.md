@@ -3,7 +3,7 @@ name: aws-lambda-deployer
 description: >-
   Deploy, invoke, and inspect AWS Lambda functions (Haiku). Triggers: `aws lambda
   update-function-code/invoke/list-functions/get-function-configuration`, "deploy lambda", "invoke lambda
-  X", "is the lambda healthy", "smoke test lambdas", `make deploy-lambda`. Auto-discovers Makefile/npm
+  X", "is the lambda healthy", "smoke test lambdas", `make deploy-lambda`. Auto-discovers Makefile
   targets. Returns per-function size + ARN for builds; pass/fail + first error for invokes. Never
   deletes or modifies config without explicit request.
 model: claude-haiku-4-5
@@ -141,8 +141,8 @@ Combined flow:
 
 ```bash
 cd "$CALLER_CWD"
-PROFILE="${AWS_PROFILE:-myapp}"
-REGION="${AWS_REGION:-us-east-1}"
+PROFILE="${AWS_PROFILE:?AWS_PROFILE not set — ask the user which profile to use}"
+REGION="${AWS_REGION:?AWS_REGION not set — ask the user which region to use}"
 FN="$1"
 PAYLOAD="${2:-{\"myapp_test\": true}}"
 
@@ -231,11 +231,11 @@ Empty output, JSON schema dumps, parser crashes — all come from missing flags.
 
 ```bash
 cd "$CALLER_CWD" && \
-  eval "$(aws configure export-credentials --profile "${AWS_PROFILE:-default}" --format env 2>/dev/null)" && \
-  OUT=$(mktemp -t lambda-invoke-XXXX.json) && \
-  META=$(aws lambda invoke \
+  eval "$(aws configure export-credentials --profile "${AWS_PROFILE:?ask the user which profile to use}" --format env 2>/dev/null)" && \
+  export OUT=$(mktemp -t lambda-invoke-XXXX.json) && \
+  export META=$(aws lambda invoke \
     --function-name "$FN" \
-    --region "${AWS_REGION:-us-east-1}" \
+    --region "${AWS_REGION:?ask the user which region to use}" \
     --invocation-type RequestResponse \
     --cli-binary-format raw-in-base64-out \
     --log-type Tail \
@@ -263,7 +263,9 @@ except Exception as e:
 PY
 ```
 
-Pass `FN`, `PAYLOAD`, `OUT`, `META` via env:
+Pass `FN` and `PAYLOAD` via env before running the recipe (`OUT`/`META` are
+exported by the recipe itself — the heredoc Python reads all four from the
+environment):
 
 ```bash
 export FN="myapp-dev-doc-dispatcher"
@@ -447,7 +449,7 @@ Check first: if targets share `/tmp/$NAME-build` dirs / write to the same S3 key
 **deploy-lambdas (parallel ≤ 4):** ✓ 22/24 succeeded, 2 failed (~3m total wall)
 
 **Failed (verbatim error per failure):**
-- build-lambda-feature-pii-detection — uv pip install: `error: failed to download chonkie==1.6.6: tokie build failed`
+- build-lambda-feature-pii-detection — uv pip install: `error: failed to download mypkg==1.6.6: native-ext build failed`
 - build-lambda-money-sweeper — ResourceConflictException: `function is currently in the following state: Pending`
 
 **Sizes (top 5):** (from successful logs)
@@ -492,8 +494,8 @@ On failure (some succeeded, some didn't):
 
 **Failed:**
 - build-lambda-feature-pii-detection
-  uv pip install: `error: failed to download chonkie==1.6.6: tokie build failed`
-  **Suggested fix:** pin `chonkie<1.6.5` in lambda-feature-pii-detection group.
+  uv pip install: `error: failed to download mypkg==1.6.6: native-ext build failed`
+  **Suggested fix:** pin `mypkg<1.6.5` in lambda-feature-pii-detection group.
 
 - build-lambda-money-sweeper
   aws lambda update-function-code: `ResourceConflictException — The operation cannot be performed at this time. The function is currently in the following state: Pending`

@@ -62,7 +62,9 @@ except ValueError as e:
 
 # Pattern 4b: Multiple exceptions in one handler (parenthesised tuple)
 # On the 3.11–3.13 baseline use a parenthesised tuple. PEP 758's paren-less
-# form (`except ConnectionError, TimeoutError as e:`) is 3.14+ only.
+# form (`except ConnectionError, TimeoutError:`) is 3.14+ only, and even
+# there it is disallowed with `as` — parentheses are always required when
+# binding the exception (`except (ConnectionError, TimeoutError) as e:`).
 try:
     process()
 except (ConnectionError, TimeoutError) as e:
@@ -95,7 +97,7 @@ try:
     result = await client.describe_table(TableName=table)
 except ClientError as e:
     if e.response["Error"]["Code"] == "ResourceNotFoundException":
-        logger.debug("table_not_found", table=table)
+        logger.warning("table_not_found", table=table)
         result = None
     else:
         raise
@@ -118,15 +120,15 @@ except ValueError:
 # NEVER rationalize "suppress() is too implicit" — suppress(SomeError) is explicit.
 # "try/except: pass" is the implicit pattern; you infer intent from a comment.
 
-# Pattern 6: TaskGroup with ExceptionGroup handling (PEP 758 syntax)
+# Pattern 6: TaskGroup with ExceptionGroup handling
 try:
     async with asyncio.TaskGroup() as tg:
         for item in items:
             tg.create_task(_process_item_do(item))
-except* ConnectionError, TimeoutError as eg:
+except* (ConnectionError, TimeoutError) as eg:
     for e in eg.exceptions:
         logging.warning(f"Transient error: {type(e).__name__}-{e}")
-except* ValueError, TypeError as eg:
+except* (ValueError, TypeError) as eg:
     for e in eg.exceptions:
         logging.error(f"Validation error: {type(e).__name__}-{e}")
 except* Exception as eg:

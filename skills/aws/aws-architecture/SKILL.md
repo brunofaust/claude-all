@@ -23,7 +23,7 @@ ______________________________________________________________________
     - Package size (250 MB unzipped hard limit, 50 MB ZIP direct upload; **use S3 for anything > 50 MB**)
     - Number of imported modules at top-level
     - VPC attachment — **avoid VPC unless necessary**. VPC attachment now uses Hyperplane ENIs (fast) but still adds cold-start tax. Lambdas needing only AWS APIs should run outside VPC.
-    - SnapStart (Java / Python 3.13+ / .NET) reduces cold starts by 90%+. Use for latency-sensitive sync paths.
+    - SnapStart (Java / Python 3.12+ / .NET) reduces cold starts by 90%+. Use for latency-sensitive sync paths.
 
 ### Idempotency
 
@@ -267,7 +267,7 @@ Moving an existing RDS/Postgres workload to DynamoDB is a big, often-irreversibl
 - **Cost compare honestly.** DDB on-demand at high steady throughput can cost *more* than a
   right-sized RDS instance. Model write/read units against real traffic; don't assume DDB is cheaper.
 - **Relational integrity moves to the app.** No foreign keys, no transactions across "tables" beyond
-  `TransactWriteItems` (25-item cap), no `CHECK` constraints. You own consistency now.
+  `TransactWriteItems` (100-item cap), no `CHECK` constraints. You own consistency now.
 - **Migration is expand-contract, not big-bang.** Dual-write to both stores, backfill DDB from a
   Postgres snapshot, shadow-read and diff, then cut over. Keep Postgres as the rollback for a while.
 
@@ -322,7 +322,7 @@ Build retries into the state machine, not the Lambdas:
 
 ### When NOT to use Step Functions
 
-- Two Lambdas in sequence — just call one from the other (or chain via SQS). Step Functions overhead isn't worth it.
+- Two Lambdas in sequence — chain via SQS or an async (`Event`) invoke; never a sync Lambda-from-Lambda call (see Lambda anti-patterns). Step Functions overhead isn't worth it for a 2-step flow.
 - Synchronous user request paths — latency budget too tight.
 
 ______________________________________________________________________

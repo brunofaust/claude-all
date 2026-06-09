@@ -79,7 +79,7 @@ from threading import RLock
 from typing import Any
 
 
-__all__ = ["wrap_loop_close", "register_cleanup", "on_event_loop_close"]
+__all__ = ["wrap_loop_close", "register_loop_cleanup"]
 
 # Track which loops have been wrapped (prevent double-wrapping)
 wrapped_loops: weakref.WeakSet[asyncio.AbstractEventLoop] = weakref.WeakSet()
@@ -112,15 +112,15 @@ def wrap_loop_close(loop: asyncio.AbstractEventLoop) -> bool:
         >>> wrap_loop_close(loop)  # idempotent
         False
     """
-    with _lock:
-        if loop in _wrapped_loops:
+    with cleanup_lock:
+        if loop in wrapped_loops:
             return False
 
         original_close = loop.close
 
         def _patched_close() -> None:
             loop_id = id(loop)
-            callbacks = _cleanup_callbacks.pop(loop_id, [])
+            callbacks = cleanup_callbacks.pop(loop_id, [])
 
             # Run cleanup callbacks in LIFO order
             for callback in reversed(callbacks):
@@ -136,10 +136,10 @@ def wrap_loop_close(loop: asyncio.AbstractEventLoop) -> bool:
             original_close()
 
         loop.close = _patched_close  # type: ignore[method-assign]
-        _wrapped_loops.add(loop)
+        wrapped_loops.add(loop)
 
         # GC fallback: if the loop is garbage-collected without close()
-        weakref.finalize(loop, lambda lid: _cleanup_callbacks.pop(lid, None), id(loop))
+        weakref.finalize(loop, lambda lid: cleanup_callbacks.pop(lid, None), id(loop))
 
         return True
 
@@ -167,16 +167,16 @@ def register_loop_cleanup(
         ...     await db_pool.close()
         >>> register_loop_cleanup(loop, cleanup_db)
     """
-    with _lock:
+    with cleanup_lock:
         if wrap_if_needed:
             wrap_loop_close(loop)
-        elif loop not in _wrapped_loops:
+        elif loop not in wrapped_loops:
             raise RuntimeError("Loop is not wrapped. Call wrap_loop_close() first.")
 
         loop_id = id(loop)
-        if loop_id not in _cleanup_callbacks:
-            _cleanup_callbacks[loop_id] = []
-        _cleanup_callbacks[loop_id].append(callback)
+        if loop_id not in cleanup_callbacks:
+            cleanup_callbacks[loop_id] = []
+        cleanup_callbacks[loop_id].append(callback)
 ```
 
 **When to use this**: Register cleanup for any long-lived resource — AWS client sessions, database connection pools, HTTP client sessions, thread pool executors. The LIFO order means you can register the pool first, then connections that use the pool, and they’ll clean up in the correct order.
@@ -347,7 +347,9 @@ class thread:
                 return self._thread_pool.submit(_isolated)
             else:
                 loop = asyncio.get_running_loop()
-                return self._thread_pool.submit(loop.run_until_complete, coro)
+                # run_coroutine_threadsafe schedules the coroutine on the
+                # running loop and returns a concurrent.futures.Future
+                return asyncio.run_coroutine_threadsafe(coro, loop)
         else:
             import functools
 
@@ -537,20 +539,6 @@ When using `asyncio.TaskGroup`, if any task raises an exception, all remaining t
 are cancelled and the exceptions are collected into an `ExceptionGroup`.
 Use the `except*` syntax to handle them gracefully:
 
-##### Why the nested isinstance check?
-
-`ExceptionGroup` can be nested — a TaskGroup might contain sub-TaskGroups, each
-of which can produce its own ExceptionGroups. The nested check flattens them:
-
-```
-ExceptionGroup (outer TaskGroup)
-├── ValueError("bad input")           → logged directly
-├── ExceptionGroup (inner TaskGroup)  → flattened
-│   ├── ConnectionError("timeout")    → logged as sub-exception
-│   └── IOError("disk full")          → logged as sub-exception
-└── KeyError("missing field")         → logged directly
-```
-
 ##### Alternative: Let ExceptionGroup Propagate
 
 If you want the caller to decide how to handle failures:
@@ -602,7 +590,7 @@ async def _rollback_entity_do(
     """Rollback a single entity to its previous version."""
     async with parallel_semaphore:
         try:
-            dt = DeltaTable(info["table_uri"], storage_options=info["storage_options"])
+            dt = DeltaTable(info["table_uri"], storage_options=info.get("storage_options", {}))
             dt.restore(info["version"])
             LOG.info(f"Rolled back {entity_name} to version {info['version']}")
         except Exception as e:

@@ -20,7 +20,7 @@ You are an SEO / GEO / AEO code reviewer. Read source files, apply the rules fro
 |         | seo-reviewer (this agent)         | seo-runner                  |
 | ------- | --------------------------------- | --------------------------- |
 | Input   | Source code on disk               | Live URL                    |
-| Tools   | Read, Glob, Grep                  | curl, PSI, W3C, Observatory |
+| Tools   | Read, Glob, Grep, Bash            | curl, PSI, W3C, Observatory |
 | When    | Pre-commit, pre-deploy, PR review | Production audit            |
 | Catches | Code-level patterns               | Runtime / hosting issues    |
 | Output  | File:line findings                | Live measurements           |

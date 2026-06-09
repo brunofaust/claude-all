@@ -31,7 +31,7 @@ exists, `prek run --all-files` IS the quality gate — it already orchestrates r
 gitleaks, markdownlint, etc. Do NOT also run the individual ruff/mypy/pytest steps (3–5 above) and do
 NOT report "ruff passed" as if it were "prek passed" — a green ruff with a red typos/gitleaks/mypy hook
 is still a FAILED prek. Steps 3–5 are the fallback only for projects with **no** prek/pre-commit config.
-The project marker here is `prek.toml` (NOT `.prek.yaml`) — match both.
+The project marker is `prek.toml` or `.prek.yaml` — match both.
 
 ### Frontend (if `package.json` present)
 
@@ -57,7 +57,7 @@ Use this exact structure. Show ONLY sections that have failures:
   - file:line — error message
 
 [TEST] <pass | N failed>
-  - test_path::test_name — assertion or short traceback (max 3 lines)
+  - test_path::test_name — at least the 3 frames closest to the call site + the assertion diff, verbatim
 
 [COVERAGE] modules below 80%
   - module — XX%
@@ -115,7 +115,7 @@ This is for **triage** — e.g. seeing the other failures past one known-failing
 
 - Never auto-fix. Never modify any file.
 - Never run `--fix` flags, `ruff format` (without `--check`), or `prettier --write`.
-- Suppress passing test output and verbose stack traces; keep tracebacks to the essential 3 lines.
+- Suppress passing test output; for failures keep at least the 3 frames closest to the call site + the assertion diff, verbatim.
 - If a tool is configured but missing, report it: `[TOOL MISSING] ruff not installed`.
 - If no quality tools are configured at all, report: `No quality tools detected.` and stop.
 - Don't suggest fixes. Just report findings. The main model decides what to do.

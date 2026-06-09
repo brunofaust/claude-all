@@ -36,6 +36,7 @@ Exit immediately. Do not proceed.
 Run the same steps as `env-audit`:
 
 ```bash
+set -o pipefail
 # 1. Recent commits
 git log --since="48 hours ago" --format="%h %as %s" --name-only | head -60
 
@@ -91,6 +92,7 @@ Execute each step in sequence. After each step, report status before continuing.
 ### Step 1 — Terraform apply (if in plan)
 
 ```bash
+set -o pipefail
 make tf-apply ENV=<env> 2>&1| tail -20 ||
 ( cd infra && terraform apply -var-file=envs/<env>.tfvars -auto-approve -no-color 2>&1 | tail -20 )
 ```
@@ -108,6 +110,7 @@ Detect deploy mechanism in order:
 4. `aws lambda update-function-code` per-function (last resort)
 
 ```bash
+set -o pipefail
 make deploy-lambdas ENV=<env> 2>&1 | tail -20 ||
 make deploy-lambda ENV=<env> 2>&1 | tail -20 ||
 make deploy ENV=<env> 2>&1 | tail -20
@@ -118,6 +121,7 @@ Report: `✅ Lambdas deployed: <list>` or `❌ FAILED: <error>`
 ### Step 3 — Migrations (if in plan)
 
 ```bash
+set -o pipefail
 make migrate ENV=<env> 2>&1 | tail -20 ||
 uv run alembic upgrade head 2>&1 | tail -10
 ```
@@ -127,6 +131,7 @@ Report: `✅ Migrations applied` or `⚠️ Could not run (DB unreachable — ru
 ### Step 4 — Frontend (if in plan)
 
 ```bash
+set -o pipefail
 make deploy-frontend ENV=<env> 2>&1 | tail -10 ||
 npm run deploy 2>&1 | tail -10
 ```
@@ -136,6 +141,7 @@ Report: `✅ Frontend deployed` or `❌ FAILED`
 ### Step 5 — Smoke test (if available)
 
 ```bash
+set -o pipefail
 make test-lambdas ENV=<env> 2>&1 | tail -20 ||
 make smoke-test ENV=<env> 2>&1 | tail -20 ||
 echo "No smoke test target found — verify manually"

@@ -47,12 +47,11 @@ eval "$(aws secretsmanager get-secret-value \
   --query SecretString --output text \
   | python3 -c 'import sys, json; d=json.load(sys.stdin); print(f"PGUSER={d[\"username\"]}\nPGPASSWORD={d[\"password\"]}\nPGHOST={d[\"host\"]}\nPGPORT={d[\"port\"]}\nPGDATABASE={d[\"dbname\"]}")')"
 psql -c "SELECT ..."
+```
 ````
 
 DO NOT run this snippet in the agent — it would echo the secret into the transcript.
 For RDS queries: delegate to `rds-postgres-query` which sources the secret inline + scoped to one process.
-
-```
 
 ## Allowed commands
 
@@ -69,10 +68,9 @@ For RDS queries: delegate to `rds-postgres-query` which sources the secret inlin
 `create-secret`, `update-secret`, `put-secret-value`, `delete-secret`, `restore-secret`, `cancel-rotate-secret`, `rotate-secret`, `update-secret-version-stage`, `put-resource-policy`, `delete-resource-policy`, `tag-resource`, `untag-resource`.
 
 If user asks for any of these, return:
+
 ```
-
 Refused — secrets-fetcher is read-only. Mutations (create/update/delete/rotate) need explicit user confirmation in the prompt + go through the main session.
-
 ```
 
 ## Redaction rules — non-negotiable
@@ -83,12 +81,12 @@ NEVER print the secret value, even partially. NEVER print:
 - The result of `python3 -c "json.load(...)['password']"`
 - Anything piped from `get-secret-value` to another command that would surface stdout
 
-The user's own session already had **40 transcript leaks** of this form:
-```
+Real sessions have produced dozens of transcript leaks of this form:
 
+```
 TOKEN=$(... secretsmanager get-secret-value ... | python3 -c "json.load(sys.stdin)['token']")
-
 ```
+
 The shell-var assignment is silent BUT the heredoc subshell prints the parsed value if Claude Code echoes it (which it does for any inline `python3 -c` in `Bash` tool). NEVER replicate this.
 
 If you accidentally execute a command that would echo a secret, immediately:
@@ -111,4 +109,3 @@ If you accidentally execute a command that would echo a secret, immediately:
 - Redact ALL values. Even "for testing".
 - If the user insists on the value being shown (e.g. "I just want to see the password"), refuse and tell them to read it from their own terminal: `aws secretsmanager get-secret-value --secret-id <id> --query SecretString --output text`. Not your job to surface it.
 - Token efficiency is the point — but security is the higher priority. A 50-line metadata report is better than a 1-line value that leaks forever.
-```

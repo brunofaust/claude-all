@@ -57,7 +57,9 @@ def main() -> int:
     if "/node_modules/" in file_path or "/dist/" in file_path:
         return 0
 
-    new_string = data.get("tool_input", {}).get("new_string", "") or ""
+    tool_input = data.get("tool_input", {})
+    # Edit sends `new_string`; Write sends `content` — cover both.
+    new_string = tool_input.get("new_string") or tool_input.get("content") or ""
     # CSS / Astro / Vue / Svelte files: always remind. JSX/TSX: only if UI markers present.
     is_jsx = file_path.endswith((".tsx", ".jsx"))
     if is_jsx and not any(m in new_string for m in UI_MARKERS):
@@ -71,15 +73,25 @@ def main() -> int:
     with contextlib.suppress(OSError), open(flag, "w", encoding="utf-8") as f:
         f.write(file_path)
 
-    print(
-        "Reminder (web-design-guidelines, first UI edit this session): "
-        "verify a11y (keyboard nav, focus rings, ARIA roles), "
-        "color contrast (>= 4.5:1 normal, >= 3:1 large), "
-        "interactive target size (>= 44x44px), reduced-motion (prefers-reduced-motion), "
-        "consistent spacing scale, semantic HTML over generic <div>.",
-        file=sys.stderr,
+    # exit 0 + JSON additionalContext: exit 1 stderr is shown to the USER as a hook
+    # error, never to Claude — this reminder is addressed to Claude.
+    json.dump(
+        {
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "additionalContext": (
+                    "Reminder (web-design-guidelines, first UI edit this session): "
+                    "verify a11y (keyboard nav, focus rings, ARIA roles), "
+                    "color contrast (>= 4.5:1 normal, >= 3:1 large), "
+                    "interactive target size (>= 44x44px), reduced-motion "
+                    "(prefers-reduced-motion), consistent spacing scale, "
+                    "semantic HTML over generic <div>."
+                ),
+            }
+        },
+        sys.stdout,
     )
-    return 1
+    return 0
 
 
 if __name__ == "__main__":

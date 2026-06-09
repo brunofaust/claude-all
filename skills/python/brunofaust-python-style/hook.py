@@ -38,18 +38,28 @@ def main() -> int:
     with contextlib.suppress(OSError), open(flag, "w", encoding="utf-8") as f:
         f.write(file_path)
 
-    print(
-        "Reminder (brunofaust-python-style, first Python edit this session): "
-        "Python 3.11+ syntax (pipe unions, match, asyncio.TaskGroup, exception.add_note); "
-        "strict type hints (TypedDict, Literal, @overload); "
-        "structured logging via structlog; "
-        "settings singleton (Pydantic) — don't sprinkle os.getenv across code; "
-        "NEVER block the event loop in async — use run_in_thread(). "
-        "Read references/<topic>.md for deep coverage on: "
-        "type-hints, error-handling, async-patterns, class-design, config, testing.",
-        file=sys.stderr,
+    # exit 0 + JSON additionalContext: exit 1 stderr is shown to the USER as a hook
+    # error, never to Claude — this reminder is addressed to Claude.
+    json.dump(
+        {
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "additionalContext": (
+                    "Reminder (brunofaust-python-style, first Python edit this session): "
+                    "Python 3.11+ syntax (pipe unions, match, asyncio.TaskGroup, "
+                    "exception.add_note); "
+                    "strict type hints (TypedDict, Literal, @overload); "
+                    "structured logging via structlog; "
+                    "settings singleton (Pydantic) — don't sprinkle os.getenv across code; "
+                    "NEVER block the event loop in async — use run_in_thread(). "
+                    "Read references/<topic>.md for deep coverage on: "
+                    "type-hints, error-handling, async-patterns, class-design, config, testing."
+                ),
+            }
+        },
+        sys.stdout,
     )
-    return 1  # non-blocking warning, but only fires once per session
+    return 0  # non-blocking reminder, fires once per session
 
 
 if __name__ == "__main__":

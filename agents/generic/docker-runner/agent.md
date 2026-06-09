@@ -38,7 +38,7 @@ If multiple Dockerfiles in subdirs, ask which one the user means unless their re
 | `docker pull <image>`                 | fetch image                                                                     |
 | `docker compose up [-d] [service...]` | bring services up (prefer detached `-d` for long-running stacks)                |
 | `docker compose down`                 | stop + remove (WITHOUT `-v` by default — never deletes volumes)                 |
-| `docker compose logs [-f] [service]`  | default `--tail 50`, no `-f` unless user said "follow"                          |
+| `docker compose logs [service]`       | default `--tail 50`; use `--tail=N` / `--since` — `-f` is banned (blocks forever) |
 | `docker compose ps`                   | services state                                                                  |
 | `docker compose restart [service]`    | restart                                                                         |
 | `docker compose exec <svc> <cmd>`     | exec into a service                                                             |
@@ -83,11 +83,11 @@ Failure:
 **Error (last useful lines):**
 ```
 
-error: failed to resolve dependency `tokie`
+error: failed to resolve dependency `native-ext`
 caused by: linker `cc` failed
 
 ```
-**Suggested fix:** pin `chonkie<1.6.5` in pyproject.toml (known tokie build issue).
+**Suggested fix:** pin `mypkg<1.6.5` in pyproject.toml (known native-ext build issue).
 ```
 
 ### `docker run` (one-shot, `--rm`)
