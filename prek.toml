@@ -145,6 +145,21 @@ hooks = [
   }
 ]
 
+# ── Type checking (mypy) ─────────────────────────────────────────────────────
+# Scoped to the installer, scripts/, hooks/ and tools/. Skill-embedded hook.py
+# files all share the module name "hook", which mypy refuses to check in one
+# batch — those stay covered by ruff + vulture.
+[[repos]]
+repo = "https://github.com/pre-commit/mirrors-mypy"
+rev = "v2.1.0"
+hooks = [
+  {
+    id = "mypy",
+    name = "🐍 python · Type-check with mypy",
+    files = '^(claude-all\.py|scripts/.*\.py|hooks/.*\.py|tools/.*\.py)$'
+  }
+]
+
 [[repos]]
 repo = "https://github.com/gitleaks/gitleaks"
 rev = "v8.30.1"

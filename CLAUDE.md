@@ -3,9 +3,9 @@
 ## Commands
 
 ```bash
-# Install an agent or skill into Claude Code
-./claude-all install <agent-name> --level user    # global
-./claude-all install <agent-name> --level project # repo-local
+# Install an agent or skill into Claude Code (positional args are path filters)
+./claude-all --all --user <name>     # global (~/.claude)
+./claude-all --all --project <name>  # repo-local (./.claude)
 
 # Dev setup (installs prek)
 uv sync --dev
@@ -24,7 +24,7 @@ prek run --all-files
 | `agents/<category>/<name>.claude_md.md` | Companion snippet injected into `~/.claude/CLAUDE.md` on install (folder agents put it at `<name>/claude_md.md`)               |
 | `skills/<category>/<name>/SKILL.md`     | Skill definitions (invoked via Skill tool)                                                                                    |
 | `instructions/<name>/claude_md.md`      | Standalone `~/.claude/CLAUDE.md` snippet (no agent/skill to install — e.g. dispatch rules for built-in agents like `Explore`) |
-| `hooks/`                                | Hook scripts (source — not yet active)                                                                                        |
+| `hooks/`                                | Standalone hook scripts — installable kind, wired per the `hooks/hooks.json` manifest                                          |
 | `.claude/hooks/`                               | Active hooks for this repo's Claude sessions                                                                                  |
 | `.claude/agents/`                              | Sub-agent definitions scoped to this repo                                                                                     |
 
@@ -37,13 +37,13 @@ prek run --all-files
    its `claude_md.md` / `hook.*` together)
 1. Optionally add a `claude_md.md` snippet — flat: `<name>.claude_md.md` beside the
    `.md`; folder: `<name>/claude_md.md` beside `agent.md`
-1. Run `./claude-all install <name> --level user` to activate
+1. Run `./claude-all --all --user <name>` to activate
 1. **Update `README.md`** — add a row to the relevant agent table (§ 1.x)
 
 **Skill:**
 
 1. Create `skills/<category>/<name>/SKILL.md`
-1. Run `./claude-all install <name> --level user` to activate
+1. Run `./claude-all --all --user <name>` to activate
 1. **Update `README.md`** — add a row to the relevant skill table (§ 2.x)
 
 ## Before raising a PR
@@ -170,11 +170,11 @@ Summaries are acceptable only when:
 ## CLAUDE.md injection — never edit `~/.claude/CLAUDE.md` directly
 
 `~/.claude/CLAUDE.md` is the user's global Claude config. It is managed by
-`claude-all install` via tagged snippet injection. **Do not edit it directly.**
+the `claude-all` installer via tagged snippet injection. **Do not edit it directly.**
 
 ### How dispatch instructions reach `~/.claude/CLAUDE.md`
 
-When `claude-all install <agent> --level user` runs, it looks for a
+When `./claude-all --all --user <agent>` runs, it looks for a
 `<agent>.claude_md.md` file next to the agent's `.md` file and injects its
 content as a tagged block. Reinstalling is idempotent — the block is replaced.
 
@@ -183,7 +183,7 @@ Skill/tool `claude_md.md` naming: inside the resource's directory.
 Standalone snippet naming: `instructions/<name>/claude_md.md` — a resource
 whose ONLY effect is injecting that block (no agent/skill/hook to install). Use it
 for main-session dispatch rules that target built-in agents (e.g. routing broad
-searches to `Explore`). Install with `./claude-all install <name> --level user`.
+searches to `Explore`). Install with `./claude-all --all --user <name>`.
 
 ### Rules
 

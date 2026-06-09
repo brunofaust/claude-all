@@ -189,7 +189,7 @@ Cross-repo search:
 
 ```
 **Repo:** brunofaust/myapp  •  default branch: main  •  stars: 12  •  forks: 0
-**Description:** Near-real-time CDC datalake for Baxter Planning.
+**Description:** Near-real-time CDC datalake for Acme Inc.
 **Topics:** aws, python, cdc, parquet, delta-lake
 **Visibility:** private  •  License: none
 ```
