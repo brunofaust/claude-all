@@ -126,13 +126,13 @@ Exception: signals 3 (pre-emptive surrender) and 7 (authority deflection) may le
 ## When NOT to apply this skill
 
 - The task IS explanation (user asked "explain X"). Skill doesn't fire on explainers.
-- The task IS design/brainstorming (no execution expected). Use `brainstorming` skill instead.
+- The task IS design/brainstorming (no execution expected) — the guard doesn't apply to genuinely exploratory asks.
 - The user explicitly said "don't run anything, just describe…".
 
 ## Hand-offs
 
 - After redirecting yourself: apply `adversarial-verification` to whatever output you produce.
-- If the rationalization is specifically AVOIDING a test: hand to `test-driven-development` skill.
+- If the rationalization is specifically AVOIDING a test: write the failing test FIRST (TDD), then make it pass — don't argue about whether the test is needed.
 
 ## Inspiration
 
