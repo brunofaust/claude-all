@@ -326,7 +326,8 @@ ______________________________________________________________________
 
 | Task | Delegate to | Why |
 | --- | --- | --- |
-| Detect the stack; inventory layout / where SDK calls live | `Explore` agent | broad fan-out search, returns conclusions not dumps |
+| Detect the stack; inventory layout / where SDK calls live (Phase 0 recon) | `Explore` agent | broad fan-out search, returns conclusions not dumps — do NOT build a dedicated agent for this |
+| Deep correctness review of hot subsystems (recent churn, uncommitted diffs, tricky domain logic) | `bug-hunter` agent | reasoning-based bug classes linters can't see; severity-tagged, read-only |
 | Run lint/type/test count commands (any stack) | `test-runner` / `code-quality` agents | absorb large output, return counts + verbatim errors |
 | Frontend / UI dimensions | `react-correctness` / `react-testing` / `web-design-guidelines` / `web-security` / `seo` | UI-layer specialists |
 | The security dimension (12) | `security-audit` skill | full six-layer + secrets-history pass |
@@ -337,6 +338,23 @@ ______________________________________________________________________
 | Mining a single Claude transcript for one guard rule | `friction-analyzer` agent | narrower than `session-harvest` |
 
 Return errors **verbatim** (file:line + message) per the repo's agent error-reporting rule.
+
+### Deep-dive lanes (optional add-on, parallel)
+
+The count-only dimensions miss logic bugs. When the user asks for a *bug hunt* (not just a
+scorecard), fan out **scoped lanes in parallel** after Phase 0 recon, one subagent per hot area:
+
+- **Hot code lanes → `bug-hunter`.** Recon tells you where the risk is: uncommitted diffs, recent
+  churn (`git log --since=`), the largest/most complex modules, new untracked scripts. Dispatch one
+  lane per area with the file list, hot spots, and bug-class emphasis inlined.
+- **Bespoke infra lanes → one-off prompts, not new agents.** A domain config outside the dimensions
+  (a reverse-proxy cache, a queue topology, a cron fleet) gets a per-run checklist written fresh
+  from recon context, following `subagent-prompting` (scope + checklist + severity format + output
+  budget + "if you can't find it, say where you looked"). The checklist IS the per-run value —
+  don't can it into a single-purpose agent you'll use once.
+
+Every lane: read-only, CRITICAL/HIGH/MEDIUM/LOW with `file:line`, hard output budget (≤ 60–70
+lines), and a closing 3-line assessment so the parent can merge lanes into one report.
 
 ______________________________________________________________________
 
