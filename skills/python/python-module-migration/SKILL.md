@@ -35,7 +35,7 @@ mkdir -p "$(dirname "$DST")"        # 1. dest dir must exist or git mv misplaces
 git mv "$SRC" "$DST"                # 2. move with history
 
 # 3. repoint every importer (perl, look-around, \Q…\E — see gotchas)
-grep -rlE "(?<![.\w])${OLD//./\\.}\b" src tests 2>/dev/null \
+grep -rlP "(?<![.\w])${OLD//./\\.}\b" src tests 2>/dev/null \
   | while IFS= read -r f; do
       perl -0777 -i -pe "s/(?<![.\w])\Q${OLD}\E\b/${NEW}/g" "$f"
     done
@@ -100,7 +100,7 @@ undo if a single move can't be finished cleanly.
 ## Verify gate — done only when all three are green
 
 ```bash
-grep -rnE "(?<![.\w])${OLD//./\\.}\b" src tests   # residual refs → MUST be empty
+grep -rnP "(?<![.\w])${OLD//./\\.}\b" src tests   # residual refs → MUST be empty
 pytest --collect-only -q 2>&1 | tail -20          # imports resolve → 0 errors
 git status --porcelain | grep '^??' || true       # no untracked destinations
 ```

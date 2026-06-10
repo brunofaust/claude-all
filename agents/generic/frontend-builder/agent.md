@@ -82,17 +82,16 @@ Or expanded form for richer output (Next.js, multi-target builds):
 Either change the target element or update the handler's generic to `HTMLButtonElement`.
 ```
 
-If multiple errors (>5), group and truncate:
+If multiple errors, return ALL tsc/build error lines verbatim — each is one file:line + message line. Collapse only exact duplicate lines (with a ×N count):
 
 ```
 **Build:** ✗ failed — 14 errors across 6 files
-**First 5:**
 - `src/foo.tsx:10:3` — TS2304: Cannot find name 'X'
 - `src/foo.tsx:18:5` — TS2304: Cannot find name 'Y'
 - `src/bar.tsx:42:9` — TS2322: ...
 - `src/baz.tsx:8:1` — Module not found: 'qux'
 - `src/qux.ts:55:2` — Syntax error
-**+9 more.** Run `npm run build` with `--no-color` and grep for `error TS` for full list.
+- ... (every remaining error line, verbatim; ×N on exact duplicates)
 ```
 
 ### Missing build script
@@ -151,7 +150,7 @@ Prefix the **Build** status line with the dominant bucket, e.g. `**Build:** 🔴
 
 ## Bundle-size baseline
 
-After a successful build, write `<output-dir>/.size-baseline.json` (e.g. `dist/.size-baseline.json`, `.next/.size-baseline.json`, `build/.size-baseline.json`) with:
+After a successful build, write `"${TMPDIR:-/tmp}/cc-size-baseline-<project-dir-basename>.json"` (NOT inside the output dir — vite empties `outDir` and next cleans `.next` on every build, which would wipe the baseline) with:
 
 ```json
 {"timestamp": "2026-05-22T14:03:00Z", "total_kb": 1843, "chunks": {"vendor-react.js": 412, "index.js": 287, "main.css": 64}}

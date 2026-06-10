@@ -32,16 +32,25 @@ def main() -> int:
     with contextlib.suppress(OSError), open(flag, "w", encoding="utf-8") as f:
         f.write(file_path)
 
-    print(
-        "Reminder (vercel-react-best-practices, first React/Next edit this session): "
-        "watch inline-object props (new ref → re-render — useMemo); "
-        "avoid unnecessary useEffect (derive in render, lift state, or event handler); "
-        "respect server/client component boundaries (Next.js); "
-        "prefer Server Components for data fetching; "
-        "code-split heavy client trees via dynamic import.",
-        file=sys.stderr,
+    # exit 0 + JSON additionalContext: exit 1 stderr is shown to the USER as a hook
+    # error, never to Claude — this reminder is addressed to Claude.
+    json.dump(
+        {
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "additionalContext": (
+                    "Reminder (vercel-react-best-practices, first React/Next edit this session): "
+                    "watch inline-object props (new ref → re-render — useMemo); "
+                    "avoid unnecessary useEffect (derive in render, lift state, or event handler); "
+                    "respect server/client component boundaries (Next.js); "
+                    "prefer Server Components for data fetching; "
+                    "code-split heavy client trees via dynamic import."
+                ),
+            }
+        },
+        sys.stdout,
     )
-    return 1
+    return 0
 
 
 if __name__ == "__main__":

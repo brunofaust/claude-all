@@ -7,7 +7,7 @@
 #### Inheritance Pattern for Service Wrappers
 
 ```python
-class storage_client:
+class StorageClient(BaseClient):
     """Storage client wrapper providing high-level operations."""
 
     _upload_config: TransferConfig
@@ -28,16 +28,16 @@ class storage_client:
 Pass pre-loaded dependencies into constructors instead of creating them internally. This makes testing straightforward and keeps coupling low.
 
 ```python
-class data_pipeline:
+class DataPipeline:
     """Pipeline for processing data through multiple stages."""
 
-    _storage: storage_client
+    _storage: StorageClient
     _db: database_client
     _notifier: notification_client
 
     def __init__(
         self,
-        storage_obj: storage_client,
+        storage_obj: StorageClient,
         db_obj: database_client,
         notifier_obj: notification_client,
     ) -> None:
@@ -47,7 +47,7 @@ class data_pipeline:
         All dependencies must be pre-loaded before being passed.
 
         Args:
-            storage_obj: A loaded storage_client for file operations.
+            storage_obj: A loaded StorageClient for file operations.
             db_obj: A loaded database_client for database operations.
             notifier_obj: A loaded notification_client for notifications.
 
@@ -64,7 +64,7 @@ class data_pipeline:
 Declare class-level type annotations for all instance attributes so readers (and type checkers) know what a class holds at a glance:
 
 ```python
-class data_transformer(data_pipeline):
+class DataTransformer(DataPipeline):
     """Handles transformation of data between layers."""
 
     _bucket: str
@@ -79,14 +79,16 @@ class data_transformer(data_pipeline):
     ]
 ```
 
-If a class attribute is immutable, we should use an immutable of Final type hint
+If a class attribute is immutable, we should use an immutable or Final type hint
 
 ```python
 from typing import Final
 
-class something:
-    “""Do something in the data pipeline."""
+class Something:
+    """Do something in the data pipeline."""
 
-    _not_change: Final[str] = “this is an immutable string"
-    _keys: Sequence[str] = [“this", "is", "an", "immutable", “list"]
+    _not_change: Final[str] = "this is an immutable string"
+    # Typed as an immutable interface: the Sequence annotation prevents
+    # mutation at type-check time; the runtime object is still a list.
+    _keys: Sequence[str] = ["typed", "as", "an", "immutable", "interface"]
 ```

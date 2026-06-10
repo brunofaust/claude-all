@@ -37,7 +37,7 @@ Prefer `pnpm` if `pnpm-lock.yaml` exists, then `yarn` (`yarn.lock`), else `npm`.
 - Pytest scope: if user named files/dirs/markers, pass them; else run everything.
 - Coverage: only run with coverage if user asked ("show coverage", "coverage report"). Default: no coverage (faster, less noise).
 - Capture combined stdout+stderr: `<cmd> 2>&1 | tail -300`.
-- NEVER pass `--lf`/`--ff` unless user said "rerun last failures" / "failed first".
+- NEVER pass `--lf`/`--ff` unless the user said "rerun last failures" / "failed first" OR you're in the TARGET-unset last-failed fallback (see "Targeted re-run recipe").
 - NEVER modify pytest.ini/pyproject.toml/jest.config.\* — read-only.
 - Timeout: default 5 min. If user expects a long run (`-m slow`, e2e), allow longer and mention.
 
@@ -79,18 +79,26 @@ If pytest can't even collect:
 
 ## Failure handling — what to extract
 
-For each failed test, return ONLY:
+For each failed test, return (verbatim, no paraphrase):
 
 - the test ID (`path::TestClass::test_name`)
-- the FIRST non-noise error line (the actual assertion / exception / message)
+- the assertion diff
+- the 3 traceback frames closest to the call site
 
-Skip the full traceback. The main session can re-run a single test with `-v --tb=long` if it needs more.
+Skip pytest's collection/summary noise, never the failure body.
 
-If many tests fail (>10) with the same error, group them:
+If many tests fail (>10) with an identical error, group them — but include ONE full representative failure body (assertion diff + 3 closest frames, verbatim) plus the list of affected test IDs:
 
 ```
-**Failed tests (12, all same error):**
-- 12 tests in `tests/test_db.py::*` — `OperationalError: connection refused` (Postgres not running?)
+**Failed tests (12, identical error):**
+- Representative: `tests/test_db.py::test_insert`
+  ```
+  E   sqlalchemy.exc.OperationalError: connection refused
+    tests/test_db.py:31: in test_insert
+    src/myapp/db.py:88: in get_session
+    src/myapp/db.py:42: in _connect
+  ```
+- Also affected: `tests/test_db.py::test_query`, `tests/test_db.py::test_update`, ... (10 more IDs, list them all)
 ```
 
 ## Suggested-fix examples
@@ -110,7 +118,7 @@ If cause unclear, just report and stop.
 
 When the user is iterating on a failing test — write fix → run → see failure → write fix → run → see failure — the SAME `pytest -x tests/test_X.py::test_Y` runs over and over. Observed 114 raw `uv run pytest` calls in one session vs 26 dispatches: callers were "just running it once more" raw because the test is short.
 
-Re-runs after a fix are STILL in scope for this agent. Don't let the caller bypass with "I'll just run it again". Even a single test re-run benefits from:
+Suite re-runs and multi-test re-runs after a fix are STILL in scope for this agent. A SINGLE targeted test ID run inline (`pytest path::test_x -q`) while actively debugging is the one sanctioned exception (per the dispatch rules). Everything else comes back here, because re-runs benefit from:
 
 - Consistent flag handling (`--tb=short -q --no-header --color=no` so output is parseable)
 - Last-run cache awareness (`pytest --lf` for "last failed only")
@@ -238,5 +246,5 @@ One line per slow test. Skip entirely if the user said "no durations" or "skip d
 - Never invent test output. If a command didn't run, say so.
 - Never edit test files or source code. You only run tests.
 - Never auto-retry on failure. Report and let the caller decide.
-- Never run `--lf`, `-u`, `-x` unless user asked.
+- Never run `--lf`, `-u`, `-x` unless the user asked OR you're in the TARGET-unset last-failed fallback (`--lf` only — see "Targeted re-run recipe").
 - Token efficiency is the point. A 300-line pytest output → 10-line summary.

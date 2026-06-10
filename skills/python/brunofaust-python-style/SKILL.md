@@ -8,7 +8,7 @@ user-invocable: true
 
 # Python Coding Style Guide (condensed)
 
-Production-grade async Python. Async-first, strict types, immutable parameter types, 100% docstrings, real-infra tests (LocalStack).
+Production-grade async Python. Async-first, strict types, immutable parameter types, docstrings everywhere (≥90% gate), real-infra tests (LocalStack).
 
 **This is the condensed entry point.** Depth and full examples live under `references/`. Read the relevant reference file before deep work in that area.
 
@@ -18,7 +18,7 @@ Production-grade async Python. Async-first, strict types, immutable parameter ty
 1. **Async everything** — custom functions are `async def`. Exceptions: `__init__`, `__iter__`, `__enter__`, other stdlib sync dunder methods.
 1. **Immutable parameter types** — `Mapping`/`Sequence` from `collections.abc`, not `dict`/`list`. Required for cached function inputs/outputs.
 1. **Type safety first** — full type hints, `TypedDict`, `Literal`, `@overload`. Enforced via mypy (strict) + Ruff.
-1. **100% docstring coverage** — Google-style with Args / Returns / Raises / Examples.
+1. **Docstring coverage ≥ 90%** (interrogate gate; aim for 100%) — Google-style with Args / Returns / Raises / Examples.
 1. **Test everything** — `MonkeyPatch.context()` for mocks. Unit + integration (LocalStack) + class structural tests. Data tests cover the full data lifecycle.
 
 ## Table of references
@@ -37,7 +37,7 @@ Read the matching file BEFORE deep work in that area. Each is a focused referenc
 | Writing README, CHANGELOG, project docs                                                                                                                                                        | [`references/project-docs.md`](references/project-docs.md)                                              |
 | Architectural decisions — KISS, SRP, Separation of Concerns, Composition>Inheritance, Rule of Three, function size, DI, anti-patterns                                                          | [`references/architecture.md`](references/architecture.md)                                              |
 | Writing/optimizing async code — TaskGroup, ExceptionGroup, `run_in_thread`, semaphores, rollback, FIFO, pagination                                                                             | [`references/async-patterns.md`](references/async-patterns.md)                                          |
-| Writing AWS Lambda handlers — async entry point with `uvloop.run()`, `main()` pattern                                                                                                          | See `## Lambda handlers` section above + [`references/async-patterns.md`](references/async-patterns.md) |
+| Writing AWS Lambda handlers — async entry point with `uvloop.run()`, `main()` pattern                                                                                                          | See `## Lambda handlers` section below + [`references/async-patterns.md`](references/async-patterns.md) |
 | Configuration management — Pydantic Settings, env var coercion, nested configs, secrets from files                                                                                             | [`references/config.md`](references/config.md)                                                          |
 | Writing tests — pytest, fixtures, parametrize, mocks, LocalStack, time freezing, snapshot, **factory pattern (polyfactory/factory_boy), DI over module-global mocks, mirrored src/ structure** | [`references/testing.md`](references/testing.md)                                                        |
 | Choosing between Pydantic / dataclass / TypedDict — trust boundaries, internal contracts, test fixtures                                                                                        | [`references/data-modeling.md`](references/data-modeling.md)                                            |

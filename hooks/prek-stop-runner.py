@@ -98,8 +98,9 @@ def is_real_failure(combined: str) -> bool:
     """Return True if the prek output contains real failures.
 
     Filters out the `check-added-large-files` exit 128 (prek 0.4.1 bug in
-    --files mode). Treats output as a real failure if any OTHER hook failed,
-    OR if `check-added-large-files` is not the only thing mentioned.
+    --files mode): lines mentioning that hook are ignored, every other
+    failure line counts. A non-zero exit with no recognizable failure line
+    is surfaced too — unknown output must not be silently swallowed.
 
     Args:
         combined: Stdout + stderr from prek run.
@@ -107,11 +108,10 @@ def is_real_failure(combined: str) -> bool:
     Returns:
         True if a real failure (not just check-added-large-files noise).
     """
-    lines_out = combined.splitlines()
-    real_failures = [
-        ln for ln in lines_out if "Failed to run hook" in ln and "check-added-large-files" not in ln
-    ]
-    return bool(real_failures) or "check-added-large-files" not in combined
+    failed_lines = [ln for ln in combined.splitlines() if "Failed" in ln]
+    if not failed_lines:
+        return True  # non-zero exit with no recognizable hook output — surface it
+    return any("check-added-large-files" not in ln for ln in failed_lines)
 
 
 def main() -> int:

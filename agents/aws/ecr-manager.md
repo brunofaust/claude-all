@@ -61,7 +61,7 @@ Augment each image entry with the scan-findings summary from ECR's built-in scan
 aws ecr describe-image-scan-findings \
   --repository-name "$REPO" \
   --image-id imageTag="$TAG" \
-  --query 'imageScanFindingsSummary.findingSeverityCounts'
+  --query 'imageScanFindings.findingSeverityCounts'
 ```
 
 Output augmentation per image:
@@ -82,7 +82,7 @@ Severity gate (security):
 Skip-conditions:
 
 - If `describe-image-scan-findings` returns `ScanNotFoundException` or the repo has `imageScanningConfiguration.scanOnPush = false`, omit the CVE row and add a single line: `- CVE scan: ⚠ scan-on-push disabled (no findings available)`.
-- If scan is still running (`scanStatus.status = IN_PROGRESS`), show: `- CVE scan: ⏳ in progress (started <ts>)`.
+- If scan is still running (`imageScanStatus.status = IN_PROGRESS`), show: `- CVE scan: ⏳ in progress (started <ts>)`.
 
 ## Rules
 

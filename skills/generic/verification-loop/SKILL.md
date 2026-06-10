@@ -46,7 +46,10 @@ stage and re-run).
 ### Phase 2 — Type check
 
 ```bash
-# Python
+# Python — if prek manages mypy (often at the pre-push stage), run it through prek
+# (the `prek` skill's rule: never run gate tools directly when prek wires them):
+prek run --all-files --hook-stage pre-push 2>&1 | tail -20
+# Python — no prek-managed mypy:
 uv run mypy . 2>&1 | tail -20
 
 # TypeScript

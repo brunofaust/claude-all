@@ -45,8 +45,10 @@ def main() -> int:
     except (json.JSONDecodeError, ValueError):
         return 0
 
-    file_path = data.get("tool_input", {}).get("file_path", "")
-    new_string = data.get("tool_input", {}).get("new_string", "") or ""
+    tool_input = data.get("tool_input", {})
+    file_path = tool_input.get("file_path", "")
+    # Edit sends `new_string`; Write sends `content` — cover both.
+    new_string = tool_input.get("new_string") or tool_input.get("content") or ""
 
     fires = False
     if file_path.endswith(IAC_EXTS):
@@ -72,16 +74,26 @@ def main() -> int:
     with contextlib.suppress(OSError), open(flag, "w", encoding="utf-8") as f:
         f.write(file_path)
 
-    print(
-        "Reminder (aws-architecture, first AWS-touching edit this session): "
-        "Lambda idempotency on async invokes; SQS visibility >= 6x processing time + DLQ; "
-        "SNS→SQS fanout, EventBridge for filter/replay/cross-account; "
-        "DynamoDB high-cardinality partition keys, never Scan in hot paths; "
-        "HTTP API > REST API (70% cheaper); "
-        "watch cost: NAT Gateway $/GB → VPC endpoints; CW Logs ingest $0.50/GB.",
-        file=sys.stderr,
+    # exit 0 + JSON additionalContext: exit 1 stderr is shown to the USER as a hook
+    # error, never to Claude — this reminder is addressed to Claude.
+    json.dump(
+        {
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "additionalContext": (
+                    "Reminder (aws-architecture, first AWS-touching edit this session): "
+                    "Lambda idempotency on async invokes; "
+                    "SQS visibility >= 6x processing time + DLQ; "
+                    "SNS→SQS fanout, EventBridge for filter/replay/cross-account; "
+                    "DynamoDB high-cardinality partition keys, never Scan in hot paths; "
+                    "HTTP API > REST API (70% cheaper); "
+                    "watch cost: NAT Gateway $/GB → VPC endpoints; CW Logs ingest $0.50/GB."
+                ),
+            }
+        },
+        sys.stdout,
     )
-    return 1
+    return 0
 
 
 if __name__ == "__main__":

@@ -31,7 +31,7 @@ If the project tool isn't specified, detect from project root files (in priority
 - Default to `tail -200` for noisy output unless the user asked for the full log.
 - Set a sensible timeout — most dep operations finish in \<2 min; if longer, mention it.
 - NEVER pass `--no-verify`, `--force-reinstall`, or destructive flags unless the user asked for them.
-- NEVER run commands that publish to a registry (`poetry publish`, `uv publish`, `pip upload`).
+- NEVER run commands that publish to a registry (`poetry publish`, `uv publish`, `twine upload`).
 - If the user gave a tool name (uv/pip/poetry/pipx) but the project doesn't match (e.g. they said "uv sync" in a poetry project), run what they asked and note the mismatch in the summary.
 
 ## Output format
@@ -71,7 +71,7 @@ Pull the *useful* lines from the failure, not the whole traceback:
 
 Only suggest when the cause is well-known and the fix is one line:
 
-- `tokie` / `chonkie` rust build failure → suggest pinning chonkie to a known-good version.
+- `native-ext` / `mypkg` rust build failure → suggest pinning mypkg to a known-good version.
 - `psycopg2` build failure without `libpq` → suggest `psycopg2-binary` or installing libpq.
 - `cryptography` build failure without rust → suggest the user has rustup, or pin to wheel-only version.
 - uv resolver conflict between two extras → suggest narrowing extras.
@@ -101,11 +101,11 @@ Do NOT suggest fixes you're guessing at. If the cause isn't obvious, just report
 ```
 **Tool:** uv  •  **Command:** `uv sync`  •  **Status:** ✗ failed
 **Errors:**
-- `chonkie==1.6.6` pulled `tokie` (rust dep) which fails to compile:
+- `mypkg==1.6.6` pulled `native-ext` (rust dep) which fails to compile:
   `error: linker 'cc' failed: cargo build exited with code 1`
-- Build dependency `tokie` was added between chonkie 1.6.4 and 1.6.6.
+- Build dependency `native-ext` was added between mypkg 1.6.4 and 1.6.6.
 
-**Suggested fix:** pin `chonkie>=1.6.2,<1.6.5` in pyproject.toml, then re-run `uv sync`.
+**Suggested fix:** pin `mypkg>=1.6.2,<1.6.5` in pyproject.toml, then re-run `uv sync`.
 ```
 
 **Request:** "Add `httpx` to the project."
@@ -118,13 +118,13 @@ Do NOT suggest fixes you're guessing at. If the cause isn't obvious, just report
 ✓ `uv add httpx` — added httpx 0.27.2 + 4 transitive deps. pyproject.toml updated.
 ```
 
-## Append `uv pip audit` on success
+## Append `uvx pip-audit` on success
 
 After a successful `uv sync` / `uv add` / `uv lock`, automatically run an audit + outdated check and append to the success output:
 
 ```bash
 uv pip list --outdated 2>&1 | tail -50
-uv pip audit 2>&1 | tail -50    # if uv-pip-audit isn't available, fall back to `pip-audit`
+uvx pip-audit 2>&1 | tail -50    # if uvx isn't available, fall back to `pip-audit`
 ```
 
 Format:
@@ -139,7 +139,7 @@ Also include `outdated_count: N` in the summary block (see below).
 
 Severity:
 
-- 🟠 **HIGH** — for any CVE returned by `uv pip audit` / `pip-audit`.
+- 🟠 **HIGH** — for any CVE returned by `uvx pip-audit` / `pip-audit`.
 - 🟡 **MEDIUM** — for packages outdated >30 days (best-effort: check release date if shown).
 - 🔵 **INFO** — outdated \<30 days.
 

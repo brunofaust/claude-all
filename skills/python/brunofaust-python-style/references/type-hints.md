@@ -127,14 +127,15 @@ Define reusable type aliases for complex types and callback signatures.
 
 ```python
 from collections.abc import Callable, Awaitable, Sequence
+from typing import TypeAlias
 
-# Simple type aliases
-type entity_id = str
-type s3_uri = str
+# Simple type aliases (3.11 baseline — use `type entity_id = str` once on 3.12+)
+entity_id: TypeAlias = str
+s3_uri: TypeAlias = str
 
 # Complex type aliases
-type async_handler = Callable[[dict[str, Any]], Awaitable[dict[str, Any]]]
-type progress_callback = Callable[[int, int], None]  # (current, total)
+async_handler: TypeAlias = Callable[[dict[str, Any]], Awaitable[dict[str, Any]]]
+progress_callback: TypeAlias = Callable[[int, int], None]  # (current, total)
 
 
 # Callable with named parameters (use Protocol)

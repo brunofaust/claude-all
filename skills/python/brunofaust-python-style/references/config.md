@@ -237,9 +237,10 @@ try:
     settings = Settings()
 except ValidationError as e:
     for error in e.errors():
-        field = error[“loc”][0]
-        msg = error[“msg”]
-        print(f”Setting {field}: {msg}”)
+        field = error["loc"][0]
+        msg = error["msg"]
+        print(f"Setting {field}: {msg}")
+    sys.exit(1)
 ```
 
 A clear error at startup is better than a cryptic `None` failure mid-request.

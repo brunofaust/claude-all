@@ -23,7 +23,12 @@ The agent can review:
 1. **Source code**: `.tf` files in a directory or PR
 1. **Both**: code + plan for full context
 
-If user provides only a directory, run `terraform plan -out=tfplan.out && terraform show -no-color tfplan.out` to get both.
+If user provides only a directory, review the `.tf` source statically. Do NOT run
+`terraform plan` yourself — it executes Terraform (refreshes state, hits provider
+APIs, can take the state lock). If plan context is needed, ask the caller to
+provide a saved plan (`terraform plan -out=tfplan.out`, e.g. via the
+`terraform-deployer` agent) and read it with `terraform show -no-color tfplan.out`
+/ `terraform show -json tfplan.out` (read-only on an existing plan file).
 
 ## Review dimensions
 

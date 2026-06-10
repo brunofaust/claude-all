@@ -4,18 +4,18 @@
 
 ## Installation
 
-\`\`\`bash
+```bash
 uv sync
-\`\`\`
+```
 
 ## Quick Start
 
-\`\`\`python
+```python
 from myproject import Client
 
 client = Client(api_key="...")
 result = client.process(data)
-\`\`\`
+```
 
 ## Configuration
 

@@ -59,8 +59,10 @@ def main() -> int:
     except (json.JSONDecodeError, ValueError):
         return 0
 
-    file_path = data.get("tool_input", {}).get("file_path", "")
-    new_string = data.get("tool_input", {}).get("new_string", "") or ""
+    tool_input = data.get("tool_input", {})
+    file_path = tool_input.get("file_path", "")
+    # Edit sends `new_string`; Write sends `content` — cover both.
+    new_string = tool_input.get("new_string") or tool_input.get("content") or ""
 
     # Always fire for robots.txt / sitemap.xml / llms.txt files
     name_fire = file_path.endswith(("robots.txt", "sitemap.xml", "llms.txt"))
@@ -81,17 +83,26 @@ def main() -> int:
     with contextlib.suppress(OSError), open(flag, "w", encoding="utf-8") as f:
         f.write(file_path)
 
-    print(
-        "Reminder (seo, first SEO-touching edit this session): "
-        "title 50-60 chars; meta description 150-160; one <h1>; canonical on every indexable page; "
-        "JSON-LD (Article/BreadcrumbList/Organization/Product) — "
-        "SKIP deprecated HowTo and non-authority FAQPage; "
-        "Core Web Vitals: LCP ≤ 2.5s, INP ≤ 200ms (not FID), CLS ≤ 0.1; "
-        "robots.txt: don't block GPTBot/ClaudeBot/PerplexityBot/Google-Extended"
-        " — costs AI citations.",
-        file=sys.stderr,
+    # exit 0 + JSON additionalContext: exit 1 stderr is shown to the USER as a hook
+    # error, never to Claude — this reminder is addressed to Claude.
+    json.dump(
+        {
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "additionalContext": (
+                    "Reminder (seo, first SEO-touching edit this session): "
+                    "title 50-60 chars; meta description 150-160; one <h1>; canonical on every "
+                    "indexable page; JSON-LD (Article/BreadcrumbList/Organization/Product) — "
+                    "SKIP deprecated HowTo and non-authority FAQPage; "
+                    "Core Web Vitals: LCP ≤ 2.5s, INP ≤ 200ms (not FID), CLS ≤ 0.1; "
+                    "robots.txt: don't block GPTBot/ClaudeBot/PerplexityBot/Google-Extended"
+                    " — costs AI citations."
+                ),
+            }
+        },
+        sys.stdout,
     )
-    return 1
+    return 0
 
 
 if __name__ == "__main__":

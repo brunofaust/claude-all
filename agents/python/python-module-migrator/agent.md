@@ -43,7 +43,7 @@ git mv "$SRC" "$DST"
 # 3. Repoint EVERY importer. Use perl with a negative-lookbehind so a path that is
 #    already a prefix of a longer path is NOT double-nested (myapp.old → myapp.core.old
 #    must never turn myapp.old.sub into myapp.core.old.sub twice). \b anchors the word end.
-grep -rlE "(?<![.\w])${OLD//./\\.}\b" src tests 2>/dev/null \
+grep -rl "${OLD//./\\.}" src tests 2>/dev/null \
   | while IFS= read -r f; do
       perl -0777 -i -pe "s/(?<![.\w])\Q${OLD}\E\b/${NEW}/g" "$f"
     done
@@ -57,6 +57,10 @@ Notes that matter (these are the foot-guns this agent exists to absorb):
   substring replace produces false positives (`myapp.old` matching inside `myapp.olds`). `\Q...\E`
   quotes the dotted path so `.` is literal; the `(?<![.\w])` + `\b` guard prevents partial and
   double-nested matches.
+- **Lookbehind lives ONLY in the perl regex — never in grep.** ERE (`grep -E`) has no
+  lookbehind: it warns and matches NOTHING, so a `grep -E "(?<!...)"` selection loop rewrites
+  zero files and a verify grep falsely passes. macOS/BSD grep has no `-P` either. So grep only
+  pre-selects candidate files with a plain (superset) pattern; perl applies the precise guard.
 - **`mkdir -p` the destination dir BEFORE `git mv`** — otherwise the move fails or lands the file
   in the wrong place.
 
@@ -79,7 +83,11 @@ Also repoint these reference sites that import-graph tools miss: `importlib.impo
 
 ```bash
 # Zero residual references to the OLD path anywhere (the move is incomplete if non-empty):
-grep -rnE "(?<![.\w])${OLD//./\\.}\b" src tests 2>/dev/null   # MUST return nothing
+# (precision check runs in perl — grep -E/-P can't do lookbehind portably)
+grep -rl "${OLD//./\\.}" src tests 2>/dev/null \
+  | while IFS= read -r f; do
+      OLD="$OLD" perl -0777 -ne 'print "$ARGV\n" if /(?<![.\w])\Q$ENV{OLD}\E\b/' "$f"
+    done   # MUST print nothing
 
 # Imports resolve across the whole tree:
 pytest --collect-only -q 2>&1 | tail -20                       # MUST end with no errors

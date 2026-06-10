@@ -68,8 +68,8 @@ commit. It needs `git` + network. **Always review the diff and commit** — the 
 1. Add a `vendored.json` entry; list sidecars in `local_only` and any patches in `frontmatter_inject`.
 1. If the resource ships multilingual / intentional-misspelling content, scope-exclude its path from
    the prek `typos` hook (see the `prek` skill).
-1. `python scripts/vendor_sync.py --check --id <id>` to confirm the entry resolves; `./claude-all
-   install <name>` to verify discovery; run `prek`.
+1. `python scripts/vendor_sync.py --check --id <id>` to confirm the entry resolves;
+   `./claude-all --list <name>` to verify discovery; run `prek`.
 
 ## Anti-patterns
 

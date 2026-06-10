@@ -188,9 +188,9 @@ Use `--porcelain` for stable parsing, then summarize.
 
 ```
 **Worktrees:** 3
-- /Users/bfaust/repos/myapp                            (main)       *primary
-- /Users/bfaust/repos/myapp/.claude/worktrees/auth     (feature/auth-refresh)
-- /Users/bfaust/repos/myapp/.claude/worktrees/billing  (hotfix/billing-pdf)  [locked]
+- /Users/user/repos/myapp                            (main)       *primary
+- /Users/user/repos/myapp/.claude/worktrees/auth     (feature/auth-refresh)
+- /Users/user/repos/myapp/.claude/worktrees/billing  (hotfix/billing-pdf)  [locked]
 *primary = the main checkout
 ```
 

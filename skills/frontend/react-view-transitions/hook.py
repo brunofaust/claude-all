@@ -34,7 +34,9 @@ def main() -> int:
     if "/node_modules/" in file_path or "/dist/" in file_path:
         return 0
 
-    new_string = data.get("tool_input", {}).get("new_string", "") or ""
+    tool_input = data.get("tool_input", {})
+    # Edit sends `new_string`; Write sends `content` — cover both.
+    new_string = tool_input.get("new_string") or tool_input.get("content") or ""
     if not any(marker in new_string for marker in TRANSITION_MARKERS):
         return 0
 
@@ -46,15 +48,24 @@ def main() -> int:
     with contextlib.suppress(OSError), open(flag, "w", encoding="utf-8") as f:
         f.write(file_path)
 
-    print(
-        "Reminder (vercel-react-view-transitions, first transition-touching edit this session): "
-        "use native React View Transitions API — "
-        "<ViewTransition>, addTransitionType, CSS ::view-transition pseudo-elements — "
-        "BEFORE pulling in framer-motion / react-spring / any third-party animation lib. "
-        "Cheaper, smoother, fewer deps.",
-        file=sys.stderr,
+    # exit 0 + JSON additionalContext: exit 1 stderr is shown to the USER as a hook
+    # error, never to Claude — this reminder is addressed to Claude.
+    json.dump(
+        {
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "additionalContext": (
+                    "Reminder (vercel-react-view-transitions, first transition-touching "
+                    "edit this session): use native React View Transitions API — "
+                    "<ViewTransition>, addTransitionType, CSS ::view-transition "
+                    "pseudo-elements — BEFORE pulling in framer-motion / react-spring / "
+                    "any third-party animation lib. Cheaper, smoother, fewer deps."
+                ),
+            }
+        },
+        sys.stdout,
     )
-    return 1
+    return 0
 
 
 if __name__ == "__main__":

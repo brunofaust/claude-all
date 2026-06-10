@@ -24,7 +24,9 @@ def main() -> int:
     if "/node_modules/" in file_path or "/dist/" in file_path:
         return 0
 
-    new_string = data.get("tool_input", {}).get("new_string", "") or ""
+    tool_input = data.get("tool_input", {})
+    # Edit sends `new_string`; Write sends `content` — cover both.
+    new_string = tool_input.get("new_string") or tool_input.get("content") or ""
     if not any(
         t in new_string
         for t in (
@@ -47,14 +49,23 @@ def main() -> int:
     with contextlib.suppress(OSError), open(flag, "w", encoding="utf-8") as f:
         f.write(file_path)
 
-    print(
-        "Reminder (vercel-composition-patterns, first prop-touching edit this session): "
-        "if adding 3+ boolean props OR conditional render branches, "
-        "prefer slot / compound / asChild composition over prop sprawl. "
-        "Map: 3+ booleans → variant prop; render-branch sprawl → children slots.",
-        file=sys.stderr,
+    # exit 0 + JSON additionalContext: exit 1 stderr is shown to the USER as a hook
+    # error, never to Claude — this reminder is addressed to Claude.
+    json.dump(
+        {
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "additionalContext": (
+                    "Reminder (vercel-composition-patterns, first prop-touching edit "
+                    "this session): if adding 3+ boolean props OR conditional render branches, "
+                    "prefer slot / compound / asChild composition over prop sprawl. "
+                    "Map: 3+ booleans → variant prop; render-branch sprawl → children slots."
+                ),
+            }
+        },
+        sys.stdout,
     )
-    return 1
+    return 0
 
 
 if __name__ == "__main__":

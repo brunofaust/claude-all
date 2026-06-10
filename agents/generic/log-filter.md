@@ -34,7 +34,7 @@ Given raw logs, you can:
 1. Apply the requested transformation. If the user didn't specify, default to:
     - Filter to ERROR + WARN only
     - Group identical or near-identical messages with counts
-    - Extract any stack traces and show top frames (max 5)
+    - Extract stack traces — show the FULL traceback for the error under investigation (see the CRITICAL rule below); collapse only repeated identical traces (show once + count)
     - Produce a timeline of distinct events
 1. For structlog: extract `timestamp`, `level`, `event`, and any error fields. Drop noisy fields unless requested.
 1. Use `jq`, `grep`, `awk` for processing where it's faster than reading line-by-line.

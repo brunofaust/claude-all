@@ -41,7 +41,7 @@ has a specific replacement — use it.
 | `monkeypatch.setattr(...)` without `MonkeyPatch.context()`   | `with MonkeyPatch.context() as mp: mp.setattr(...)`                                      | Explicit teardown; safe under parallel collection                              |
 | `@pytest.fixture` with side-effects but no `yield` cleanup   | Always `yield` + cleanup, even for "harmless" fixtures                                   | Resource leaks compound under `-n auto`                                        |
 | Mocking AWS with `moto` / `boto-mock` for integration tests  | LocalStack (Docker, managed by the project's pytest plugin)                              | Higher fidelity; catches real boto serialization bugs                          |
-| `import unittest.mock` anywhere in `tests/`                  | `pytest-mock` (`mocker` fixture) only when DI is genuinely impossible                    | Plugin gives auto-cleanup; stdlib `mock` is easy to forget to stop             |
+| `unittest.mock.patch` / `MagicMock` module-patching in `tests/` | `pytest-mock` (`mocker` fixture) only when DI is genuinely impossible; `from unittest.mock import AsyncMock` for protocol stubs is the one allowed import | Plugin gives auto-cleanup; stdlib `patch` is easy to forget to stop            |
 | `assert x` with no message on complex objects                | `assert x, f"context: {x!r}"` or `pytest.fail(...)`                                      | Failure logs are unreadable otherwise                                          |
 | `time.sleep(N)` to wait for an async event                   | `await asyncio.wait_for(...)` / `pytest-asyncio` + polling helper                        | sleeps make tests flaky and slow                                               |
 | Catching `Exception` in tests to "be safe"                   | Let exceptions propagate; use `pytest.raises(SpecificError)`                             | Silently swallowing errors hides real bugs                                     |
@@ -73,7 +73,7 @@ has a specific replacement — use it.
 - pytest-dotenv: load environment variables
 - pytest-rerunfailures: rerun failed
 - pytest-timeout: timeout test
-- pytest-unordered: random test order
+- pytest-unordered: order-insensitive collection comparisons (use pytest-randomly for random test order)
 - pytest-xdist: parallel execution
 - python-on-whales: control Docker
 - freezegun: freezes the datetime
@@ -88,7 +88,7 @@ has a specific replacement — use it.
 [pytest]
 asyncio_mode = auto
 asyncio_default_fixture_loop_scope = session
-pythonpath = ["."]
+pythonpath = .
 env_override_existing_values = 1
 env_files = tests/pytest.env
 testpaths = tests
@@ -350,9 +350,7 @@ monkeypatch.setattr(
 For global mocks that apply across all tests (e.g., replacing config loading with local file reads):
 
 ```python
-# In conftest.py — module-level patching
-
-MONKEYPATCH = pytest.MonkeyPatch()
+# In conftest.py — session-scoped patching with explicit undo
 
 
 async def _mock_get_configuration(cls, config_name: str) -> Any:
@@ -363,10 +361,15 @@ async def _mock_get_configuration(cls, config_name: str) -> Any:
     return orjson.loads(content)
 
 
-MONKEYPATCH.setattr(
-    "some_class.get_configuration",
-    _mock_get_configuration,
-)
+@pytest.fixture(autouse=True, scope="session")
+def _patch_configuration() -> Iterator[None]:
+    """Apply the global mock for the whole session, undone on teardown."""
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(
+            "some_class.get_configuration",
+            _mock_get_configuration,
+        )
+        yield
 ```
 
 ### Data Tests
@@ -392,7 +395,7 @@ async def test_step_1_load_first_file() -> None:
     lf = await get_orders()
 
     expected_lf = pl.LazyFrame(...)
-    assert lf == lf_expected
+    assert_frame_equal(lf.collect(), expected_lf.collect())
 
     # 4. Verify no duplicates
     orders = await get_order_by_id(1)
@@ -927,7 +930,7 @@ def test_create_user_rejects_invalid_email():
 ### Running Tests
 
 ```bash
-# All tests (15 parallel workers)
+# All tests (10 parallel workers)
 uv run pytest -n10
 
 # Without data/slow/localstack tests (quick check)

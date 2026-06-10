@@ -26,7 +26,7 @@ silently break every session — so robustness is the whole game.
 | `PreToolUse` | before a tool runs | **yes** (exit 2 stops the tool) |
 | `PostToolUse` | after a tool returns (sees the result) | no |
 | `UserPromptSubmit` | when the user sends a message | yes (exit 2 drops it) |
-| `Stop` / `SubagentStop` | when the main / sub agent finishes | no |
+| `Stop` / `SubagentStop` | when the main / sub agent finishes | **yes** (exit 2 blocks stoppage; stderr goes to Claude) |
 | `PreCompact` | before context compaction | no |
 | `SessionStart` / `Notification` | session begins / a notification fires | no |
 
@@ -124,5 +124,5 @@ Run a battery of should-block / should-allow / should-warn cases (this is how
 ## Examples in this repo
 
 - `hooks/destructive-command-guard.py` — a **guard** (exit 2, with allowlist + override).
-- `hooks/config-protection.py` — a non-blocking guard (exit 1, asks for confirmation).
+- `hooks/config-protection.py` — a non-blocking guard (exit 0 + JSON `additionalContext` telling Claude to get user confirmation first).
 - `skills/*/hook.py` + `hook.json` — domain reminder hooks shipped with skills.

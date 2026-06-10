@@ -218,7 +218,7 @@ ______________________________________________________________________
 
 Report-only stops here. To *act* on it, create each resource per this repo's conventions (see
 `CLAUDE.md` and `claude-all`): add the file under the right `...` path, then
-`./claude-all install <name>`. Confirm before creating any **hook**, **settings** change, or
+`./claude-all --all --user <name>`. Confirm before creating any **hook**, **settings** change, or
 **CLAUDE.md instruction** — those alter automatic behaviour (`config-protection`). Build the proposed
 resource with its matching skill: `claude-hooks` (hooks), `subagent-prompting` (agents),
 `update-config` (settings).

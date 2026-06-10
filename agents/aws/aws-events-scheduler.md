@@ -157,7 +157,7 @@ Any `ResourceNotFoundException` / `NoSuchEntity` / `404` → flag as ORPHANED in
 
 If the rule is Terraform-managed (see anti-patterns below), the FIX hint should point at `terraform-deployer` to remove the target from the IaC, not direct `aws events remove-targets`.
 
-### `describe-schedule` — single schedule detail
+### `get-schedule` — single schedule detail
 
 ```
 **Schedule:** myapp-dev-cleanup (group: default)

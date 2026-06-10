@@ -107,9 +107,10 @@ def upgrade() -> None:
     )
 ```
 
-For ENUM value additions: create new type, migrate data, drop old type in a
-SEPARATE migration. Don't combine — postgres `ALTER TYPE ... ADD VALUE` is not
-transactional in some setups and can deadlock.
+For ENUM changes that rename/remove values or need a same-change backfill:
+create new type, migrate data, drop old type in a SEPARATE migration. For pure
+value ADDITIONS, the in-place `ALTER TYPE ... ADD VALUE` inside an autocommit
+block is fine — see "ENUM ALTER inside autocommit block" below.
 
 ### Adding + dropping columns
 
@@ -237,15 +238,19 @@ follow-up plan if applicable.
 
 ## ENUM ALTER inside autocommit block
 
-**Common foot-gun.** `ALTER TYPE ... ADD VALUE` is **not transactional** in
-PostgreSQL — it cannot run inside the implicit transaction Alembic wraps each
-migration in. Running it normally will fail with:
+**Common foot-gun.** On PostgreSQL < 12, `ALTER TYPE ... ADD VALUE` cannot run
+inside the implicit transaction Alembic wraps each migration in — it fails with:
 
 ```
 ERROR: ALTER TYPE ... ADD cannot run inside a transaction block
 ```
 
-Use `op.get_context().autocommit_block()` to escape the outer transaction:
+Since PG 12 it CAN run in a transaction, but the new value is unusable until the
+transaction commits — so a same-migration backfill that writes the new value
+still breaks. Either way, use `op.get_context().autocommit_block()` to escape
+the outer transaction. (This in-place `ADD VALUE` route is for *adding* values
+only; for renames/removals — or when you must backfill in the same change — use
+the new-type → migrate → drop-old recipe from "ENUM value additions" above.)
 
 ```python
 from alembic import op

@@ -37,7 +37,10 @@ Prefer RDS Proxy when available (connection pooling, IAM auth, no password handl
 - `INSERT`, `UPDATE`, `DELETE`, `TRUNCATE`, `MERGE`
 - `CREATE`, `ALTER`, `DROP` (any object)
 - `GRANT`, `REVOKE`
-- `COPY ... FROM` (write); `COPY ... TO` is allowed
+- `COPY ... FROM` (write); `COPY ... TO '<file>'` and `COPY ... TO PROGRAM` (write files /
+    run commands AS THE DB SERVER OS USER — never). Only `COPY (SELECT ...) TO STDOUT` is allowed
+    for exporting query results.
+- `SELECT ... FOR UPDATE` / `FOR SHARE` (takes row locks), `REINDEX`, `VACUUM`
 - `CALL` to procedures (could mutate)
 - Anything inside `BEGIN`/`COMMIT` blocks doing writes
 
