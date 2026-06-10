@@ -88,7 +88,11 @@ names, or internal tool names from any specific codebase.
 - Real project names from any client or employer codebase
 - Real internal tool or hook names (e.g. private GitHub repos used as prek hooks)
     are fine in actual config files (`prek.toml`) but must not appear in skill
-    documentation examples — use `myorg/myhook` instead
+    documentation examples — use `myorg/myhook` instead.
+    **Functional exception:** agent dispatch triggers and gate-output handling may
+    name a real hook the user actually runs (e.g. `lint-fixer` matching
+    "resolve codecongruence" and its finding codes) — dispatch must match real
+    command output to work. Illustrative examples still use `myorg/myhook`.
 - Real email addresses in examples — use `user@example.com`
 - Real AWS account IDs — use `123456789012`
 - Real ARNs — use `arn:aws:lambda:us-east-1:123456789012:function:myapp-dev-worker`

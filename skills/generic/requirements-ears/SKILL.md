@@ -6,8 +6,8 @@ description: >-
   implementing a feature or refactor when the requester wants to specify behavior at the
   business level without writing code or tests. Triggers: "what should this do", "write
   acceptance criteria", "spec this feature", "turn this into requirements", or handing a
-  brainstorm output into implementation. Pairs with brainstorming (which decides WHAT to
-  build) by pinning HOW each behavior must work. Output feeds directly into tests.
+  brainstorm output into implementation. Complements a brainstorming/design phase (which
+  decides WHAT to build) by pinning HOW each behavior must work. Output feeds directly into tests.
 user-invocable: true
 ---
 

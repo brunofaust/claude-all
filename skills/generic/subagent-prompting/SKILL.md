@@ -165,7 +165,7 @@ The agents that most need it are the untrusted-input readers: `email-inspector`,
 
 - After dispatch: apply `adversarial-verification` to the subagent's output before trusting it.
 - If subagents repeatedly return `NEEDS_CONTEXT`: your prompts are missing inputs — re-read this skill, not the subagent.
-- For parallel fan-out specifically: `superpowers-extended-cc:dispatching-parallel-agents` skill has the independence-test recipe.
+- For parallel fan-out specifically: the independence test is in "Parallel dispatch — independence precondition" above; the recipe originates from obra/superpowers' `dispatching-parallel-agents` (linked under Inspiration).
 
 ## Inspiration
 

@@ -246,7 +246,7 @@ five focused passes don't. Lenses:
 - **Consistency** — does it match the existing patterns/conventions in this codebase?
 - **Redundancy / reuse** — is this reinventing something that already exists? (see `research-before-build`)
 
-Dispatch them as parallel agents (`subagent-prompting` / `dispatching-parallel-agents`); each returns
+Dispatch them as parallel agents (write the prompts per `subagent-prompting`); each returns
 findings in this skill's output format; you synthesize one report. Reserve the full panel for
 high-stakes diffs — a small change needs one pass.
 
