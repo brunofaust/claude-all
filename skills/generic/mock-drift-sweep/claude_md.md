@@ -1,0 +1,4 @@
+## Mock drift — `mock-drift-sweep` skill
+After changing any function signature, return shape, exception type, or import path, sweep and update EVERY mock of that seam in the same change — use the `mock-drift-sweep` skill. Green tests over an updated implementation but stale mocks = a broken contract that ships.
+
+Rule: locate all forms (patch-strings, `@patch.object`, autospec, hand fakes, mock servers, recorded fixtures, hand-built config), update each to the new shape, prefer spec'd/autospec mocks over bare `Mock()`, and build config mocks from the real model. `pytest --collect-only` catches a dead patch *module* but NOT a renamed patch *attribute* — grep the old symbol and run the affected tests. Keep at least one real-dependency test per external contract (real DB/SDK, production version) — mocks validate nothing about real SQL/schema/exception types.
