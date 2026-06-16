@@ -96,7 +96,7 @@ pre-commit/`local`-hook wiring and `SKIP=` discipline.
 ## C. Example checkers (`checkers/`)
 
 Generic, runnable, and used as worked examples with the harness. Each is Python, but the *principle*
-is stack-neutral — translate to your toolchain. All fail open on unparseable files (a sibling syntax
+is stack-neutral — translate to your toolchain. All fail open on unparsable files (a sibling syntax
 gate owns those) and exit 0 so they compose with `baseline_gate.py`.
 
 | Checker | Lesson | What it catches |

@@ -76,7 +76,7 @@ def find_violations(path: Path) -> list[str]:
     try:
         tree = ast.parse(path.read_text(encoding="utf-8"))
     except (SyntaxError, ValueError, UnicodeDecodeError):
-        return []  # a sibling syntax gate owns unparseable files
+        return []  # a sibling syntax gate owns unparsable files
     findings: list[str] = []
     for node in ast.walk(tree):
         if isinstance(node, ast.Call):
