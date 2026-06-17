@@ -17,32 +17,32 @@ STATIC checks (no network, instant):
 - **alternate Python indexes** — `--index-url`/`--extra-index-url` can shadow
   public names (dependency confusion); `--trusted-host` disables TLS verification.
 
-COOLDOWN check (queries the registry; the actual Shai-Hulud-style defense):
-- For every package being installed — named on the command line OR resolved from
-  the lockfile for `uv sync` / `poetry install` / `npm ci` / `pip -r` — it looks up
-  the release date and ALERTS if the version was published within the cooldown
-  window (default 7 days; most malicious releases are caught within days). Publish
-  dates of pinned versions are cached on disk (they're immutable), and the whole
-  check runs under a time budget with a tool-call-safe per-request timeout, so it
-  stays fast and FAILS OPEN — a registry it can't reach never blocks the install.
+COOLDOWN check (the actual Shai-Hulud-style defense): for every package being
+installed it checks the release date and ALERTS if the version was published
+within the cooldown window (default 7 days — most malicious releases are caught
+within days). Date sources, cheapest first:
+- **`uv.lock`** already records `upload-time` per artifact, so `uv sync` (and any
+  uv-locked package) is checked entirely OFFLINE — no network, no cache.
+- For named installs (`pip install x`, `uv add x`, …) and lockfiles without dates
+  (poetry.lock, package-lock.json, requirements) it does a small LIVE registry
+  lookup — no cache (installs are rare), under a time budget with a short
+  per-request timeout, and it FAILS OPEN (an unreachable registry never blocks).
 
 Covers npm/pnpm/yarn/bun and pip/pipx/uv/poetry. Env:
   CC_SUPPLY_CHAIN_OK=1            silence the whole hook
-  CC_SUPPLY_CHAIN_NO_NETWORK=1   skip the cooldown lookup (keep the static checks)
+  CC_SUPPLY_CHAIN_NO_NETWORK=1   skip live lookups (uv.lock dates still checked)
   CC_SUPPLY_CHAIN_COOLDOWN_DAYS  cooldown window in days (default 7)
 """
 
 from __future__ import annotations
 
-import contextlib
 import json
 import os
 import re
 import shlex
 import sys
-import tempfile
+import time
 import urllib.request
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -67,12 +67,14 @@ LOCKFILES: dict[str, tuple[str, str]] = {
 
 # ── cooldown-check tunables ──────────────────────────────────────────────────
 COOLDOWN_DAYS = int(os.environ.get("CC_SUPPLY_CHAIN_COOLDOWN_DAYS", "7"))
-MAX_PKGS = 60  # cap registry lookups per command (lockfiles can be huge)
-WORKERS = 8
-BUDGET_SECONDS = 6.0  # overall wall-clock budget for the lookups
-REQ_TIMEOUT = 3.0  # per-request timeout (keeps stray threads short-lived)
+MAX_LOOKUPS = 40  # cap LIVE registry lookups per command (uv.lock dates are free)
+BUDGET_SECONDS = 6.0  # overall wall-clock budget for live lookups
+REQ_TIMEOUT = 3.0  # per-request timeout
 USER_AGENT = "claude-all-supply-chain-guard"
 OPERATORS = frozenset({"&&", "||", ";", "|", ">", ">>", "<", "&"})
+
+# A (name, version_or_None, upload_iso_or_None) target.
+Target = tuple[str, str | None, str | None]
 
 
 def nudge(message: str) -> int:
@@ -198,44 +200,55 @@ def classify(command: str) -> tuple[str, str, list[str], str | None]:
     return ("", "", [], None)
 
 
-# ── package spec + lockfile parsing ──────────────────────────────────────────
-def _split_npm(token: str) -> tuple[str, str | None]:
+# ── package spec + lockfile parsing (→ Target triples) ───────────────────────
+def _split_npm(token: str) -> Target:
     if token.startswith("@"):
         at = token.find("@", 1)
-        return (token, None) if at == -1 else (token[:at], token[at + 1 :] or None)
+        return (token, None, None) if at == -1 else (token[:at], token[at + 1 :] or None, None)
     name, _, ver = token.partition("@")
-    return (name, ver or None)
+    return (name, ver or None, None)
 
 
-def _split_py(token: str) -> tuple[str, str | None]:
+def _split_py(token: str) -> Target:
     token = re.sub(r"\[.*?\]", "", token)
     pinned = re.match(r"^([A-Za-z0-9._-]+)==([^\s,;]+)", token)
     if pinned:
-        return (pinned.group(1), pinned.group(2))
+        return (pinned.group(1), pinned.group(2), None)
     name = re.match(r"^([A-Za-z0-9._-]+)", token)
-    return (name.group(1), None) if name else (token, None)
+    return (name.group(1), None, None) if name else (token, None, None)
 
 
-def _parse_named(eco: str, pkgs: list[str]) -> list[tuple[str, str | None]]:
+def _parse_named(eco: str, pkgs: list[str]) -> list[Target]:
     split = _split_npm if eco == "npm" else _split_py
     return [split(p) for p in pkgs if p and not p.startswith("-")]
 
 
-def _parse_requirements(path: Path) -> list[tuple[str, str | None]]:
-    out: list[tuple[str, str | None]] = []
+def _parse_requirements(path: Path) -> list[Target]:
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
     except OSError:
-        return out
+        return []
+    out: list[Target] = []
     for raw in lines:
         line = raw.split("#", 1)[0].strip()
-        if not line or line.startswith("-"):
-            continue
-        out.append(_split_py(line))
+        if line and not line.startswith("-"):
+            out.append(_split_py(line))
     return out
 
 
-def _parse_toml_lock(path: Path) -> list[tuple[str, str | None]]:
+def _uv_upload_time(pkg: dict[str, Any]) -> str | None:
+    """Earliest `upload-time` recorded for a uv.lock package's artifacts, if any."""
+    stamps: list[str] = []
+    sdist = pkg.get("sdist")
+    if isinstance(sdist, dict) and isinstance(sdist.get("upload-time"), str):
+        stamps.append(sdist["upload-time"])
+    for wheel in pkg.get("wheels") or []:
+        if isinstance(wheel, dict) and isinstance(wheel.get("upload-time"), str):
+            stamps.append(wheel["upload-time"])
+    return min(stamps) if stamps else None
+
+
+def _parse_toml_lock(path: Path, *, with_dates: bool) -> list[Target]:
     try:
         import tomllib
     except ModuleNotFoundError:
@@ -244,45 +257,40 @@ def _parse_toml_lock(path: Path) -> list[tuple[str, str | None]]:
         data = tomllib.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return []
-    out: list[tuple[str, str | None]] = []
+    out: list[Target] = []
     for pkg in data.get("package") or []:
         name, ver = pkg.get("name"), pkg.get("version")
         if name and ver:
-            out.append((name, ver))
+            out.append((name, ver, _uv_upload_time(pkg) if with_dates else None))
     return out
 
 
-def _parse_npm_lock(path: Path) -> list[tuple[str, str | None]]:
+def _parse_npm_lock(path: Path) -> list[Target]:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return []
-    out: list[tuple[str, str | None]] = []
+    out: list[Target] = []
     for key, meta in (data.get("packages") or {}).items():
-        if not key:
-            continue
-        name = key.rsplit("node_modules/", 1)[-1]
-        ver = (meta or {}).get("version")
-        if name and ver:
-            out.append((name, ver))
+        if key and (ver := (meta or {}).get("version")):
+            out.append((key.rsplit("node_modules/", 1)[-1], ver, None))
     for name, meta in (data.get("dependencies") or {}).items():
-        ver = (meta or {}).get("version")
-        if name and ver:
-            out.append((name, ver))
+        if ver := (meta or {}).get("version"):
+            out.append((name, ver, None))
     return out
 
 
-def _lock_targets(eco: str, req: str | None, cwd: Path) -> list[tuple[str, str | None]]:
+def _lock_targets(eco: str, req: str | None, cwd: Path) -> list[Target]:
     if req:
         path = cwd / req
         return _parse_requirements(path) if path.is_file() else []
     if eco == "npm":
         path = cwd / "package-lock.json"
         return _parse_npm_lock(path) if path.is_file() else []
-    for name in ("uv.lock", "poetry.lock"):
-        path = cwd / name
-        if path.is_file():
-            return _parse_toml_lock(path)
+    if (cwd / "uv.lock").is_file():
+        return _parse_toml_lock(cwd / "uv.lock", with_dates=True)  # uv records upload-time
+    if (cwd / "poetry.lock").is_file():
+        return _parse_toml_lock(cwd / "poetry.lock", with_dates=False)
     return []
 
 
@@ -326,79 +334,29 @@ def _age_days(iso: str) -> int | None:
     return max(0, (datetime.now(UTC) - dt).days)
 
 
-def _cache_path() -> Path:
-    base = os.environ.get("CLAUDE_CACHE_DIR")
-    root = Path(base) if base else Path.home() / ".claude" / "cache"
-    directory = root / "supply-chain"
-    try:
-        directory.mkdir(parents=True, exist_ok=True)
-    except OSError:
-        directory = Path(tempfile.gettempdir())
-    return directory / "publish-dates.json"
-
-
-def _load_cache(path: Path) -> dict[str, str]:
-    try:
-        loaded = json.loads(path.read_text(encoding="utf-8"))
-        return {str(k): str(v) for k, v in loaded.items()} if isinstance(loaded, dict) else {}
-    except (OSError, ValueError):
-        return {}
-
-
 def cooldown_findings(
-    eco: str, mode: str, named: list[str], req: str | None, cwd: Path, days: int
+    eco: str, mode: str, named: list[str], req: str | None, cwd: Path, days: int, *, network: bool
 ) -> list[str]:
-    """Alert on packages whose release date is within the cooldown window."""
+    """Alert on packages whose release date is within the cooldown window.
+
+    Uses `upload-time` embedded in uv.lock when present (offline); otherwise does a
+    bounded, uncached live registry lookup (only when ``network`` is allowed).
+    """
     targets = _parse_named(eco, named) if mode == "named" else _lock_targets(eco, req, cwd)
     seen: set[tuple[str, str | None]] = set()
-    uniq: list[tuple[str, str | None]] = []
-    for name, ver in targets:
+    uniq: list[Target] = []
+    for name, ver, iso in targets:
         if name and (name, ver) not in seen:
             seen.add((name, ver))
-            uniq.append((name, ver))
-    uniq = uniq[:MAX_PKGS]
-    if not uniq:
-        return []
-
-    cache_path = _cache_path()
-    cache = _load_cache(cache_path)
-    resolved: dict[tuple[str, str | None], str] = {}
-    misses: list[tuple[str, str | None]] = []
-    for name, ver in uniq:
-        key = f"{eco}:{name}:{ver}"
-        if ver is not None and key in cache:
-            resolved[(name, ver)] = cache[key]
-        else:
-            misses.append((name, ver))
-
-    if misses:
-        pool = ThreadPoolExecutor(max_workers=WORKERS)
-        futures = {pool.submit(_published, eco, name, ver): (name, ver) for name, ver in misses}
-        try:
-            for fut in as_completed(futures, timeout=BUDGET_SECONDS):
-                name, ver = futures[fut]
-                try:
-                    iso = fut.result()
-                except Exception:
-                    iso = None
-                if iso:
-                    resolved[(name, ver)] = iso
-        except TimeoutError:
-            pass  # budget hit — report what resolved in time
-        pool.shutdown(wait=False, cancel_futures=True)
-        updated = False
-        for (name, ver), iso in resolved.items():
-            key = f"{eco}:{name}:{ver}"
-            if ver is not None and cache.get(key) != iso:
-                cache[key] = iso
-                updated = True
-        if updated:
-            with contextlib.suppress(OSError):
-                cache_path.write_text(json.dumps(cache), encoding="utf-8")
+            uniq.append((name, ver, iso))
 
     findings: list[str] = []
-    for name, ver in uniq:
-        iso = resolved.get((name, ver))
+    deadline = time.monotonic() + BUDGET_SECONDS
+    lookups = 0
+    for name, ver, iso in uniq:
+        if iso is None and network and lookups < MAX_LOOKUPS and time.monotonic() < deadline:
+            lookups += 1
+            iso = _published(eco, name, ver)
         if not iso:
             continue
         age = _age_days(iso)
@@ -425,11 +383,11 @@ def main() -> int:
         return 0
 
     cwd = Path(data.get("cwd") or os.getcwd())
+    eco, mode, named, req = classify(command)
     cooldown: list[str] = []
-    if not os.environ.get("CC_SUPPLY_CHAIN_NO_NETWORK"):
-        eco, mode, named, req = classify(command)
-        if eco:
-            cooldown = cooldown_findings(eco, mode, named, req, cwd, COOLDOWN_DAYS)
+    if eco:
+        network = not os.environ.get("CC_SUPPLY_CHAIN_NO_NETWORK")
+        cooldown = cooldown_findings(eco, mode, named, req, cwd, COOLDOWN_DAYS, network=network)
 
     findings = cooldown + analyze(command, cwd)
     if not findings:
