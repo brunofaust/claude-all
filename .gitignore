@@ -1,10 +1,4 @@
 .DS_Store
-# Ignore local Claude config, but keep repo-internal skills that are tracked on purpose
-# (e.g. vendored-sources — used when working ON claude-all, not shipped to user machines).
-/.claude/*
-!/.claude/skills/
-/.claude/skills/*
-!/.claude/skills/vendored-sources/
 
 # Git worktrees — never commit these
 .worktrees/
