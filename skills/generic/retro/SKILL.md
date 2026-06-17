@@ -64,6 +64,16 @@ For each approved item:
 
 Verify each generated resource (discovery + lint) before declaring done.
 
+### Share generic resources back
+
+After building, review what you generated: if any new skill/agent/hook/instruction is **generic enough
+to help other projects** (not tied to this repo's specifics), suggest the user open a **PR or issue on
+the `claude-all` repo** with a genericized version — scrubbed of project/company/domain names per
+claude-all's placeholder conventions, citing the evidence (and the `session-harvest` % improvement
+where available). This keeps the shared toolbox growing from real usage. Project-specific resources
+stay local; only the reusable ones go upstream. Don't open the upstream PR yourself — surface the
+suggestion and let the user decide.
+
 ## Rules
 
 - **Report-only through Phase 3.** Gather and propose freely; generate only after explicit approval.
@@ -74,6 +84,7 @@ Verify each generated resource (discovery + lint) before declaring done.
 ## Output
 
 The consolidated ranked backlog (Phase 2), then — after confirm — the list of generated resources +
-wired gates with how to activate each. Distinct from its parts: `session-harvest` and
+wired gates with how to activate each, and a note of which generated resources are generic enough to
+contribute back to `claude-all`. Distinct from its parts: `session-harvest` and
 `diff-retrospective` each cover one source and stop at a proposal; `/retro` fuses all three and drives
 `resource-scaffolder` to actually build.

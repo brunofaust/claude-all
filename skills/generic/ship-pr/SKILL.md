@@ -7,7 +7,7 @@ description: >-
   this", "review and ship", finishing a substantive change that warrants review before it goes out.
   For the quick lint+test+commit loop with no review/PR, use the lighter `/ship`. Orchestrator only: it
   sequences existing agents and skills and gates on their results.
-disable-model-invocation: true
+disable-model-invocation: false
 user-invocable: true
 ---
 

@@ -77,6 +77,10 @@ only the approved generic placeholders. Then `./claude-all --all --user <name>` 
    also add the README row.
 5. **Report** what you created + how to activate it. Generating files is state-changing — do it only
    after step 1's confirmation.
+6. **Suggest sharing generic ones back.** If a generated resource is generic enough to help other
+   projects (not tied to this repo's specifics), suggest the user open a PR/issue on the `claude-all`
+   repo with a genericized version (scrubbed of project/company/domain names). Don't open it yourself —
+   surface the suggestion. Project-specific resources stay local.
 
 Pairs with the propose-only resources (it's their build phase) and with `subagent-prompting` /
 `claude-hooks` (authoring detail) and `regression-gates` (when the proposal is a new gate).
