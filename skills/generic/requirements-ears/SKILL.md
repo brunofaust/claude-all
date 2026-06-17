@@ -74,7 +74,11 @@ When invoked with a feature or business intent:
 1. **Enumerate behaviors** — happy path, every edge case, every failure mode. Ask the
     requester about gaps; do not invent business rules. The most commonly missed are
     the unwanted-behavior (`IF`/`THEN`) cases — probe for them.
-1. **Write each as an EARS statement.** One behavior per statement. No "and".
+1. **Write each as an EARS statement, with a stable id.** One behavior per statement. No "and".
+    Prefix each with a stable behavior id `[b1]`, `[b2]`, … These ids are the traceability spine:
+    each test names the id it defends (`test_b3_empty_text_rejected`, or a comment / `ac_trace: b3`
+    in the commit), so you can audit end-to-end that every criterion has a test and every test maps
+    to a criterion. Never renumber an existing id — append new ones.
 1. **Make each measurable.** Replace vague words. "Fast" → "within 2 seconds".
     "Handle errors gracefully" → a specific `IF`/`THEN`. If a statement can't be turned
     into a pass/fail test, it isn't done — sharpen it.
@@ -99,14 +103,15 @@ Business intent: "MyApp should generate embeddings for ticket text."
 
 Criteria produced:
 
-- WHEN ticket text is provided THE SYSTEM SHALL return a vector embedding.
-- IF the text is empty THEN THE SYSTEM SHALL reject the request with a clear error.
-- IF the text exceeds the model's max input tokens THEN THE SYSTEM SHALL split it into chunks and embed each.
-- WHILE the embedding provider is unavailable THE SYSTEM SHALL queue the request for retry rather than dropping it.
-- THE SYSTEM SHALL record the source id of every embedded text for audit traceability.
+- `[b1]` WHEN ticket text is provided THE SYSTEM SHALL return a vector embedding.
+- `[b2]` IF the text is empty THEN THE SYSTEM SHALL reject the request with a clear error.
+- `[b3]` IF the text exceeds the model's max input tokens THEN THE SYSTEM SHALL split it into chunks and embed each.
+- `[b4]` WHILE the embedding provider is unavailable THE SYSTEM SHALL queue the request for retry rather than dropping it.
+- `[b5]` THE SYSTEM SHALL record the source id of every embedded text for audit traceability.
 
-These five map directly to five tests on `core/` embeddings. The requester decided all
-five behaviors; they wrote no code and no tests.
+These five map directly to five tests on `core/` embeddings (`test_b1_…` … `test_b5_…`), so coverage
+of the spec is auditable by id. The requester decided all five behaviors; they wrote no code and no
+tests.
 
 ## Handoff line
 

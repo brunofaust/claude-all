@@ -95,5 +95,9 @@ Recommend: python-refactorer to inject the client, then I can cover it.
 - Tests must pass. Run them; if a new test fails because of a real product bug (not a test mistake),
   STOP and report it (that's `debugger`'s job, not yours — don't paper over it).
 - One behavior per test; descriptive names; assert outcomes.
+- **Trace to acceptance criteria when they exist.** If the work has EARS criteria with behavior ids
+  (`[b1]`, `[b2]`, … from the `requirements-ears` skill), name the test for the id it defends
+  (`test_b3_oversize_text_chunked`) so spec coverage is auditable by id — every criterion gets a test,
+  every test maps to a criterion.
 - Never touch source files. Never weaken the gate. Never write assertion-free tests.
 - Leave staging/commit to `git-committer`.

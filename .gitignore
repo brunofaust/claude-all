@@ -1,5 +1,8 @@
 .DS_Store
-/.claude/
+
+# Per-user local Claude settings (machine-specific paths / permission grants) — the rest of
+# .claude/ is tracked on purpose.
+/.claude/settings.local.json
 
 # Git worktrees — never commit these
 .worktrees/

@@ -254,6 +254,20 @@ high-stakes diffs — a small change needs one pass.
 > ([`rules/common/code-review.md`](https://github.com/affaan-m/ECC/blob/main/rules/common/code-review.md),
 > [`rules/common/agents.md`](https://github.com/affaan-m/ECC/blob/main/rules/common/agents.md)) — track for updates.
 
+## Cross-model second opinion (decorrelate hallucination)
+
+The author and the reviewer sharing one model share its blind spots — the model that wrote a subtle bug
+tends to bless it on review. For a high-stakes change, get the review (or one panel lens) from a
+**different model/provider** than the one that wrote the code, so errors aren't correlated:
+
+- dispatch the review subagent with a different `model` than the implementer used, or
+- route it through another provider's reviewer (e.g. an MCP-backed model, or the built-in
+  `request_copilot_review` on a PR), then reconcile findings into this skill's output format.
+
+Treat the second opinion as *input*, not authority — a finding still needs a concrete failure path
+(Rule 4.5). The win is catching what a same-model self-review structurally misses. Reserve it for
+risky diffs; routine changes don't need it.
+
 ## Integration with existing review tooling
 
 | Tool                             | This skill's contribution                                                    |
