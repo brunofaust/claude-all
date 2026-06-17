@@ -27,6 +27,7 @@ prek run --all-files
 | `hooks/`                                | Standalone hook scripts — installable kind, wired per the `hooks/hooks.json` manifest                                          |
 | `.claude/hooks/`                               | Active hooks for this repo's Claude sessions                                                                                  |
 | `.claude/agents/`                              | Sub-agent definitions scoped to this repo                                                                                     |
+| `.claude/skills/`                              | Skills scoped to this repo (used when working ON claude-all, NOT shipped via the installer) — e.g. `vendored-sources`. Most of `.claude/` is git-ignored; this path is re-included in `.gitignore` so it's tracked. |
 
 ## Adding a new agent or skill
 
