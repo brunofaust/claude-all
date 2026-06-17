@@ -2,6 +2,7 @@
   "_comment": "Install metadata for the standalone hook scripts in this directory. Each key is a <name>.py here, wired by `claude-all ... coding hooks`. event = Claude Code hook event; matcher = tool-name regex (empty = all tools); timeout in ms. Symlinks install WITHOUT a kind prefix (<name>.py) and the settings merge dedups by basename, so re-install cleanly replaces a prior (incl. hand-wired) entry.",
   "config-protection": {"event": "PreToolUse", "matcher": "Edit|Write|MultiEdit", "timeout": 2000},
   "destructive-command-guard": {"event": "PreToolUse", "matcher": "Bash", "timeout": 5000},
+  "supply-chain-guard": {"event": "PreToolUse", "matcher": "Bash", "timeout": 5000},
   "dev-server-tmux": {"event": "PreToolUse", "matcher": "Bash", "timeout": 2000},
   "suggest-compact": {"event": "PreToolUse", "matcher": "", "timeout": 2000},
   "edited-files-accumulator": {"event": "PostToolUse", "matcher": "Edit|Write|MultiEdit", "timeout": 2000},

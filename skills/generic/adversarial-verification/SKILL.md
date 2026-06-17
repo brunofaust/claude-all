@@ -40,6 +40,32 @@ If you typed one of these, **STOP**, restart the gate.
 
 You do not get to claim PASS until step 5. You DO get to claim FAIL at any point.
 
+## Epistemic markers — tag every claim by evidence status
+
+When you state something during analysis or planning, mark *what kind* of statement it is, so an
+unverified guess can't masquerade as a fact:
+
+- **`[FACT]`** — verified now, or trivially verifiable (you ran it / read it / quoted it).
+- **`[INFERENCE]`** — a logical conclusion from facts (could be wrong if a premise is).
+- **`[ASSUMPTION]`** — unverified. **Must be validated before you build on it** — an `[ASSUMPTION]`
+  driving an implementation decision is a bug waiting to happen.
+
+The Feynman test: if you can't explain *how you know* a claim, it's not a `[FACT]`. Downgrade it.
+The adversarial pass (and any reviewer) should hunt for `[ASSUMPTION]`s dressed up as `[FACT]`s, and
+for `[INFERENCE]`s whose premise was never checked.
+
+## Observation corollary — claims about behavior cite OBSERVED state
+
+A claim that something *works* (UI renders, endpoint responds, job ran) is only `[FACT]` if you
+observed the actual current state — not the code that *should* produce it. Acceptable observations:
+
+- a screenshot / DOM dump (Playwright), a `curl` of the rendered response, a real log line, a query
+  result, a test run quoted verbatim.
+
+"The code looks correct so the page works" is an `[INFERENCE]`, not evidence — reading source is not
+observing behavior. A claim about runtime behavior with **zero observation is incomplete by policy**;
+go observe, then claim. (This is the same discipline as the 5-step gate, applied to non-test claims.)
+
 ## Regression discipline (for bug-fix claims)
 
 A test that passed before AND after a fix proves nothing. Run the revert-cycle:
