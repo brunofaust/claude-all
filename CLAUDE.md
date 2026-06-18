@@ -44,8 +44,61 @@ prek run --all-files
 **Skill:**
 
 1. Create `skills/<category>/<name>/SKILL.md`
+1. Optionally add a companion `hook.py` + `hook.json` (see § *Authoring companion hooks*) and/or a `claude_md.md` snippet beside `SKILL.md`
 1. Run `./claude-all --all --user <name>` to activate
 1. **Update `README.md`** — add a row to the relevant skill table (§ 2.x)
+
+## Authoring companion hooks (reminder vs guard)
+
+A skill or agent may ship a `hook.py` + `hook.json` beside its main file
+(`SKILL.md` / folder-agent `agent.md`; a flat agent uses prefixed siblings
+`<name>.hook.{py,json}`). On install the script is symlinked into
+`.claude/hooks/` and merged into `settings.json`. There are **two archetypes** —
+pick ONE and obey its firing rule:
+
+| Archetype          | Purpose                                                                                                          | Fires                                                              | Channel                                                                  |
+| ------------------ | --------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| **Reminder**       | Surface a skill's conventions when a relevant file/command appears (orientation, not enforcement)                | **Once per session** — dedup via a `/tmp` flag keyed by `session_id` | exit 0 + JSON `additionalContext` (addressed to **Claude**)             |
+| **Guard / utility** | Safety check or bookkeeping that must evaluate *every* occurrence (`destructive-command-guard`, `supply-chain-guard`, `edited-files-accumulator`) | **Every matching call** — no dedup                                | exit 2 to BLOCK (PreToolUse), or `additionalContext` / stderr per intent |
+
+### Reminder-hook rules (the common case)
+
+1. **Fire once per session.** Flag at
+   `tempfile.gettempdir()/claude-all-<slug>-<session_id>.flag`; if it exists,
+   `return 0` silently. Write best-effort under `contextlib.suppress(OSError)`
+   (unwritable FS → skip the dedup, never crash). Hooks can't share a session —
+   the flag is the only state. (Want "once ever, across sessions"? Use a
+   persistent path under `~/.claude-all/` instead of `tempfile` — but per-session
+   is the default; reach for once-ever only when explicitly asked.)
+2. **Address Claude, not the user.** Emit
+   `{"hookSpecificOutput": {"hookEventName": "<event>", "additionalContext": "…"}}`
+   to **stdout** and `return 0`. NEVER use exit-1 / stderr for a Claude-facing
+   reminder — stderr is shown to the **USER** as a hook error, never to Claude.
+3. **Never break a turn.** Malformed stdin, wrong file type, or any unexpected
+   error → `return 0`. A reminder hook must be invisible when it has nothing to say.
+4. **Match narrowly + bail early.** `Edit|Write` + a file-extension / path check,
+   or `Bash` + a command regex. `return 0` early on `node_modules` / `dist` /
+   vendored paths and on non-matching commands.
+5. **Don't stack overlapping reminders.** Before adding a reminder whose matcher
+   overlaps an existing one (e.g. a second `*.tsx` Edit hook), confirm it won't
+   pile multiple reminders onto a single edit.
+
+### Guard-hook rule
+
+A guard fires on **every** matching call by design — deduping it would defeat the
+safety / bookkeeping purpose. Reserve exit 2 (hard block) for genuinely
+destructive or irreversible actions, and give an explicit override (env var or
+`# guard:allow` comment) as an escape hatch.
+
+### `hook.json` schema
+
+```json
+{"event": "PreToolUse", "matcher": "Edit|Write", "timeout": 2000}
+```
+
+`matcher` is a tool-name regex (`Bash` for command hooks, empty `""` for all
+tools). `timeout` is milliseconds. Keep the script executable; the installer also
+sets the bit.
 
 ## Before raising a PR
 
