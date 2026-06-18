@@ -23,6 +23,11 @@ def main() -> int:
         return 0
     if "/node_modules/" in file_path or "/dist/" in file_path:
         return 0
+    # Test files are owned by the react-testing hook — bail so the two reminders
+    # don't stack on the same edit.
+    base = file_path.rsplit("/", 1)[-1]
+    if ".test." in base or ".spec." in base or "/__tests__/" in file_path:
+        return 0
 
     session_id = data.get("session_id") or "no-session"
     flag = os.path.join(tempfile.gettempdir(), f"claude-all-react-best-{session_id}.flag")

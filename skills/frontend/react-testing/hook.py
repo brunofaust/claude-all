@@ -6,8 +6,9 @@ Fires PreToolUse on Edit|Write. If the target is a frontend test file
 `__tests__/` directory), emit a one-time, non-blocking reminder of the testing
 conventions and to load the skill. Addressed to Claude, never the user.
 
-Narrower than react-best-practices (which fires on all `*.tsx`/`*.jsx`): this
-only matches test files, so the two don't pile onto the same component edit.
+Complementary to react-best-practices: this fires only on test files, and that
+hook bails on test files (`.test.`/`.spec.`/`__tests__/`), so exactly one
+reminder fires per edit — never both on the same file.
 """
 
 from __future__ import annotations

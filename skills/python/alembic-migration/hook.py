@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
 """Reminder hook for the alembic-migration skill. One reminder per session.
 
-Fires PreToolUse on Edit|Write. If the target looks like an Alembic migration
-(a `.py` file under a `versions/` / `alembic/` / `migrations/` directory), emit a
-one-time, non-blocking reminder of the migration safety rules and to load the
-skill. Addressed to Claude (stdout additionalContext), never the user.
+Fires PreToolUse on Edit|Write. If the target looks like an Alembic migration,
+emit a one-time, non-blocking reminder of the migration safety rules and to load
+the skill. Addressed to Claude (stdout additionalContext), never the user.
+
+Matching avoids firing Alembic-specific advice on non-Alembic stacks: a
+`versions/` or `alembic/` path segment is Alembic-specific and fires on its own,
+but a bare `migrations/` (also used by Django, etc.) fires ONLY when the edited
+content carries an Alembic signal (`down_revision`, `op.`, `import alembic`).
 """
 
 from __future__ import annotations
@@ -15,8 +19,12 @@ import os
 import sys
 import tempfile
 
-# Alembic revision files live under one of these path segments.
-_MIGRATION_SEGMENTS = ("/versions/", "/alembic/", "/migrations/")
+# Alembic-specific path segments — fire on their own.
+_STRONG_SEGMENTS = ("/versions/", "/alembic/")
+# Ambiguous segment (Django et al. also use it) — needs a content signal too.
+_WEAK_SEGMENT = "/migrations/"
+# Alembic fingerprints in the file body (revision graph + migration ops API).
+_ALEMBIC_SIGNALS = ("down_revision", "from alembic", "import alembic", "op.", "revision =")
 
 
 def main() -> int:
@@ -25,11 +33,21 @@ def main() -> int:
     except (json.JSONDecodeError, ValueError):
         return 0  # malformed input — don't block
 
-    file_path = data.get("tool_input", {}).get("file_path", "")
+    tool_input = data.get("tool_input", {})
+    file_path = tool_input.get("file_path", "")
     if not file_path.endswith(".py"):
         return 0
-    if not any(seg in file_path for seg in _MIGRATION_SEGMENTS):
+
+    strong = any(seg in file_path for seg in _STRONG_SEGMENTS)
+    weak = _WEAK_SEGMENT in file_path
+    if not (strong or weak):
         return 0  # not in a migrations tree — nothing to remind
+    if not strong:
+        # Only a bare `migrations/` match — require an Alembic signal in the edit
+        # so we don't fire Alembic advice on a Django (etc.) migration.
+        blob = " ".join(str(tool_input.get(k, "")) for k in ("content", "new_string", "old_string"))
+        if not any(sig in blob for sig in _ALEMBIC_SIGNALS):
+            return 0
 
     session_id = data.get("session_id") or "no-session"
     flag = os.path.join(tempfile.gettempdir(), f"claude-all-alembic-{session_id}.flag")
