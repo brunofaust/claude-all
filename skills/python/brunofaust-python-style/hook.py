@@ -46,14 +46,16 @@ def main() -> int:
                 "hookEventName": "PreToolUse",
                 "additionalContext": (
                     "Reminder (brunofaust-python-style, first Python edit this session): "
-                    "Python 3.11+ syntax (pipe unions, match, asyncio.TaskGroup, "
+                    "for non-trivial Python work, invoke the brunofaust-python-style skill "
+                    "(Skill tool) and read the matching references/<topic>.md "
+                    "(type-hints, error-handling, async-patterns, class-design, config, testing) "
+                    "before editing — don't rely on this summary alone. "
+                    "Quick rules: Python 3.11+ syntax (pipe unions, match, asyncio.TaskGroup, "
                     "exception.add_note); "
                     "strict type hints (TypedDict, Literal, @overload); "
                     "structured logging via structlog; "
                     "settings singleton (Pydantic) — don't sprinkle os.getenv across code; "
-                    "NEVER block the event loop in async — use run_in_thread(). "
-                    "Read references/<topic>.md for deep coverage on: "
-                    "type-hints, error-handling, async-patterns, class-design, config, testing."
+                    "NEVER block the event loop in async — use run_in_thread()."
                 ),
             }
         },
