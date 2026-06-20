@@ -78,7 +78,11 @@ Target = tuple[str, str | None, str | None]
 
 
 def nudge(message: str) -> int:
-    """Emit a non-error reminder into Claude's context, then allow the tool."""
+    """Emit a non-error reminder into Claude's context, then allow the tool.
+
+    Args:
+        message: Reminder text surfaced to Claude via ``additionalContext``.
+    """
     json.dump(
         {"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": message}},
         sys.stdout,
@@ -88,7 +92,12 @@ def nudge(message: str) -> int:
 
 # ── static checks ────────────────────────────────────────────────────────────
 def analyze(command: str, cwd: Path) -> list[str]:
-    """Static (no-network) supply-chain findings for one Bash command."""
+    """Static (no-network) supply-chain findings for one Bash command.
+
+    Args:
+        command: The full Bash command line being inspected.
+        cwd: Working directory the command runs in (used to locate lockfiles).
+    """
     js = JS_INSTALL_RE.search(command)
     py = PY_INSTALL_RE.search(command)
     if not (js or py):
@@ -155,6 +164,9 @@ def classify(command: str) -> tuple[str, str, list[str], str | None]:
     ecosystem ∈ {"npm","pypi",""}; mode ∈ {"named","lock",""}. For `lock` mode the
     packages come from a lockfile (named_pkgs empty); requirement_file is set when a
     `pip -r <file>` was used.
+
+    Args:
+        command: The full Bash command line to classify.
     """
     try:
         tokens = shlex.split(command)
@@ -237,7 +249,11 @@ def _parse_requirements(path: Path) -> list[Target]:
 
 
 def _uv_upload_time(pkg: dict[str, Any]) -> str | None:
-    """Earliest `upload-time` recorded for a uv.lock package's artifacts, if any."""
+    """Earliest `upload-time` recorded for a uv.lock package's artifacts, if any.
+
+    Args:
+        pkg: A single ``[[package]]`` table parsed from uv.lock.
+    """
     stamps: list[str] = []
     sdist = pkg.get("sdist")
     if isinstance(sdist, dict) and isinstance(sdist.get("upload-time"), str):
@@ -341,6 +357,15 @@ def cooldown_findings(
 
     Uses `upload-time` embedded in uv.lock when present (offline); otherwise does a
     bounded, uncached live registry lookup (only when ``network`` is allowed).
+
+    Args:
+        eco: Ecosystem — "npm", "pypi", or "" when no install was detected.
+        mode: "named" (packages on the command line) or "lock" (from a lockfile).
+        named: Explicit package specs, used when ``mode`` is "named".
+        req: Path to a pip requirements file, when one was given.
+        cwd: Working directory used to locate lockfiles.
+        days: Cooldown window in days; releases newer than this are flagged.
+        network: Whether bounded live registry lookups are permitted.
     """
     targets = _parse_named(eco, named) if mode == "named" else _lock_targets(eco, req, cwd)
     seen: set[tuple[str, str | None]] = set()
