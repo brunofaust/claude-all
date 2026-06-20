@@ -838,6 +838,13 @@ def install_standalone_hook(item: Item, level: str) -> str:
     if dest.is_symlink() or dest.exists():
         dest.unlink()
     os.symlink(item.src, dest)
+
+    # Claude Code execs the hook by bare path, so the script MUST be executable
+    # or the shell fails with "Permission denied". Ensure the bit is set on the
+    # symlink target (mirrors inject_hook for companion hooks).
+    mode = item.src.stat().st_mode
+    item.src.chmod(mode | 0o111)
+
     cmd_str = str(dest)
     target_basename = f"{item.name}.py"
 
