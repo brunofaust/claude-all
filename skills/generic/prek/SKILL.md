@@ -304,20 +304,32 @@ hooks = [
 ]
 
 # ── Ruff (lint + format) ─────────────────────────────────────────────────────
+# Split pattern: COMMIT blocks on real issues without touching files (--no-fix,
+# overrides `fix = true` in [tool.ruff]); PUSH applies the autofixes + formats.
+# This keeps `git commit` from rewriting files under you while still gating it.
 [[repos]]
 repo = "https://github.com/astral-sh/ruff-pre-commit"
 rev = "v0.15.14"
 hooks = [
   {
     id = "ruff-check",
-    name = "🐍 python · Check with Ruff",
-    args = ["--fix"],
-    types_or = ["python", "pyi"]
+    name = "🐍 python · Check with Ruff (report-only)",
+    args = ["--no-fix"],          # COMMIT: surface + block, never modify files
+    types_or = ["python", "pyi"],
+    stages = ["pre-commit"]
+  },
+  {
+    id = "ruff-check",
+    name = "🐍 python · Fix with Ruff (--fix)",
+    args = ["--fix"],             # PUSH: apply the fixes the commit check reported
+    types_or = ["python", "pyi"],
+    stages = ["pre-push"]
   },
   {
     id = "ruff-format",
     name = "🐍 python · Format with Ruff",
-    types_or = ["python", "pyi"]
+    types_or = ["python", "pyi"],
+    stages = ["pre-push"]          # formatter — defer to push, no commit-time churn
   }
 ]
 
@@ -424,6 +436,29 @@ hooks = [
   }
 ]
 
+# Dependency CVE audit — fast (~1s) local hooks. Trigger ONLY when the lockfile
+# changes so they don't run on every commit. No upstream prek hook exists for audit.
+[[repos]]
+repo = "local"
+hooks = [
+  {
+    id = "uv-audit",
+    name = "🔒 security · Audit Python deps for CVEs",
+    entry = "uv audit",
+    language = "system",
+    pass_filenames = false,
+    files = "^(pyproject\\.toml|uv\\.lock)$"
+  },
+  {
+    id = "npm-audit",
+    name = "🔒 security · Audit JS deps for CVEs",
+    entry = "npm audit --audit-level=high",
+    language = "system",
+    pass_filenames = false,
+    files = "^package-lock\\.json$"
+  }
+]
+
 # ── Python anti-patterns ─────────────────────────────────────────────────────
 [[repos]]
 repo = "https://github.com/pre-commit/pygrep-hooks"
@@ -440,6 +475,70 @@ hooks = [
   { id = "text-unicode-replacement-char", name = "🐍 python · Forbid UTF-8 Unicode replacement character" }
 ]
 
+# ── Local AST enforcer (project single-ownership / visibility rules) ──────────
+# A `repo = "local"` hook running your own AST checker enforces rules ruff can't
+# express: each SDK imported in exactly one owner package, no raw
+# `asyncio.to_thread` / `subprocess` (route through owned wrappers), module-level
+# names declared via `__all__`, and a valid `__all__` import contract. Keep prek
+# the single gate by adding these as local hooks rather than running a side script.
+# (Checker skeleton: see the brunofaust-python-style skill's `enforcement.md`.)
+# [[repos]]
+# repo = "local"
+# hooks = [
+#   {
+#     id = "skill-enforcer",
+#     name = "🐍 python · Enforce single-ownership + visibility (AST)",
+#     entry = "python scripts/skill_enforcer.py",
+#     language = "system",
+#     files = "\\.py$"
+#   }
+# ]
+
+# ── Local pygrep guards (one-line bans, no script) ───────────────────────────
+# A pygrep hook blocks a banned token by regex — cheaper than an AST checker when
+# a substring match is enough. Always exempt the owner file that legitimately
+# uses the banned API (and `scripts/**` for dev-only code).
+# [[repos]]
+# repo = "local"
+# hooks = [
+#   {
+#     id = "no-asyncio-to-thread",
+#     name = "🐍 python · Use run_in_thread() not asyncio.to_thread",
+#     entry = "asyncio\\.to_thread",
+#     language = "pygrep",
+#     types_or = ["python"],
+#     exclude = { glob = ["src/*/core/thread_pool.py"] }   # the owner
+#   },
+#   {
+#     id = "no-raw-subprocess-import",
+#     name = "🐍 python · Use run_exec()/run_shell() not raw subprocess",
+#     entry = "^import subprocess\\b|^from subprocess\\b",
+#     language = "pygrep",
+#     types_or = ["python"],
+#     exclude = { glob = ["src/*/core/subprocess.py", "scripts/**"] }
+#   }
+# ]
+
+# ── Regression-only project gates (baseline today's debt, ratchet to zero) ───
+# Local gates that grandfather existing violations via a checked-in baseline file
+# and fail only on NEW ones (see the `regression-gates` skill). Worth stealing:
+#   • jscpd — copy-paste detector with a `--threshold` floor (dedup, never SKIP it)
+#   • raw-SQL validator — parse `text("…")` SQL with sqlglot against the schema your
+#     alembic migrations build (no DB) — catches column/table drift at commit time
+#   • alembic-single-head — one linear migration chain + revision-id length check
+# [[repos]]
+# repo = "local"
+# hooks = [
+#   {
+#     id = "jscpd",
+#     name = "🔍 duplication · Detect copy-paste",
+#     entry = "npx --yes jscpd --min-tokens 60 --threshold 0.5 --reporters ai src",
+#     language = "system",
+#     pass_filenames = false,
+#     always_run = true
+#   }
+# ]
+
 # ── Docstrings ───────────────────────────────────────────────────────────────
 [[repos]]
 repo = "https://github.com/econchick/interrogate"
@@ -448,6 +547,10 @@ hooks = [
   {
     id = "interrogate",
     name = "🐍 python · Check docstrings",
+    # GOTCHA: interrogate 1.7.0 resolves a Python 3.12 hook env by default, whose
+    # parser chokes on PEP 758 syntax (unparenthesized `except A, B:`) used by a
+    # 3.14 codebase. Pin the hook interpreter when you hit a SyntaxError here.
+    language_version = "3.14",
     pass_filenames = false
     # configure thresholds in [tool.interrogate] in pyproject.toml
   }

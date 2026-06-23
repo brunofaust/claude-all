@@ -121,6 +121,27 @@ async def ensure_loaded(client: loadable_client) -> None:
 isinstance(my_client, loadable_client)  # True if shape matches
 ```
 
+**A Protocol implementer exposes exactly the Protocol's public surface — no extra
+public members.** If a class needs a helper that isn't on the interface, make it a
+private instance member (`self._x`), not a public method/attr. A public name absent
+from the Protocol means either the Protocol is incomplete or the member shouldn't
+be public — decide, don't leak it.
+
+#### Strict-typing gates (enforced — don't suppress)
+
+These fail the mypy-strict / prek gate; fix them at the seam rather than silencing:
+
+- **`Final` on what must not change.** Annotate class-level constants `Final`; mark a
+  base/protocol method that must not be overridden `Final` too. mypy flags a subclass
+  that redeclares a `Final` attribute as `[misc]` — that's the signal, not noise.
+- **Annotations, never type comments.** Use `x: int`, never `# type:` comment syntax.
+- **No blanket suppressions.** Every `# type: ignore[code]` / `# noqa: CODE` names its
+  specific code; bare `# type: ignore` / `# noqa` are blocked, and a stale suppression
+  (`[unused-ignore]`) fails the gate — delete it.
+- **`no-any-return`.** When a typed function would return an inferred `Any` (untyped
+  lib call, `dict.get`, `json.loads`), narrow it at the boundary with `cast(...)` or an
+  explicit type. Don't let `Any` escape a typed return — it's a recurring strict-mode blocker.
+
 #### Type Aliases and Callable Types
 
 Define reusable type aliases for complex types and callback signatures.

@@ -61,5 +61,12 @@ For each match, decide:
 
 ## Enforcement
 
+`__all__` is a checker-enforced contract, not just a convention — a missing or stale
+`__all__` is a build failure, not a style nit:
+
 - Vulture in pre-commit (`--min-confidence 80`).
 - `skill_enforcer.py` rule `no_module_underscore_names` — flags module-level `Name` nodes starting with `_` (not `__`). See `references/enforcement.md`.
+- **`__all__` import-contract gate** (two prek hooks): a **pyright** pass + an **AST**
+  pass that verify every name listed in `__all__` actually exists and that each
+  module's public API is declared via `__all__`. A name exported but undefined (or
+  public-but-absent from `__all__`) fails the gate.

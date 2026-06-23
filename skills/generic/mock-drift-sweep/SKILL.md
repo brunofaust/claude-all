@@ -66,7 +66,7 @@ Any of these is a mock-drift risk — sweep before you call the change done:
 A fully-mocked test of a DB or SDK call validates nothing about SQL syntax, the real schema, or the
 SDK's real exception types — it only checks that your code calls the mock the way you told the mock to
 expect. For each external contract, keep **at least one test against the real engine** (a real
-Postgres in a container, a localstack/SDK sandbox), pinned to the **production version**. Mocks make
+Postgres in a container, a ministack/SDK sandbox), pinned to the **production version**. Mocks make
 the other 95% fast; the one real test is what catches the drift mocks can't see.
 
 Pairs with `adversarial-verification` (revert-and-rerun to prove a test actually fails when the code

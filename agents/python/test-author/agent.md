@@ -34,7 +34,7 @@ For Python, follow the `brunofaust-python-style` skill's test patterns (read it 
 - **Dependency injection, never `mod._client = mock`** (race-prone under xdist) — inject via
   constructor / fixture.
 - `tests/` mirrors `src/` **1:1** (`src/pkg/feature/service.py` → `tests/unit/feature/test_service.py`).
-- Real-infra integration tests use LocalStack, not mocked AWS — but prefer unit tests for coverage.
+- Real-infra integration tests use MiniStack (LocalStack drop-in on `:4566`), not mocked AWS — but prefer unit tests for coverage.
 - Match the existing tests' style first: read a couple of sibling test files before writing.
 
 If the project isn't Python, detect the framework (vitest/jest/go test) and mirror ITS idioms.

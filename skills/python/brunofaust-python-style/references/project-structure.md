@@ -219,6 +219,11 @@ from .client import JiraClient
 __all__ = ["JiraClient"]
 ```
 
+An `__init__.py` holds **only a docstring and re-exports** — never implementation
+logic (enforced by `RUF067`). Put code in a real module and re-export it here.
+(This is the one legitimate "module that only imports"; a non-`__init__` module
+left as a pure re-export is a shim — move it instead, see `architecture.md`.)
+
 ## Enforcement — `import-linter` contracts
 
 ```toml

@@ -29,6 +29,14 @@ The project is async-first, using:
 1. **Use timeouts** to prevent hanging operations
 1. **Pool connections** for better performance
 1. **Never block the event loop** - use `run_in_thread` for sync code
+1. **Offload sync work only through `run_in_thread()`** — never call
+   `asyncio.to_thread` directly. The wrapper is the single owner of the
+   thread-offload seam (pool sizing, naming, leak tracking); a banned-api prek
+   hook blocks raw `asyncio.to_thread`.
+1. **Stay async-first — don't de-async a function just because it has no `await`.**
+   The API is uniformly `async` so every call site stays awaitable; `RUF029`
+   (async-method-without-await) is **ignored project-wide on purpose**. Reverting a
+   function to sync to satisfy RUF029 is a regression, not a fix — don't do it.
 
 ### Event Loop Management
 
@@ -645,6 +653,87 @@ async def _group_worker_do(
             q.task_done()
 ```
 
+### Single-flight execution control (DynamoDB lock)
+
+Stop a scheduled job from overlapping with its own in-flight run, dedup an
+at-least-once SQS / Lambda-chain delivery, or serialise a critical section across
+processes — all with **one DynamoDB table** and a conditional write. DynamoDB's
+conditional `PutItem` is the cross-process compare-and-set primitive; no extra
+infra (Redis, an SQS FIFO group) needed.
+
+Two distinct jobs, two markers — don't conflate them:
+
+- **Run-lock (mutual exclusion):** acquire *before* work, release in `finally`. A
+  second invocation while the first is in flight fails the condition and **skips**
+  (the cron fired again before the previous run finished).
+- **Idempotency marker (exactly-once effect):** write *after* the side effect
+  succeeds. A redelivery sees the marker and **no-ops**. Writing it *before* the
+  effect would suppress a legitimate retry of a failed effect.
+
+```python
+import time
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
+from botocore.exceptions import ClientError
+
+LOCK_TTL_SECONDS = 15 * 60  # safety net if the holder dies without releasing
+
+
+class LockHeld(Exception):
+    """Another execution holds the lock — caller should skip, not retry."""
+
+
+@asynccontextmanager
+async def single_flight(table: "DDBTable", lock_id: str) -> AsyncIterator[None]:
+    """Acquire a cross-process run-lock; skip if another run holds it.
+
+    Acquire with a conditional ``PutItem`` (``attribute_not_exists``) so only one
+    writer wins. ``expires_at`` lets a DynamoDB TTL reaper clear the lock if the
+    holder crashes before ``finally`` runs. Released by ``DeleteItem``.
+
+    Args:
+        table: Owner wrapper around the lock table (see external-system-ownership).
+        lock_id: Stable id of the *logical job*, not the trigger.
+
+    Raises:
+        LockHeld: the lock is already taken by an in-flight execution.
+    """
+    now = int(time.time())
+    try:
+        await table.put_item(
+            Item={"pk": lock_id, "expires_at": now + LOCK_TTL_SECONDS},
+            ConditionExpression="attribute_not_exists(pk) OR expires_at < :now",
+            ExpressionAttributeValues={":now": now},
+        )
+    except ClientError as exc:
+        if exc.response["Error"]["Code"] == "ConditionalCheckFailedException":
+            raise LockHeld(lock_id) from exc
+        raise
+    try:
+        yield
+    finally:
+        # Best-effort release; the TTL is the backstop if this never runs.
+        await table.delete_item(Key={"pk": lock_id})
+```
+
+```python
+# Scheduled dispatcher: never overlap the previous run.
+try:
+    async with single_flight(lock_table, "dispatcher"):
+        await run_dispatch_cycle()
+except LockHeld:
+    logger.info("dispatch_skipped", reason="previous run in flight")
+```
+
+- **Enable the DynamoDB TTL** on `expires_at` so a crashed holder's lock
+  self-clears — the `finally` release is the happy path, the TTL is the backstop.
+- The condition `attribute_not_exists(pk) OR expires_at < :now` lets a *stale*
+  lock be reclaimed; drop the `OR` clause if a stuck lock should instead require
+  manual clearing.
+- Same primitive behind EventBridge cron, an SQS consumer, or a Lambda chain — the
+  lock is on the *logical job*, so the in-flight guard holds across all three.
+
 ### Async Pagination
 
 For APIs that return paginated results:
@@ -727,5 +816,5 @@ async with storage_client() as client:
 | Database batch operations  | 50    | Throughput limits            |
 | File processing / logging  | 25    | Moderate parallelism         |
 | API key validation         | 10    | Balance speed vs. throttling |
-| Test resource creation     | 20    | Fast but safe for LocalStack |
+| Test resource creation     | 20    | Fast but safe for MiniStack  |
 | General external API calls | 10    | Conservative default         |

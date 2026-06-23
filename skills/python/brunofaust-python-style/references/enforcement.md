@@ -23,6 +23,18 @@ Every rule in this skill has an enforcement mechanism. If a rule has no enforcem
 | Docstring coverage ≥ 90%              | interrogate                                                        | raise the floor                            |
 | No bare `# type: ignore`              | `python-check-blanket-type-ignore`                                 | use specific code                          |
 | No bare `# noqa`                      | ruff `RUF100`                                                      | use specific code                          |
+| No `Any` from a typed return          | mypy strict `no-any-return`                                        | `cast(...)` / explicit type at the seam    |
+| `Final` attr not redeclared           | mypy `[misc]`                                                      | rethink the override                       |
+| No raw `asyncio.to_thread`            | ruff `banned-api` (TID251) → `run_in_thread()`                     | `[per-file-ignores]`                       |
+| No raw `subprocess`                   | ruff `banned-api` (TID251) → `run_exec()`/`run_shell()`            | `scripts/**` per-file-ignore               |
+| Annotations, not type comments        | prek type-annotation-enforcement hook                              | none                                       |
+| `__all__` import contract valid       | pyright + AST `__all__`-contract hooks                             | fix/declare `__all__`                       |
+| `__init__.py` re-exports only         | ruff `RUF067`                                                      | none — move logic to a real module         |
+| Stay async (no de-async on no-`await`)| ruff `RUF029` disabled in config (by design)                       | n/a — keep the API uniformly `async`       |
+| Bounded copy-paste duplication        | `jscpd` (regression-only `--threshold`)                            | dedup the clone — never `SKIP=jscpd`       |
+| Raw SQL valid vs migration schema     | `check_raw_sql.py` (sqlglot, regression baseline, no DB)           | fix the query / baseline a real bug        |
+| Single alembic head + id ≤ 32 chars   | `check_alembic_heads.py` (AST, no DB)                              | merge heads into one linear chain          |
+| CI-reserved env vars hard-set in tests| pygrep `no-ci-env-setdefault` (`GITHUB_*`/`RUNNER_*`/`CI`)         | assign directly, never `os.environ.setdefault` |
 | Test mirrors src structure            | `skill_enforcer.py` rule `test_mirrors_src`                        | none                                       |
 
 **Single enforcement tool:** `scripts/skill_enforcer.py` — AST-based, config-driven via `skill_rules.toml`. One hook in `prek.toml`, all rules toggleable.

@@ -64,6 +64,8 @@ ticket = await jira.get_issue("PROJ-123")
 "boto3".msg = "Use the core/aws/<service>.py wrapper. Allowed only in src/*/core/aws/**"
 "aiobotocore".msg = "Use the core/aws/<service>.py wrapper. Allowed only in src/*/core/aws/**"
 "atlassian".msg = "Use JiraClient or ConfluenceClient"
+"asyncio.to_thread".msg = "Use run_in_thread() — the single owner of the thread-offload seam"
+"subprocess".msg = "Use the owned run_exec()/run_shell() wrapper (argv list, never a shell string). Allowed only in scripts/**"
 
 [tool.ruff.lint.per-file-ignores]
 "src/*/integrations/**" = ["TID251"]
@@ -81,6 +83,9 @@ Empty output = clean. Any line returned = a leak to fix.
 
 ## When the owner pattern is overkill
 
-- One-shot scripts (`scripts/*.py`) — direct SDK use is fine.
-- Truly stdlib-only deps (no third-party SDK) — wrapping `subprocess` rarely pays off.
+- One-shot scripts (`scripts/*.py`) — direct SDK / `subprocess` use is fine (the
+  `banned-api` rules above carve out `scripts/**`).
+- In application code, even stdlib side-effecting seams (`subprocess`, the
+  thread-offload via `asyncio.to_thread`) get a single owner — `run_exec()` /
+  `run_shell()` and `run_in_thread()` respectively. Argv lists, never shell strings.
 - Test code that needs to construct fake SDK responses — keep SDK-shaped fixtures co-located with tests.
