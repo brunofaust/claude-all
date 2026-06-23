@@ -372,3 +372,25 @@ def calculate_discount(user: User, order_history: list[Order]) -> float:
         return 0.15
     return 0.0
 ```
+
+**Don't leave re-export shim modules — move the code, repoint the imports:**
+
+A module whose entire body is `from new.location import X` (a pointer left behind
+after a refactor) is a shim. It adds a second name for one thing, hides the real
+location from "go to definition", and blinds dead-code tools. When you relocate
+code, **move the file and repoint every importer** — don't soften the move with a
+backward-compatibility shim.
+
+```python
+# BAD: src/myapp/old_service.py left behind as a shim after the code moved
+from myapp.core.service import Service  # noqa: F401  (re-export for old imports)
+
+
+# GOOD: the file moved to src/myapp/core/service.py and EVERY old import was
+# repointed to `from myapp.core.service import Service`. No module left behind.
+```
+
+The one legitimate "module that only imports" is a package's `__init__.py`
+declaring its public API via `__all__` (see [`visibility.md`](visibility.md)) —
+that is the intended seam, not a shim. For the mechanical move + import-repoint +
+`collect-only` verify loop, use the `python-module-migration` skill.
