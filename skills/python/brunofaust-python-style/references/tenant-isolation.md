@@ -103,33 +103,71 @@ you'd rather start test-only, create the policies in a pytest-init fixture.
 You asked for a detector that "logs the session tenant and flags if it touched any
 other tenant id, on any query." Two ways, trading coverage for simplicity:
 
-**Audit-only RLS policy (covers reads *and* writes).** Instead of filtering, the
-policy always returns `true` but logs a mismatch as a side effect. Because RLS
-`USING` is evaluated for `SELECT`/`UPDATE`/`DELETE` and `WITH CHECK` for `INSERT`,
-this captures **any query**, reads included — which plain triggers cannot do.
+**Audit-only RLS policy — one `FOR ALL` policy covers every operation.** Instead of
+filtering, the policy function always returns `true` but logs a mismatch as a side
+effect. Put it in **both** `USING` and `WITH CHECK` of a single `FOR ALL` policy so it
+fires across all DML — including `SELECT`, which plain triggers can't see:
 
 ```sql
-CREATE OR REPLACE FUNCTION audit_tenant_access(row_tenant uuid) RETURNS boolean
+CREATE OR REPLACE FUNCTION audit_tenant_access(row_tenant uuid, phase text) RETURNS boolean
 LANGUAGE plpgsql VOLATILE SECURITY DEFINER AS $$
 DECLARE declared text := current_setting('app.current_tenant', true);
 BEGIN
     IF declared IS NULL OR row_tenant::text IS DISTINCT FROM declared THEN
-        INSERT INTO audit.tenant_access (declared_tenant, row_tenant, test_id, at)
-        VALUES (declared, row_tenant,
+        INSERT INTO audit.tenant_access (declared_tenant, row_tenant, phase, test_id, at)
+        VALUES (declared, row_tenant, phase,
                 current_setting('app.test_id', true), clock_timestamp());
     END IF;
-    RETURN true;  -- ← never blocks; results are unchanged
+    RETURN true;  -- ← audit-only: never blocks, results unchanged
 END;
 $$;
 
 CREATE POLICY tenant_audit ON orders
-  USING (audit_tenant_access(tenant_id)) WITH CHECK (audit_tenant_access(tenant_id));
+  FOR ALL
+  USING      (audit_tenant_access(tenant_id, 'read'))    -- existing rows
+  WITH CHECK (audit_tenant_access(tenant_id, 'write'));  -- new / modified rows
 ```
 
-Caveats: a function call per scanned row (cost — scope it to suspect tables or run in
-e2e/integration, not hot prod paths); keep the `audit` schema RLS-free so it can't
-recurse; the audit insert lives in the same transaction, so a rolled-back txn drops
-its log (fine for committed e2e flows).
+`USING` evaluates against **existing** rows, `WITH CHECK` against **new** row values;
+a `FOR ALL` policy with both fires on every command. `MERGE` is covered because
+Postgres decomposes it into its INSERT/UPDATE/DELETE actions, each governed by this
+policy:
+
+| Operation | `USING` fires (existing row) | `WITH CHECK` fires (new row) |
+| --------- | ---------------------------- | ---------------------------- |
+| `SELECT`  | ✅                           | —                            |
+| `INSERT`  | —                            | ✅                           |
+| `UPDATE`  | ✅ (old row)                 | ✅ (new row)                 |
+| `DELETE`  | ✅                           | —                            |
+| `MERGE`   | ✅ via its UPDATE/DELETE     | ✅ via its INSERT/UPDATE     |
+
+`UPDATE` logs twice — old row via `read`, new row via `write` — which is what you
+want: it catches both *reading* a foreign row and *writing* a foreign tenant value.
+The `phase` column disambiguates.
+
+**Enforce OR audit on a table — never both at once.** The audit policy is
+*permissive* and always returns `true`; permissive policies are **OR-combined**, so
+stacking it beside an enforcing policy makes every row visible and **defeats
+enforcement**. Run enforcing RLS in prod (read-leaks impossible) and the always-true
+audit policy in e2e/integration (leak *discovery*) — selected by environment, never
+layered on the same table. (A `RESTRICTIVE` audit policy *can* coexist with
+enforcement, but AND short-circuit makes it skip exactly the foreign rows you want
+logged — so keep them separate by environment instead.)
+
+**Read-precision caveat.** RLS `USING` expressions are security-barrier quals:
+Postgres may evaluate them on more rows than the query returns (before the app's own
+`WHERE`), and the exact set is plan-dependent (seq scan vs index). So read an audit
+row as *"this session reached into another tenant's data,"* not a byte-exact
+returned-row count. For an exact "the result the app **got** contained foreign rows"
+check, inspect returned rows **app-side** — a SQLAlchemy `after_cursor_execute` hook
+or result wrapper in the **test** connection (not product code). That's in-process,
+so for real MiniStack lambdas the server-side policy (accept the over-report) or
+`pgaudit` are the no-code options.
+
+Other caveats: a function call per scanned row (cost — scope to suspect tables / e2e,
+not hot prod paths); keep the `audit` schema RLS-free so the logging `INSERT` can't
+recurse; the audit row lives in the same transaction, so a rolled-back txn drops it
+(fine for committed e2e flows).
 
 **Trigger audit (writes only, simpler/cheaper).** `AFTER INSERT/UPDATE/DELETE`
 triggers record the same row into `audit.tenant_access`. Doesn't see `SELECT`s
@@ -211,6 +249,8 @@ WHERE a.attname = 'tenant_id' AND c.relkind = 'r'
 - [ ] App role is non-owner, non-superuser, no `BYPASSRLS`; tables `FORCE` RLS.
 - [ ] Policy treats unset tenant as deny-all (`current_setting(..., true)` → NULL).
 - [ ] RLS + audit live in migrations (prod-faithful) or a clearly env-gated fixture.
+- [ ] Audit policy is `FOR ALL` with the log fn in **both** `USING` and `WITH CHECK` (covers SELECT/INSERT/UPDATE/DELETE/MERGE).
+- [ ] Enforce and audit are kept on **separate** tables/environments — never an always-true permissive audit policy stacked on an enforcing one (it OR-defeats enforcement).
 - [ ] Audit stamps both `app.current_tenant` and a caller id (`app.test_id` / request id).
 - [ ] `pytest_sessionfinish` asserts no `declared_tenant <> row_tenant` rows.
 - [ ] Coverage test asserts every `tenant_id` table has RLS + a policy.
