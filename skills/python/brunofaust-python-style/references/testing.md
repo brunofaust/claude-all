@@ -143,6 +143,11 @@ cust_b = await db.insert_customer(tenant_id=tenant_b.id, name="...")
 await db.insert_order(tenant_id=tenant_b.id, customer_id=cust_b)  # same tenant
 ```
 
+> Want the **database** to *prove* a test never crossed tenants (rather than
+> asserting it row-by-row)? See [`tenant-isolation.md`](tenant-isolation.md) —
+> optional Postgres RLS enforcement + a non-blocking audit table you query at
+> `pytest_sessionfinish`, with a no-code-change path for real lambdas in MiniStack.
+
 **The seed simulates real data.** Production never shares a customer row across two
 tenants, so the seed must not either. If a test needs a customer in tenant B,
 **create a new customer row in tenant B** — don't reach for an existing one in
