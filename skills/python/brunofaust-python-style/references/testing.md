@@ -183,6 +183,11 @@ Practical consequences for writing tests under xdist:
   scatter it to any worker in any order. Pinning tests together just relocates the
   flakiness — it doesn't remove it.
 
+  **Treat the marker as a diagnostic, not a tool.** If you find yourself reaching
+  for `xdist_group`, that is the signal your tests aren't isolated correctly —
+  stop and fix the isolation (dynamic ids, per-test data ownership, per-test
+  resource names), don't paper over it by forcing the tests onto one worker.
+
   **The rare exception — ask first, document why.** A *very* occasional case
   genuinely can't be split (e.g. a single contended external singleton with no
   per-test namespace). Before adding `xdist_group`, **ask the user**, and only
