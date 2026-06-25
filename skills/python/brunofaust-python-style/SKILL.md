@@ -40,7 +40,9 @@ Read the matching file BEFORE deep work in that area. Each is a focused referenc
 | Writing AWS Lambda handlers — async entry point with `uvloop.run()`, `main()` pattern                                                                                                          | See `## Lambda handlers` section below + [`references/async-patterns.md`](references/async-patterns.md) |
 | Configuration management — Pydantic Settings, env var coercion, nested configs, secrets from files                                                                                             | [`references/config.md`](references/config.md)                                                          |
 | Writing tests — pytest, fixtures, parametrize, mocks, MiniStack, time freezing, snapshot, **factory pattern (polyfactory/factory_boy), DI over module-global mocks, mirrored src/ structure** | [`references/testing.md`](references/testing.md)                                                        |
-| Choosing between Pydantic / dataclass / TypedDict — trust boundaries, internal contracts, test fixtures                                                                                        | [`references/data-modeling.md`](references/data-modeling.md)                                            |
+| Choosing between Pydantic / dataclass / TypedDict — trust boundaries, internal contracts, test fixtures, **Lambda event + ECS env validation**                                                  | [`references/data-modeling.md`](references/data-modeling.md)                                            |
+| Scoped global processes — run-for-one(/group) parameter on all-tenant jobs, DynamoDB idempotency that includes the scope, global-run-supersedes-customer-run rule                              | [`references/scoped-processes.md`](references/scoped-processes.md)                                      |
+| Database tenant isolation (optional) — Postgres RLS (enforcing) + non-blocking audit table, session-tenant via `SET LOCAL`, per-tenant-role vs GUC injection vectors, no-code-change e2e for real lambdas                                                                                                                       | [`references/tenant-isolation.md`](references/tenant-isolation.md)                                      |
 | Owner-class pattern for external systems (Jira, AWS, OpenAI…), ruff `banned-api` config, audit recipe                                                                                          | [`references/external-system-ownership.md`](references/external-system-ownership.md)                    |
 | Module-level visibility — `__all__` over `_` prefix, vulture/ruff blind-spot fix                                                                                                               | [`references/visibility.md`](references/visibility.md)                                                  |
 | Debugging AWS dev environments — full-run → isolate → hotfix vs deploy → parallel pieces → SF splitting → verify                                                                               | [`aws-debug-loop` skill](../../aws/aws-debug-loop/SKILL.md)                                             |
@@ -127,6 +129,15 @@ Every Lambda handler must be **async-first**. The sync `handler` is a one-line w
 ```python
 import uvloop
 from typing import Any
+from pydantic import BaseModel
+
+
+class HandlerEvent(BaseModel):
+    """Validated entry payload — parse the untrusted `event` dict here, once."""
+
+    model_config = {"extra": "forbid", "frozen": True}
+
+    run_date: str
 
 
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
@@ -135,7 +146,8 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
 
 async def main(event: dict[str, Any]) -> dict[str, Any]:
-    """Async implementation — all logic lives here."""
+    """Async implementation — validate at the boundary, then run typed logic."""
+    parsed = HandlerEvent.model_validate(event)  # boundary parse — raises on bad shape
     ...
 ```
 
@@ -143,6 +155,7 @@ Rules:
 
 - `lambda_handler` is **sync** (AWS requirement) — one line only: `return uvloop.run(main(event))`.
 - `main()` is `async def` and contains all business logic.
+- **Validate the payload at the boundary.** The `event` dict (and any SQS/SNS/EventBridge record, Step Functions input, or ECS env block) is untrusted shape — parse it into a Pydantic model as the first line of `main()`, before any logic. ECS tasks validate their env vars through a `pydantic-settings` model at startup. → [`references/data-modeling.md`](references/data-modeling.md)
 - Never call `asyncio.run()` — always `uvloop.run()`.
 - Never put business logic inside `lambda_handler`.
 
@@ -166,10 +179,11 @@ Section headers for long files:
 
 ## Architectural rules (one-liners — depth in references)
 
-1. **Data modeling.** Pydantic at trust boundaries, frozen dataclasses internally, TypedDict only for static test data. Never pass `dict[str, Any]` between modules. → `references/data-modeling.md`
+1. **Data modeling.** Pydantic at trust boundaries, frozen dataclasses internally, TypedDict only for static test data. Never pass `dict[str, Any]` between modules. **Every entry point validates its payload** — Lambda events (SQS/SNS/EventBridge/Step Functions/direct invoke) and ECS env vars (`pydantic-settings`) are parsed into a Pydantic model at the boundary, before any logic. → `references/data-modeling.md`
 1. **External system ownership.** One owner class per external system (Jira, S3, OpenAI, …). All SDK / HTTP calls flow through it; ruff `banned-api` blocks raw imports outside owner folders. → `references/external-system-ownership.md`
 1. **Error handling discipline.** No silent except. No `log.debug` inside `except`. Catch narrowest class, log at `warning`/`error` with structured context, `raise ... from e` when converting. **`contextlib.suppress(Exception)` is strictly prohibited** — it silences all exceptions including bugs and OOM; `suppress(SpecificError)` requires explicit justification. → `references/error-handling.md`
-1. **Test patterns.** Use factories (polyfactory / factory_boy). Never `mod._client = mock` (race-prone under xdist) — inject the dependency. Tests mirror `src/` 1:1. → `references/testing.md`
+1. **Test patterns.** Use factories (polyfactory / factory_boy). Never `mod._client = mock` (race-prone under xdist) — inject the dependency. Tests mirror `src/` 1:1. **Test data is isolated**: dynamic DB ids (never hard-coded), each test owns its own rows (nothing shared), FKs never cross tenants, suite runs under `pytest-xdist` (concurrency *is* the isolation check). **No `@pytest.mark.xdist_group`** to prop up co-dependent tests — make each test self-contained; the marker is a rare, user-approved, documented exception only. → `references/testing.md`
+1. **Scoped global processes.** Every all-tenant job (Lambda/ECS) accepts an optional scope to run for one entity or a group — one code path (`scope or list_all()`), absent scope = global. DynamoDB idempotency includes the scope: a global run **supersedes** a customer-scoped run (the customer claim is blocked when a global run already covers it). Enables both e2e test isolation and single-customer production re-runs. → `references/scoped-processes.md`
 1. **Visibility.** Module-level names never start with `_` — use `__all__`. Class-scope `self._x` is fine. The `_`-prefix blinds vulture, ruff, pyright to dead-code at module scope. → `references/visibility.md`
 1. **Project structure.** `domain/` (pure logic) → `features/` (vertical slices) → `integrations/` + `aws_resources/` + `db/` (horizontal). Entry points (`api/`, `cli/`, lambdas) stay thin. Enforce direction with `import-linter`. → `references/project-structure.md`
 1. **Documentation discipline.** Every code change ships with doc update. Mandatory files: README, CLAUDE.md (root + per resource), ARCHITECTURE, CHANGELOG, TODO. Prek hooks + GH Actions block merge if docs stale. → `references/project-docs.md`
@@ -198,6 +212,9 @@ Section headers for long files:
 - ❌ **Hardcoded config at module or class level** — any value that could differ between environments or change over time must live in `Settings`, env var, or be passed as a parameter. Covers: LLM model names, Jira/workflow statuses, S3/SQS/SNS resource names, API endpoints, timeouts, batch sizes, feature flags. Function/method *parameter defaults* are the one allowed exception. → `references/config.md`
 - ❌ `os.getenv()` scattered across modules — all env var access must go through the `Settings` singleton.
 - ❌ Internal types in public APIs — use TypedDicts / DTOs.
+- ❌ **Using a Lambda `event` dict or ECS env block raw** — parse it into a Pydantic model at the boundary first. → `references/data-modeling.md`
+- ❌ **Hard-coded test ids / shared test data / cross-tenant FK in seeds** — dynamic ids, per-test ownership, FKs stay within one tenant. → `references/testing.md`
+- ❌ **A global (all-tenant) job that can't run for a single customer** — add an optional scope param; make DDB idempotency scope-aware so a global run supersedes a customer run. → `references/scoped-processes.md`
 - ❌ Mixed I/O + business logic in one function.
 - ❌ `except Exception: pass` — catch specific, log context, re-raise as needed.
 - ❌ **`contextlib.suppress(Exception)` — strictly prohibited.** Silences all exceptions including bugs, OOM, and `KeyboardInterrupt`. `suppress(SpecificError)` is allowed only with an inline comment explaining why swallowing that specific error is intentional and safe.
@@ -223,6 +240,9 @@ Before finalising code:
 - [ ] No hardcoded config at module/class level (model names, statuses, resource names, endpoints, timeouts → Settings)
 - [ ] No exposed internal types in APIs
 - [ ] Input validated at boundaries
+- [ ] Lambda events / ECS env vars parsed into a Pydantic model at the entry point
+- [ ] Tests: dynamic DB ids, per-test data ownership, no cross-tenant FK, green under `-n auto`
+- [ ] Global jobs accept a scope param; DDB idempotency includes scope (global run supersedes customer run)
 - [ ] Thread-safe
 - [ ] No blocking calls in async
 - [ ] `raise` specific (`ValueError`, `TypeError`), not generic `Exception`

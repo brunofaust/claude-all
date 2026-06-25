@@ -45,6 +45,184 @@ has a specific replacement — use it.
 | `assert x` with no message on complex objects                | `assert x, f"context: {x!r}"` or `pytest.fail(...)`                                      | Failure logs are unreadable otherwise                                          |
 | `time.sleep(N)` to wait for an async event                   | `await asyncio.wait_for(...)` / `pytest-asyncio` + polling helper                        | sleeps make tests flaky and slow                                               |
 | Catching `Exception` in tests to "be safe"                   | Let exceptions propagate; use `pytest.raises(SpecificError)`                             | Silently swallowing errors hides real bugs                                     |
+| Hard-coded DB ids / keys (`customer_id=1`, `"TICK-1"`)       | Generate a fresh id per test (`uuid4`, factory sequence, `INSERT ... RETURNING`)         | Two tests reusing id `1` clobber each other under xdist → flaky               |
+| Sharing a seeded row across tests (a global "test customer")  | Each test seeds its **own** rows; no cross-test data                                     | One test mutating shared data breaks another non-deterministically            |
+| A child row pointing at another tenant's parent (shared FK)  | Every FK resolves within the **same** tenant the test created                            | Cross-tenant FK leakage hides isolation bugs and corrupts parallel runs       |
+| Running the suite single-process (`-n0`) as the default       | `-n auto --dist worksteal` is the default; `-n0` only to debug                           | xdist is the isolation/concurrency **validator**, not just a speed-up         |
+| `@pytest.mark.xdist_group(...)` to pin co-dependent tests together | Make each test self-contained so worksteal can scatter it anywhere                   | Grouping hides a test-depends-on-test bug instead of fixing it (rare exception — ask first) |
+
+### Test data isolation — the flaky-test root cause
+
+> These rules came out of a real debugging marathon: hours lost to "flaky" tests
+> that were actually **shared-state** tests racing each other under `pytest-xdist`.
+> A test is only flaky if it depends on data it doesn't own. Own your data and the
+> flakiness disappears.
+
+The contract, in four rules:
+
+1. **Database ids are dynamic — never hard-coded.**
+1. **Each test owns its own data — nothing shared between tests.**
+1. **Foreign keys never cross tenants — a child row belongs to its parent's tenant.**
+1. **The suite runs under `pytest-xdist` — concurrency is part of the test.**
+
+#### Rule 1 — dynamic ids, never hard-coded
+
+A literal id (`customer_id=1`, `"TICK-1"`, `tenant="acme"`) is a collision waiting
+to happen: the moment two tests use it — or two xdist workers run the same test
+file — they read and write the same row. Generate a fresh id for every record.
+
+```python
+# ❌ BAD — every test that uses customer 1 fights over the same row
+await db.insert_customer(id=1, name="Test Customer")
+await db.insert_order(id=1, customer_id=1, amount=100)
+
+
+# ✅ GOOD — ids come from the database / a factory, unique per test
+customer_id = await db.insert_customer(name="Test Customer")  # INSERT ... RETURNING id
+order_id = await db.insert_order(customer_id=customer_id, amount=100)
+```
+
+Sources of dynamic ids, in order of preference:
+
+- **DB-generated** — `INSERT ... RETURNING id` (identity / serial / UUID default).
+  The database is the single source of truth for the key.
+- **Factory sequences** — `factory_boy` `Sequence` / `polyfactory` auto-fields.
+- **`uuid4()`** for client-generated keys (and natural keys: suffix with a short
+  random token, e.g. `f"order-{uuid4().hex[:8]}"`, never a bare `"order-1"`).
+
+#### Rule 2 — each test owns its data; nothing shared
+
+Every test **creates the rows it needs and only touches those rows**. No
+"well-known test customer" seeded once and reused; no test reading a row another
+test wrote. Shared data means one test's mutation (or teardown) silently changes
+another test's inputs — the textbook flaky test.
+
+```python
+# ❌ BAD — module/session fixture everyone mutates
+@pytest.fixture(scope="session")
+def shared_customer(db):
+    return db.insert_customer(id=1, name="Shared")  # tests stomp on each other
+
+
+# ✅ GOOD — function-scoped, each test gets its own freshly-seeded customer
+@pytest.fixture
+async def customer(db):
+    cid = await db.insert_customer(name=f"cust-{uuid4().hex[:8]}")
+    yield await db.get_customer(cid)
+    await db.delete_customer(cid)  # own it, clean it up
+```
+
+- Fixtures that create data are **`scope="function"`** (see the anti-pattern table
+  — session scope leaks).
+- If two tests need "the same kind of" data, they each seed their own copy. Same
+  *shape*, different *rows*.
+- A test asserts only on rows it created — never `SELECT COUNT(*) FROM orders`
+  (another worker's rows inflate it); scope the query to your own ids.
+
+#### Rule 3 — foreign keys never cross tenants
+
+In a multi-tenant schema, **a foreign key must resolve within the same tenant**.
+Tenant A's order may not reference tenant B's customer. Sharing a row across
+tenants in a fixture hides exactly the isolation bug your tests exist to catch,
+and corrupts data when parallel tests assume their tenant is private.
+
+```python
+# ❌ BAD — one customer row reused across tenants; FK crosses the tenant boundary
+shared_customer_id = 1
+await db.insert_order(tenant_id="A", customer_id=shared_customer_id)
+await db.insert_order(tenant_id="B", customer_id=shared_customer_id)  # B borrows A's customer
+
+
+# ✅ GOOD — each tenant gets its own customer; every FK stays inside the tenant
+tenant_a = await seed_tenant()
+cust_a = await db.insert_customer(tenant_id=tenant_a.id, name="...")
+await db.insert_order(tenant_id=tenant_a.id, customer_id=cust_a)  # same tenant
+
+tenant_b = await seed_tenant()
+cust_b = await db.insert_customer(tenant_id=tenant_b.id, name="...")
+await db.insert_order(tenant_id=tenant_b.id, customer_id=cust_b)  # same tenant
+```
+
+> Want the **database** to *prove* a test never crossed tenants (rather than
+> asserting it row-by-row)? See [`tenant-isolation.md`](tenant-isolation.md) —
+> optional Postgres RLS enforcement + a non-blocking audit table you query at
+> `pytest_sessionfinish`, with a no-code-change path for real lambdas in MiniStack.
+
+**The seed simulates real data.** Production never shares a customer row across two
+tenants, so the seed must not either. If a test needs a customer in tenant B,
+**create a new customer row in tenant B** — don't reach for an existing one in
+tenant A because it's convenient. Model the real-world cardinality (a tenant owns
+its customers, a customer owns its orders) all the way down the FK chain.
+
+#### Rule 4 — run under xdist (it's a correctness check, not just speed)
+
+The suite runs `-n auto --dist worksteal` (see `pytest.ini` above) **by default**.
+xdist isn't only a speed-up — it's the mechanism that *proves* rules 1–3 hold:
+
+- **Concurrency validation.** Tests execute simultaneously across worker
+  processes. A test that depends on shared/static data will collide with another
+  worker and fail — surfacing the isolation bug that a serial run would hide.
+- **Feature isolation.** Workers steal tests across files, so two unrelated
+  features run side-by-side against the same database. Cross-feature data bleed
+  shows up here.
+- **`pytest-randomly`** on top randomises order, so a test that secretly depended
+  on running after another fails loudly.
+
+Practical consequences for writing tests under xdist:
+
+- **Resource names unique per worker / per test.** MiniStack buckets, queues,
+  tables, S3 prefixes — suffix with the test's dynamic id or
+  `os.environ["PYTEST_XDIST_WORKER"]` so two workers don't share infra (see
+  [§ MiniStack resource setup](#ministack-resource-setup)).
+- **No reliance on global counts or ordering** — your assertions read only your
+  own ids.
+- **`-n0` is for debugging a single test, never the committed default.** If a test
+  only passes at `-n0`, it has a hidden shared-state dependency — fix the test,
+  don't pin the worker count.
+- **Never reach for `@pytest.mark.xdist_group` to make a flaky test pass.**
+  `xdist_group` forces every test in the named group onto the **same worker**, run
+  in order — it's the marker people use when one test depends on another's state.
+  That is the exact bug these rules exist to kill: it *hides* a
+  test-depends-on-test coupling instead of fixing it. The fix is to make each test
+  self-contained (own data, own ids, own resources) so `--dist worksteal` can
+  scatter it to any worker in any order. Pinning tests together just relocates the
+  flakiness — it doesn't remove it.
+
+  **Treat the marker as a diagnostic, not a tool.** If you find yourself reaching
+  for `xdist_group`, that is the signal your tests aren't isolated correctly —
+  stop and fix the isolation (dynamic ids, per-test data ownership, per-test
+  resource names), don't paper over it by forcing the tests onto one worker.
+
+  **The rare exception — ask first, document why.** A *very* occasional case
+  genuinely can't be split (e.g. a single contended external singleton with no
+  per-test namespace). Before adding `xdist_group`, **ask the user**, and only
+  proceed once you've explained to them *why* it's needed and why isolation isn't
+  achievable here. Record that reason in a comment on the marker:
+
+  ```python
+  # xdist_group: APPROVED by <user> — <external resource> has no per-test namespace,
+  # so these tests must serialise on one worker. Isolation not achievable here.
+  @pytest.mark.xdist_group("legacy_global_singleton")
+  async def test_...() -> None: ...
+  ```
+
+  No silent `xdist_group`. If it appears without an approval comment, treat it as a
+  hidden shared-state bug and fix the test instead.
+- **Driving global jobs from a test?** Scope them to the test's own tenant so an
+  all-tenant sweep can't race the test — see
+  [`scoped-processes.md`](scoped-processes.md).
+
+#### Quick isolation checklist
+
+- [ ] No literal ids — every key is DB-generated, factory-sequenced, or `uuid4`.
+- [ ] Data-creating fixtures are `scope="function"` and clean up after themselves.
+- [ ] Each test seeds its own rows; no test reads another test's data.
+- [ ] Every FK resolves inside one tenant; no cross-tenant row sharing in seeds.
+- [ ] Seed mirrors real cardinality — new row per tenant, never a borrowed one.
+- [ ] Assertions scope to the test's own ids (no global `COUNT(*)`).
+- [ ] MiniStack / external resource names are unique per test or per xdist worker.
+- [ ] Suite passes under `-n auto` **and** `pytest-randomly` (not just `-n0`).
+- [ ] No `@pytest.mark.xdist_group` unless user-approved with a documented reason comment.
 
 ### Test Types
 

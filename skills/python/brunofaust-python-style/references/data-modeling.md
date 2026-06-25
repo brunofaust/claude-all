@@ -9,6 +9,70 @@
 - DynamoDB read payloads
 - Hook configs from user-controlled sources
 - Configuration loaded from files or env (use `pydantic-settings`)
+- **Lambda event payloads** — SQS / SNS / EventBridge records, Step Functions
+  state input, direct-invoke JSON. The `event: dict[str, Any]` AWS hands you is
+  untrusted shape; parse it into a model as the first line of `main()`.
+- **ECS task inputs** — container env vars (via `pydantic-settings`) and any JSON
+  passed through a command override / `containerOverrides`. Same rule: validate
+  before use.
+
+**Every entry point parses its payload.** A Lambda `event`, an ECS env block, an
+SQS message body, a Step Functions input — none of them are trusted dicts. The
+boundary parse is mandatory, not optional, and it is the place that catches a
+malformed deploy or a renamed field *loudly* instead of as a `KeyError` three
+calls deep.
+
+## Lambda event + ECS env — the boundary parse
+
+```python
+import uvloop
+from typing import Any
+from pydantic import BaseModel, Field, ValidationError
+from pydantic_settings import BaseSettings
+
+
+class RollupEvent(BaseModel):
+    """Validated Lambda event — the untyped `event` dict is parsed here, once."""
+
+    model_config = {"extra": "forbid", "frozen": True}
+
+    run_date: str
+    customer_ids: tuple[str, ...] = Field(default_factory=tuple)
+
+
+def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
+    """AWS entry point — sync shell, async body."""
+    return uvloop.run(main(event))
+
+
+async def main(event: dict[str, Any]) -> dict[str, Any]:
+    """Parse the untrusted event at the boundary, then run typed logic."""
+    parsed = RollupEvent.model_validate(event)  # raises ValidationError on bad shape
+    return await run_rollup(parsed)
+```
+
+ECS containers read their inputs from env vars — validate them through a
+`pydantic-settings` model at startup so a missing or malformed var crashes the
+task immediately with a clear message (fail-fast), never mid-run:
+
+```python
+class TaskSettings(BaseSettings):
+    """ECS task inputs — env vars validated at container startup."""
+
+    run_date: str = Field(alias="RUN_DATE")
+    customer_ids: tuple[str, ...] = Field(default_factory=tuple, alias="CUSTOMER_IDS")
+
+    model_config = {"extra": "ignore"}
+
+
+TASK_SETTINGS = TaskSettings()  # fails fast at import if RUN_DATE is unset
+```
+
+`model_config = {"extra": "forbid"}` on event models surfaces a renamed or stray
+field as a `ValidationError` at the boundary instead of silently ignoring it. See
+[`config.md`](config.md) for the full `pydantic-settings` patterns (coercion,
+secrets, nested groups) and [`scoped-processes.md`](scoped-processes.md) for the
+scope parameter that rides on these payloads.
 
 ## Internal contracts — use `@dataclass(frozen=True, slots=True)`
 
