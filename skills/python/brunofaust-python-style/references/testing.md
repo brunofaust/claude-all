@@ -49,6 +49,7 @@ has a specific replacement — use it.
 | Sharing a seeded row across tests (a global "test customer")  | Each test seeds its **own** rows; no cross-test data                                     | One test mutating shared data breaks another non-deterministically            |
 | A child row pointing at another tenant's parent (shared FK)  | Every FK resolves within the **same** tenant the test created                            | Cross-tenant FK leakage hides isolation bugs and corrupts parallel runs       |
 | Running the suite single-process (`-n0`) as the default       | `-n auto --dist worksteal` is the default; `-n0` only to debug                           | xdist is the isolation/concurrency **validator**, not just a speed-up         |
+| `@pytest.mark.xdist_group(...)` to pin co-dependent tests together | Make each test self-contained so worksteal can scatter it anywhere                   | Grouping hides a test-depends-on-test bug instead of fixing it (rare exception — ask first) |
 
 ### Test data isolation — the flaky-test root cause
 
@@ -173,6 +174,30 @@ Practical consequences for writing tests under xdist:
 - **`-n0` is for debugging a single test, never the committed default.** If a test
   only passes at `-n0`, it has a hidden shared-state dependency — fix the test,
   don't pin the worker count.
+- **Never reach for `@pytest.mark.xdist_group` to make a flaky test pass.**
+  `xdist_group` forces every test in the named group onto the **same worker**, run
+  in order — it's the marker people use when one test depends on another's state.
+  That is the exact bug these rules exist to kill: it *hides* a
+  test-depends-on-test coupling instead of fixing it. The fix is to make each test
+  self-contained (own data, own ids, own resources) so `--dist worksteal` can
+  scatter it to any worker in any order. Pinning tests together just relocates the
+  flakiness — it doesn't remove it.
+
+  **The rare exception — ask first, document why.** A *very* occasional case
+  genuinely can't be split (e.g. a single contended external singleton with no
+  per-test namespace). Before adding `xdist_group`, **ask the user**, and only
+  proceed once you've explained to them *why* it's needed and why isolation isn't
+  achievable here. Record that reason in a comment on the marker:
+
+  ```python
+  # xdist_group: APPROVED by <user> — <external resource> has no per-test namespace,
+  # so these tests must serialise on one worker. Isolation not achievable here.
+  @pytest.mark.xdist_group("legacy_global_singleton")
+  async def test_...() -> None: ...
+  ```
+
+  No silent `xdist_group`. If it appears without an approval comment, treat it as a
+  hidden shared-state bug and fix the test instead.
 - **Driving global jobs from a test?** Scope them to the test's own tenant so an
   all-tenant sweep can't race the test — see
   [`scoped-processes.md`](scoped-processes.md).
@@ -187,6 +212,7 @@ Practical consequences for writing tests under xdist:
 - [ ] Assertions scope to the test's own ids (no global `COUNT(*)`).
 - [ ] MiniStack / external resource names are unique per test or per xdist worker.
 - [ ] Suite passes under `-n auto` **and** `pytest-randomly` (not just `-n0`).
+- [ ] No `@pytest.mark.xdist_group` unless user-approved with a documented reason comment.
 
 ### Test Types
 
