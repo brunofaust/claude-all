@@ -20,6 +20,7 @@ claude-all/
 ├── plugins/                  # Claude Code plugins
 ├── mcps/                     # MCP server configurations
 ├── tools/                    # OS-level CLI tools (brew)
+├── instructions/            # Standalone ~/.claude/CLAUDE.md snippets (no resource to install)
 └── README.md
 ```
 
@@ -230,7 +231,7 @@ All agents follow the same pattern: a detailed `description` so Claude Code's au
 | `bug-hunter`          | sonnet-4-6 | Deep correctness bug hunt over a named scope (files/dirs/subsystem) — reasoning-based review against a bug-class taxonomy (async/concurrency, data handling, storage/transactions, error swallowing, off-by-one/boundary) that linters can't see. Dispatcher inlines the file list + hot spots (uncommitted diffs, recent churn, tricky domain logic). Read-only, severity-tagged findings with file:line + brief code quote, ≤70-line report. Not for style (`code-quality`), PR diffs (`/code-review`), or whole-repo scorecards (`repo-audit`).   |
 | `lint-fixer`          | sonnet-4-6 | FIXES quality-gate findings (ruff, mypy, eslint, tsc, codecongruence). Clears the mechanical tier with `ruff --fix`/`ruff format`, then fixes judgment findings (types, complexity, semantic dedup) at the ROOT CAUSE — no `# type: ignore`/`# noqa`/config-loosening/`--no-verify`. Verifies with the gate + tests after each category. Pairs with `code-quality` (finds) + `test-runner` (confirms).                                                                                                                                               |
 | `git-committer`       | haiku-4-5  | Stages changes, generates a Conventional Commits message, commits to current branch (optionally pushes). Never branches, merges, or rebases.                                                                                                                                                                                                                                                                                                                                                                                                         |
-| `git-runner`          | haiku-4-5  | Read-only git inspection (log, diff, status, blame, show, branch, stash list). Returns tight summaries — author/file counts, not raw multi-page output. Uses `lean-ctx` or `rtk` wrapper if installed. Refuses any write/destructive git command.                                                                                                                                                                                                                                                                                                               |
+| `git-runner`          | haiku-4-5  | Read-only git inspection (log, diff, status, blame, show, branch, stash list). Returns tight summaries — author/file counts, not raw multi-page output. Uses the `rtk` wrapper if installed. Refuses any write/destructive git command.                                                                                                                                                                                                                                                                                                               |
 | `log-filter`          | haiku-4-5  | Filters, summarizes, formats raw logs from any source (structlog JSON, CloudWatch output, stdout). Works on logs already in hand.                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | `docs-updater`        | sonnet-4-6 | Updates README, CLAUDE.md, ARCHITECTURE.md, CHANGELOG.md after code changes. Detects which doc needs the update; proposes diffs.                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | `docker-runner`       | haiku-4-5  | Executes docker / docker compose commands (build, run, exec, logs, ps, compose up/down/restart/logs). Returns concise summary — image tag/size for builds, container state for ps, error chain for failures. Refuses destructive ops (rm/rmi/volume rm/prune/push/down -v) without explicit confirmation.                                                                                                                                                                                                                                            |
@@ -493,12 +494,25 @@ Installer:
 - Runs each `post_install` step in order
 - Injects optional `claude_md.md` into `~/.claude/CLAUDE.md` or `./CLAUDE.md` (per `--user` / `--project`)
 
-Installed tools (pick one — they are alternatives, not complementary):
+Installed tools:
 
 | Tool       | Source                                                    | Install                                                       | Purpose                                                                                                                                                                                                                                                                          |
 | ---------- | --------------------------------------------------------- | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `rtk`      | [rtk-ai/rtk](https://github.com/rtk-ai/rtk)               | `brew install rtk` + `rtk init -g`                            | Rust Token Killer — explicit prefix model (`rtk git log`, `rtk aws …`). Wraps `git`, `grep`, `cat`, `find`, `ls`, `aws`, `make`, `terraform`, `pytest`, `gh`, `npm`, `eslint`, `playwright`, `psql`, `wc` to cut output token cost 60-90%.                                      |
-| `lean-ctx` | [yvgude/lean-ctx](https://github.com/yvgude/lean-ctx)     | `brew tap yvgude/lean-ctx` + `brew install lean-ctx` + `lean-ctx onboard` | Context Engineering Layer — auto-compresses shell output via hooks (no prefix needed), exposes 69 MCP tools (`ctx_read`, `ctx_search`, `ctx_shell`, …) in 10 read modes, archives large tool results. Check savings with `lean-ctx gain`. |
+
+### 7. Instructions (standalone CLAUDE.md snippets)
+
+A resource whose **only** effect is injecting a tagged block into `~/.claude/CLAUDE.md` — no
+agent/skill/hook/tool to install. Each lives at `instructions/<name>/claude_md.md` and is installed
+with `claude-all --all --user <name>`. Use for main-session dispatch rules that target built-in
+agents or cut across many agents (so they don't belong to any single agent's companion).
+
+| Snippet           | Purpose                                                                                                       |
+| ----------------- | ------------------------------------------------------------------------------------------------------------- |
+| `delegate_search` | Routes broad/iterative codebase search to the built-in `Explore` agent instead of grep loops in main session. |
+| `agent-era-rules` | Distilled standing rules from running AI agents on a production codebase (mock drift, gates, ownership, …).    |
+| `tool-dispatch`   | Token-efficiency dispatch: built-in tools over Bash for filesystem; RAG over Grep; self-check before raw `aws`/`psql`/`terraform`. |
+| `bash-safety`     | Credential-leak + destructive-write anti-patterns (`PGPASSWORD=`, `Bearer` tokens, secret echoes, raw DDB/SQL writes, heredoc bypass). |
 
 ## Model strategy
 

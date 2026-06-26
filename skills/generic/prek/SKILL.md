@@ -922,6 +922,17 @@ for older prek versions. If you must use `--files` mode in a hook script, filter
 is that the files you edited are not staged. Stage them first: `git add <file>` or use
 `prek run --all-files` to bypass the staged-file filter.
 
+### Fix-loop discipline — 2 failures, then stop
+
+When a hook (or `final_check.py`) fires and prek fails, you get **2 attempts** to fix +
+re-stage + re-run. After **2 consecutive prek failures, STOP** — surface the verbatim
+error to the user and ask for direction. Never enter an infinite retry loop.
+
+Fix **one category per attempt**, in order: lint errors first, then format errors, then
+type errors. Never mix all three in one unreviewed patch. Before diagnosing "no files to
+lint", confirm `prek.toml` and every changed file are staged (see above) — don't widen
+the hook scope or blame config first.
+
 ### Worktrees
 
 Claude Code creates git worktrees under `.worktrees/` and `.claude/worktrees/`. Exclude both:
