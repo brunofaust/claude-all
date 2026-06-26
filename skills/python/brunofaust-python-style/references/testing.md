@@ -214,8 +214,8 @@ Practical consequences for writing tests under xdist:
 - **Running a parallel e2e / integration suite against one shared backing stack?**
   The data-isolation rules above are the core; for the shared-infra remedies
   (one `create_tenant` factory, sequence randomization, concurrency-capable mocks,
-  drain-to-own queues, the phased-execution plugin, the flaky-fix method) see
-  [`e2e-testing.md`](e2e-testing.md).
+  drain-to-own queues, a separate serial pass for un-scopeable global tests, the
+  flaky-fix method) see [`e2e-testing.md`](e2e-testing.md).
 
 #### Quick isolation checklist
 
