@@ -217,190 +217,55 @@ Set it in `addopts` or on the CLI.
 
 After true data isolation, **most grouping becomes unnecessary**. The residue is
 tests that drive a pipeline *in-process* and so contend on the shared queue / state
-machine — those still want serialization (see § 9 for the cleaner phased approach,
-and [`testing.md`](testing.md) for why `xdist_group` is a diagnostic, not a tool).
+machine — those still want serialization: run un-scopeable global tests in a separate
+serial pass (see § 9), and see [`testing.md`](testing.md) for why `xdist_group` is a
+diagnostic, not a tool.
 
-## 9. Phased execution for cross-tenant / global processes (one pytest pass)
+## 9. Cross-tenant / global processes — run them in a separate serial pass
 
 Global operations — a scheduler tick that scans *all* tenants — are inherently
 incompatible with concurrent per-tenant tests: they sweep up half-created tenants.
-They must run **alone, on a known DB state**. Rather than a second pytest invocation,
-do it in a **single pass** with a tiny plugin.
+They must run **alone, on a known DB state**.
 
-> If the global job itself takes an optional scope param, prefer scoping it to the
-> test's own tenant — see [`scoped-processes.md`](scoped-processes.md). Phasing is
-> for the genuinely *un-scopeable* global sweep that must see a quiescent DB.
+> First, try to dissolve the problem: if the global job takes an optional scope
+> param, scope it to the test's own tenant — see
+> [`scoped-processes.md`](scoped-processes.md). Only the genuinely *un-scopeable*
+> sweep needs the separation below.
 
-The plugin has four parts:
+**Don't try to "phase" them inside one xdist run.** It is tempting to mark tests with
+an ordered phase and add a cross-worker barrier (no worker starts phase N+1 until
+every worker has drained phase N) so the parallel per-tenant tests and the run-alone
+global tests share a single `pytest -n auto` pass. **This is not viable under
+pytest-xdist** — xdist assigns and steals tests across workers on its own schedule, a
+`conftest` cannot reliably gate a worker's progression mid-run, and any
+poll-until-the-others-drain barrier trades the contention for deadlock risk and
+brittle timing. Don't build it.
 
-1. **A phase marker.** `@pytest.mark.phase(n)` (int ≥ 1); unmarked ⇒ phase 0.
-   `pytest_collection_modifyitems` stable-sorts items ascending by phase. Phase 0
-   runs first as a **full parallel** sweep, then phase 1, 2, … **Within** a phase
-   tests still distribute across workers — phasing serialises *between* phases,
-   never within one.
-2. **A cross-worker barrier.** No worker starts phase `N+1` until *every* worker has
-   drained phase `N`:
-   - Compute the **expected count per phase** once at collection, written to a
-     shared file every worker reads.
-   - On each item's completion, increment `completed[phase]` in a shared on-disk
-     counter under a **brief** filelock (guarding only the read-modify-write).
-   - Before running an item, **poll** until every lower phase hits its expected
-     count. The lock is **never held across the poll** — that would deadlock; it
-     guards only the mutation.
-   - Honour an overall **barrier timeout** (a pytest ini option, e.g.
-     `phase_barrier_timeout`) and **fail loud** on expiry — a stuck phase is a hard
-     error, not a silent hang.
-3. **Per-phase reset — a `{phase: fn}` mapping, injected by the project.** The
-   generic plugin never knows *how* to reset; the project hands it a mapping from
-   phase number to a reset callable, set in `pytest_configure` (not a per-mark flag,
-   not a module global). After the barrier confirms phase `N-1` drained and
-   **before** phase `N` runs, **exactly one worker** (the first across the boundary,
-   chosen under a lock) calls `config._phase_reset[N]`. Phases absent from the map —
-   including phase 0 — do **not** reset. It is *always* a per-phase mapping; there is
-   deliberately **no single-callable-for-all-phases variant** (different phases need
-   different resets — clear billing state before one, cross-tenant locks before
-   another).
-4. **Shipped as a named plugin** so it's trivially disabled (`-p no:phasing`),
-   leaving collection/ordering unchanged and no barrier/reset running.
+**Split into two runs instead** (the proven approach): a parallel pass for the
+isolated per-tenant tests, then a second, serial pass for the un-scopeable
+global/cross-tenant tests against a freshly-reset DB.
 
-```python
-# tests/e2e/conftest.py  (PROJECT) — inject the per-phase reset mapping.
-# The plugin stays generic; only the project knows how to reset its own backing infra.
-def pytest_configure(config: pytest.Config) -> None:
-    config._phase_reset = {
-        2: reset_billing_state,     # a DISTINCT fn per phase — never one-fn-for-all
-        3: reset_global_scheduler,  # clear cross-tenant locks before the all-tenant sweep
-    }
+```bash
+# Pass 1 — isolated per-tenant tests, full parallelism
+pytest -m "not all_tenants" -n auto --dist worksteal
+
+# Pass 2 — un-scopeable global sweeps, alone, on a quiesced DB
+pytest -m all_tenants -p no:xdist     # reset/seed the DB first if Pass 1 left state
 ```
 
 ```python
-# tests/e2e/phasing.py  (GENERIC PLUGIN) — orchestration only; `-p no:phasing` disables it.
-# Module-level names avoid the `_` prefix (use __all__) per the visibility rule.
 import pytest
 
-__all__ = ["PHASE_MARK", "pytest_configure", "pytest_collection_modifyitems", "pytest_runtest_protocol"]
 
-PHASE_MARK = "phase"
-
-
-def pytest_configure(config: pytest.Config) -> None:
-    """Declare the marker; the project's conftest supplies config._phase_reset."""
-    config.addinivalue_line("markers", f"{PHASE_MARK}(n): ordered phase n (int ≥ 1; default 0)")
-
-
-def phase_of(item: pytest.Item) -> int:
-    """Phase number of an item; unmarked tests are phase 0."""
-    marker = item.get_closest_marker(PHASE_MARK)
-    return int(marker.args[0]) if marker else 0
-
-
-@pytest.hookimpl(trylast=True)  # run AFTER the suite's other modifyitems hooks
-def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
-    """Order the whole pass by phase ascending; record per-phase expected counts."""
-    items.sort(key=phase_of)
-    counts: dict[int, int] = {}
-    for item in items:
-        counts[phase_of(item)] = counts.get(phase_of(item), 0) + 1
-    write_expected_counts(config, counts)  # shared file, read by every worker
-
-
-@pytest.hookimpl(hookwrapper=True)
-def pytest_runtest_protocol(item: pytest.Item, nextitem: pytest.Item | None) -> object:
-    """Gate each item behind the barrier; run the phase's reset once on entry."""
-    phase = phase_of(item)
-    await_lower_phases_drained(item.config, phase)         # poll; brief lock per read
-    if claim_phase_entry(item.config, phase):              # exactly one worker wins
-        reset = getattr(item.config, "_phase_reset", {}).get(phase)
-        if reset is not None:
-            reset()                                        # project fn, mid-run-safe
-    outcome = yield
-    increment_completed(item.config, phase)                # brief filelock around RMW
-    return outcome.get_result()
+@pytest.mark.all_tenants  # `global` is a keyword — name the marker all_tenants
+async def test_scheduler_tick_sweeps_all_tenants() -> None:
+    """A bare, unscoped sweep — must see a quiescent DB, so it runs alone in Pass 2."""
+    ...
 ```
 
-Each reset fn must be **mid-run-safe**: when it touches a sequence use
-`GREATEST(<seq>, <floor>)` so it never lowers a sequence below already-committed rows
-from a concurrent worker. This keeps the parallel per-tenant tests and the run-alone
-all-tenant tests in **one** `pytest -n auto` pass — no second invocation — ordered,
-quiesced between phases, with the reset action living in the project that owns the
-infra, not in the plugin.
-
-### The barrier helpers — a file-counter shared across xdist workers
-
-The skeleton above calls four helpers. Here they are, minimal and complete. The key
-fact: **xdist exports `PYTEST_XDIST_TESTRUNUID`** (identical for every worker in a
-run), so all workers agree on one scratch dir; each phase is a counter in a shared
-JSON file, guarded by a `filelock` only around the read-modify-write.
-
-```python
-# tests/e2e/phasing.py (continued)
-import json, os, tempfile, time
-from pathlib import Path
-from filelock import FileLock
-
-# In production, read these from pytest ini options (phase_barrier_timeout /
-# phase_poll_interval), not module constants — no hardcoded config.
-BARRIER_TIMEOUT, POLL = 300.0, 0.5
-
-
-def phase_dir(config: pytest.Config) -> Path:
-    """One scratch dir shared by every xdist worker in this run."""
-    run = os.environ.get("PYTEST_XDIST_TESTRUNUID", "serial")  # same for all workers
-    d = Path(tempfile.gettempdir()) / f"pytest-phasing-{run}"
-    d.mkdir(exist_ok=True)
-    return d
-
-
-def write_expected_counts(config: pytest.Config, counts: dict[int, int]) -> None:
-    """Persist tests-per-phase once. Every worker collects the FULL suite → identical totals."""
-    path = phase_dir(config) / "expected.json"
-    with FileLock(f"{path}.lock"):
-        if not path.exists():
-            path.write_text(json.dumps({str(k): v for k, v in counts.items()}))
-
-
-def increment_completed(config: pytest.Config, phase: int) -> None:
-    """Atomically tally one finished test against its phase, across all workers."""
-    path = phase_dir(config) / "completed.json"
-    with FileLock(f"{path}.lock"):
-        done = json.loads(path.read_text()) if path.exists() else {}
-        done[str(phase)] = done.get(str(phase), 0) + 1
-        path.write_text(json.dumps(done))
-
-
-def await_lower_phases_drained(config: pytest.Config, phase: int) -> None:
-    """Block until EVERY lower phase hit its expected count across ALL workers."""
-    if phase == 0:
-        return  # phase 0 is the parallel baseline — nothing precedes it
-    expected = json.loads((phase_dir(config) / "expected.json").read_text())
-    completed_path = phase_dir(config) / "completed.json"
-    deadline = time.monotonic() + BARRIER_TIMEOUT
-    while True:
-        done = json.loads(completed_path.read_text()) if completed_path.exists() else {}
-        if all(done.get(str(p), 0) >= expected.get(str(p), 0) for p in range(phase)):
-            return  # every prior phase fully drained on every worker → proceed
-        if time.monotonic() >= deadline:
-            raise TimeoutError(f"phase {phase} barrier: prior phases not drained in {BARRIER_TIMEOUT}s")
-        time.sleep(POLL)  # fail loud on timeout, never hang silently
-
-
-def claim_phase_entry(config: pytest.Config, phase: int) -> bool:
-    """True for exactly ONE worker per phase — the first to create the marker."""
-    marker = phase_dir(config) / f"entered-{phase}"
-    with FileLock(f"{marker}.lock"):
-        if marker.exists():
-            return False
-        marker.write_text("1")
-        return True
-```
-
-That's the whole barrier: `write_expected_counts` (called once at collection from
-`pytest_collection_modifyitems`), `increment_completed` (after each test), and
-`await_lower_phases_drained` (before each test) together guarantee no worker enters
-phase `N` until every phase `< N` test has finished on *every* worker.
-`claim_phase_entry` then elects the single worker that runs `config._phase_reset[N]`.
-(If a reset must *complete* before siblings proceed, have the winner also write a
-`reset-{phase}.done` marker and have the others poll for it before their first test.)
+Mark the un-scopeable tests, exclude them from the parallel pass (`-m "not
+all_tenants"`), and run them alone afterwards. Two invocations is the price of
+correctness here; an in-process barrier is not.
 
 ## 10. Fixtures / payloads agree with reality, not the code's assumptions
 
@@ -446,6 +311,6 @@ A concurrency fix is **not proven by one green run.**
 - [ ] Fail-closed paths log the budget **and** publish to a monitored channel.
 - [ ] Env-driven config is set **before** the settings cache builds (root conftest / `.env`).
 - [ ] Dist mode chosen in `addopts`/CLI (not a late `pytest_configure` flip).
-- [ ] Un-scopeable all-tenant sweeps run via the phased plugin in **one pass** (phase 0 parallel → barrier → phase N alone, `-p no:phasing`); the project injects a `{phase: reset_fn}` mapping (`config._phase_reset`), resets are mid-run-safe (`GREATEST` on any sequence), and the barrier uses collection-time expected counts + a brief filelock and **fails loud** on timeout.
+- [ ] Un-scopeable all-tenant sweeps run in a **separate serial pass** (`-m all_tenants -p no:xdist` on a freshly-reset DB), excluded from the parallel pass (`-m "not all_tenants"`) — **not** phased inside one xdist run (an in-process cross-worker barrier is not viable under xdist).
 - [ ] Payloads built from factory context; boundary Pydantic validation catches shape drift.
 - [ ] Flaky fixes proven by isolating the variable + N consecutive green runs, with evidence.
