@@ -1,4 +1,0 @@
-## Rolling out a new gate — `regression-gates` skill
-When adding ANY new lint/quality/correctness gate (custom checker, AST rule, pre-commit hook) to a codebase that already has violations, use the `regression-gates` skill — don't fix-everything-at-once and don't flip straight to `--strict`.
-
-Rule: seed a regression-only baseline (`<gate>_baseline.txt`), then ratchet to zero. New findings fail; baselined findings pass; **stale baseline entries also fail** so the file can only shrink. Key findings by stable identity (`path: message`), not line number. **Fail closed** if the checker can't run — never pass vacuously. Roll out warn → scope-to-triggering-files → error, and run the gate in CI (not just pre-commit — bypasses get used). Ship a cleanup together with the checker that prevents its return. `baseline_gate.py` + example checkers are in the skill dir.
