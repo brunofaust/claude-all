@@ -232,18 +232,10 @@ They must run **alone, on a known DB state**.
 > [`scoped-processes.md`](scoped-processes.md). Only the genuinely *un-scopeable*
 > sweep needs the separation below.
 
-**Don't try to "phase" them inside one xdist run.** It is tempting to mark tests with
-an ordered phase and add a cross-worker barrier (no worker starts phase N+1 until
-every worker has drained phase N) so the parallel per-tenant tests and the run-alone
-global tests share a single `pytest -n auto` pass. **This is not viable under
-pytest-xdist** — xdist assigns and steals tests across workers on its own schedule, a
-`conftest` cannot reliably gate a worker's progression mid-run, and any
-poll-until-the-others-drain barrier trades the contention for deadlock risk and
-brittle timing. Don't build it.
-
-**Split into two runs instead** (the proven approach): a parallel pass for the
-isolated per-tenant tests, then a second, serial pass for the un-scopeable
-global/cross-tenant tests against a freshly-reset DB.
+**Split into two runs** (the proven approach): a parallel pass for the isolated
+per-tenant tests, then a second, serial pass for the un-scopeable
+global/cross-tenant tests against a freshly-reset DB. Don't try to interleave the
+two in a single `pytest -n auto` invocation — keep them as separate runs.
 
 ```bash
 # Pass 1 — isolated per-tenant tests, full parallelism
@@ -265,7 +257,8 @@ async def test_scheduler_tick_sweeps_all_tenants() -> None:
 
 Mark the un-scopeable tests, exclude them from the parallel pass (`-m "not
 all_tenants"`), and run them alone afterwards. Two invocations is the price of
-correctness here; an in-process barrier is not.
+correctness for a sweep that, by definition, can't share a database with concurrent
+tenants.
 
 ## 10. Fixtures / payloads agree with reality, not the code's assumptions
 
@@ -311,6 +304,6 @@ A concurrency fix is **not proven by one green run.**
 - [ ] Fail-closed paths log the budget **and** publish to a monitored channel.
 - [ ] Env-driven config is set **before** the settings cache builds (root conftest / `.env`).
 - [ ] Dist mode chosen in `addopts`/CLI (not a late `pytest_configure` flip).
-- [ ] Un-scopeable all-tenant sweeps run in a **separate serial pass** (`-m all_tenants -p no:xdist` on a freshly-reset DB), excluded from the parallel pass (`-m "not all_tenants"`) — **not** phased inside one xdist run (an in-process cross-worker barrier is not viable under xdist).
+- [ ] Un-scopeable all-tenant sweeps run in a **separate serial pass** (`-m all_tenants -p no:xdist` on a freshly-reset DB), excluded from the parallel pass (`-m "not all_tenants"`).
 - [ ] Payloads built from factory context; boundary Pydantic validation catches shape drift.
 - [ ] Flaky fixes proven by isolating the variable + N consecutive green runs, with evidence.
