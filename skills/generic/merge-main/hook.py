@@ -27,9 +27,7 @@ import tempfile
 
 # `git ... merge ... origin/main` or `git ... pull ... origin ... main` anywhere
 # in the command (allows `-C path`, flags, args, and `origin/main` or `origin main`).
-_GIT_MERGE_MAIN = re.compile(
-    r"\bgit\b[^\n]*\b(?:merge|pull)\b[^\n]*\borigin[\s/]+main\b"
-)
+_GIT_MERGE_MAIN = re.compile(r"\bgit\b[^\n]*\b(?:merge|pull)\b[^\n]*\borigin[\s/]+main\b")
 
 
 def main() -> int:
@@ -58,14 +56,15 @@ def main() -> int:
             "hookSpecificOutput": {
                 "hookEventName": "PreToolUse",
                 "additionalContext": (
-                    "Reminder (merge-main, first origin/main merge this session): a clean textual "
-                    "merge can still be semantically broken (main touched a file this branch "
-                    "deleted, changed a contract this branch still calls, or removed a symbol this "
-                    "branch references). Consider routing this through the /merge-main skill instead "
-                    "of a bare merge — it merges with --no-commit, runs a semantic conflict pass + "
-                    "lint/test gates, and only finalizes after they pass. If you are ALREADY inside "
-                    "/merge-main (or the user explicitly asked for a plain merge), ignore this and "
-                    "proceed."
+                    "Reminder (merge-main, first origin/main merge this session): a clean "
+                    "textual merge can still be semantically broken (main touched a file this "
+                    "branch deleted, changed a contract this branch still calls, or removed a "
+                    "symbol this branch references). Consider routing this through the "
+                    "/merge-main skill instead of a bare merge — it checks the incoming change "
+                    "semantically before merging, then resolves both textual and semantic "
+                    "conflicts and validates with the lint/test gates, only stopping to ask on "
+                    "huge/high-risk differences. If you are ALREADY inside /merge-main (or the "
+                    "user explicitly asked for a plain merge), ignore this and proceed."
                 ),
             }
         },
