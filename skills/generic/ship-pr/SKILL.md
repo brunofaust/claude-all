@@ -25,8 +25,13 @@ first hard failure**.
    simplification, efficiency, altitude). Run it early so its edits pass through the gates below.
    Skip for trivial diffs, or when the change is purely mechanical. It doesn't hunt bugs — the review
    gates below do that.
-2. **Gates — run the `/ship` sequence:** `lint-fixer` → `test-runner` → `verification-loop`. If any
-   hard-fails, stop there (same rules as `/ship`).
+2. **Gates — run the `/ship` sequence:** `test-coverage gate` → `lint-fixer` → `test-runner` →
+   `verification-loop`. If any hard-fails, stop there (same rules as `/ship`). The **test-coverage
+   gate runs first**, before lint/test: it confirms this change ships the unit tests for its
+   new/changed code AND — where an e2e/integration suite exists — the e2e/integration tests that
+   validate each **business requirement** of the feature (user-observable behaviour, not the
+   implementation). A new feature with no business-requirement coverage is a hard stop; offer to write
+   the missing tests before continuing.
 3. **Code review — `/code-review` skill (gate).** Review the working diff. Treat **Block** findings as
    a hard stop: fix them (loop back through the gates) or surface them for a decision. Warnings are
    reported, not blocking.
@@ -56,6 +61,9 @@ number (someone else's, or a re-review after pushes), use the existing **`review
   opening a PR.
 - **Block findings are a hard stop.** Never commit/open over an unresolved Block from code or security
   review.
+- **No feature without its tests.** The test-coverage gate runs before the other gates: a new/changed
+  feature must ship unit tests for its code AND e2e/integration tests validating its business
+  requirements (where such a suite exists). A missing-coverage gap is a hard stop, not a warning.
 - **Confirm the two outward steps** (commit, then PR) separately; default the PR to draft; never push
   force / enable auto-merge from here.
 - **Simplify before the gates, docs after review.** Code-mutating steps (simplify, lint-fixer) run
@@ -68,5 +76,5 @@ number (someone else's, or a re-review after pushes), use the existing **`review
 ## Output
 
 ```
-ship-pr: simplify ✓ · lint ✓ · tests ✓ · verify READY · review ✓ (0 block, 2 warn) · sec n/a · docs ✓ · commit <sha> · PR #NN (draft)
+ship-pr: simplify ✓ · coverage ✓ (unit + e2e) · lint ✓ · tests ✓ · verify READY · review ✓ (0 block, 2 warn) · sec n/a · docs ✓ · commit <sha> · PR #NN (draft)
 ```
