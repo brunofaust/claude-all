@@ -182,6 +182,10 @@ venv.bak/
 .dmypy.json
 dmypy.json
 
+# Local tool caches (ChunkHound MCP index, Playwright MCP session state)
+.chunkhound/
+.playwright-mcp/
+
 # Pyre type checker
 .pyre/
 
