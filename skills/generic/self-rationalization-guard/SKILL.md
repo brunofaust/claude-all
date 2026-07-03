@@ -1,7 +1,7 @@
 ---
 name: self-rationalization-guard
 description: >-
-  Behavioral guard — detects when an agent is writing explanations / restating constraints / pre-emptively surrendering instead of executing the task. Fires when the agent emits >2 sentences before any tool call on an actionable request. Pairs with `adversarial-verification` (output-side discipline). Synthesized from obra/superpowers writing-skills + verification-before- completion + kadaliao/claude-code-skills-collection.
+  Behavioral guard — detects when an agent is writing explanations / restating constraints / pre-emptively surrendering instead of executing the task. Fires when the agent emits >2 sentences before any tool call on an actionable request. Pairs with `adversarial-verification` (output-side discipline). Synthesized from obra/superpowers writing-skills + verification-before-completion + kadaliao/claude-code-skills-collection.
 disable-model-invocation: false
 user-invocable: true
 ---
@@ -10,13 +10,13 @@ user-invocable: true
 
 > **"Stop explaining. Run the command. Quote the output."**
 
-Detects the seven most common AI execution-avoidance patterns and forces a redirect to action.
+Detects the eight most common AI execution-avoidance patterns and forces a redirect to action.
 
 ## When this skill fires
 
 Trigger: the agent has emitted **more than 2 sentences** before ANY tool call on a task that explicitly asked for work to be done. (Skill explanation / clarifying questions are exempt — but a clarifying question must be one sentence + an actual question, not three paragraphs of hedging.)
 
-## The 7 behavioral signals
+## The 8 behavioral signals
 
 Detect any of these in your OWN response. Restart if found.
 
@@ -90,6 +90,18 @@ Trigger phrases:
 
 Fix: **either ask the user, or quote the source.** Unsourced authority is invented authority.
 
+### 8. Delegation rationalization
+
+Trigger phrases:
+
+- "Let the subagent figure out the details."
+- "Based on what we discussed earlier…" (dispatched to a subagent that has zero memory of this conversation)
+- "This needs the user's confirmation" (when you could resolve it yourself with one tool call)
+
+Fix: **a subagent has zero memory of this conversation — inline every fact it needs, don't offload
+synthesis work to it. Route to the user only when the decision is genuinely theirs, not to dodge
+deciding yourself.**
+
 ## Redirection prompts (paste back to yourself)
 
 When a signal fires, paste one of these to re-orient:
@@ -102,7 +114,9 @@ When a signal fires, paste one of these to re-orient:
 
 When a signal fires:
 
-1. Discard the current draft response (don't send it).
+1. Discard the current draft response (don't send it) — don't paraphrase its conclusions into the new
+   response and don't quietly keep its reasoning; if the tool call proves the draft wrong, the new
+   response reflects the tool's output, not a softened version of the discard.
 1. Emit ONE tool call that advances the task.
 1. THEN write the response, with the tool's output quoted as evidence.
 
@@ -122,6 +136,10 @@ Exception: signals 3 (pre-emptive surrender) and 7 (authority deflection) may le
 - ❌ Listing risks / caveats / preconditions instead of trying.
 - ❌ "I'll start by analyzing…" then 200 words later still no tool call.
 - ❌ Treating uncertainty as a stop condition instead of a reason to probe.
+- ❌ Repeating the same failed approach with different wording, hoping a rephrase fixes it — stop,
+  diagnose why it failed, try something structurally different.
+- ❌ Adding an exception clause to any of the 8 signals later ("unless it's minor", "except for tiny
+  tasks") — a scoped exemption is exactly the kind of loophole this skill exists to close.
 
 ## When NOT to apply this skill
 
