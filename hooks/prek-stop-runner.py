@@ -71,6 +71,25 @@ def find_project_root(file_path: str) -> Path | None:
     return None
 
 
+def is_linked_worktree(root: Path) -> bool:
+    """Return True if *root* is a linked git worktree (not the main checkout).
+
+    A linked worktree's ``.git`` is a FILE (a ``gitdir:`` pointer); the main
+    checkout's ``.git`` is a directory. Edits in a linked worktree are
+    work-in-progress on a feature branch whose authoritative prek gate runs at
+    its real commit/push (or /ship-pr), so the end-of-turn lint batch skips it.
+    Generalises the ``/.worktrees/`` path exclusion to worktrees created
+    anywhere on disk (e.g. a sibling ``../repo-feature`` dir).
+
+    Args:
+        root: Project root (directory containing prek.toml).
+
+    Returns:
+        True if *root* is a linked worktree and should be skipped.
+    """
+    return (root / ".git").is_file()
+
+
 # Hooks that gate the COMMIT itself, not the edited files. They false-fail in a
 # Stop lint-batch — e.g. `no-commit-to-branch` fails purely because you're on `main`,
 # though no commit is happening. Skip them here; they still run on a real `git commit`.
@@ -180,7 +199,7 @@ def main() -> int:
     roots: dict[Path, list[str]] = {}
     for f in files:
         root = find_project_root(f)
-        if root:
+        if root and not is_linked_worktree(root):
             roots.setdefault(root, []).append(f)
 
     if not roots:
