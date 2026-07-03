@@ -24,6 +24,7 @@ Forbidden phrases until step 5 is complete:
 - "probably" / "likely"
 - "I think it's working"
 - "the fix is in"
+- "Great!" / "Perfect!" / "Done!" (exclamatory satisfaction before verification)
 
 If you typed one of these, **STOP**, restart the gate.
 
@@ -65,6 +66,23 @@ observed the actual current state — not the code that *should* produce it. Acc
 "The code looks correct so the page works" is an `[INFERENCE]`, not evidence — reading source is not
 observing behavior. A claim about runtime behavior with **zero observation is incomplete by policy**;
 go observe, then claim. (This is the same discipline as the 5-step gate, applied to non-test claims.)
+
+## Completeness corollary — verify against the ORIGINAL ask, not just the last claim
+
+A test passing proves the tested code is correct. It says nothing about whether you did **everything**
+that was asked — the 5-step gate operates on one claim at a time and has no view of the whole task.
+
+Before claiming the TASK (not just one claim) is done:
+
+1. Re-read the original request / plan.
+2. Build a checklist — one line per distinct requirement.
+3. Verify each line individually (a passing test suite does not verify "I did the refactor AND updated
+   the docs AND removed the old code path" — check each separately).
+4. Report gaps explicitly. "Tests passing" is not itself a checklist item — it's one form of evidence
+   for some of the items.
+
+If a subagent did part of the work: diff its actual file changes (`git diff` / `git show`) against the
+claim it returned — a subagent's summary can hallucinate success; the diff is the ground truth.
 
 ## Regression discipline (for bug-fix claims)
 
