@@ -20,13 +20,18 @@ hooks = [
     id = "check-yaml",
     name = "✅ check · Validate yaml files"
   },
+  # Whitespace/EOL fixers skip vendored dirs — vendored files must stay
+  # byte-identical to upstream even when upstream ships trailing whitespace;
+  # a local "fix" would make vendor_sync --check report drift forever.
   {
     id = "end-of-file-fixer",
-    name = "✅ check · Fix end of file"
+    name = "✅ check · Fix end of file",
+    exclude = { glob = ["skills/frontend/react-best-practices/**", "skills/frontend/composition-patterns/**", "skills/frontend/react-view-transitions/**", "skills/generic/humanink/**"] }
   },
   {
     id = "trailing-whitespace",
-    name = "✅ check · Trailing whitespaces"
+    name = "✅ check · Trailing whitespaces",
+    exclude = { glob = ["skills/frontend/react-best-practices/**", "skills/frontend/composition-patterns/**", "skills/frontend/react-view-transitions/**", "skills/generic/humanink/**"] }
   },
   {
     id = "debug-statements",
@@ -34,7 +39,8 @@ hooks = [
   },
   {
     id = "mixed-line-ending",
-    name = "✅ check · Mixed line ending"
+    name = "✅ check · Mixed line ending",
+    exclude = { glob = ["skills/frontend/react-best-practices/**", "skills/frontend/composition-patterns/**", "skills/frontend/react-view-transitions/**", "skills/generic/humanink/**"] }
   },
   {
     id = "check-case-conflict",
@@ -210,6 +216,18 @@ hooks = [
     additional_dependencies = ["vulture==2.14"],
     pass_filenames = false,
     types = ["python"]
+  },
+  # Regression gate: real project names + tool-call XML artifacts must never
+  # appear in shipped agents/skills/instructions (repo CLAUDE.md naming rules).
+  # Vendored dirs are excluded — they stay byte-identical to upstream. Real
+  # names in prek.toml itself are fine (functional config; outside `files`).
+  {
+    id = "banned-project-names",
+    name = "🔍 content · Banned project names / artifacts",
+    entry = 'busydone|BDD#|[Mm]ini[Ss]tack|</content>|</invoke>',
+    language = "pygrep",
+    files = '^(agents|skills|instructions)/',
+    exclude = { glob = ["skills/frontend/react-best-practices/**", "skills/frontend/composition-patterns/**", "skills/frontend/react-view-transitions/**", "skills/generic/humanink/**"] }
   }
 ]
 

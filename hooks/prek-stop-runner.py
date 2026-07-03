@@ -13,13 +13,16 @@ frontend issues BEFORE you push, instead of letting them slip through until
 `git push` actually fires.
 
 Only runs if:
+  - The Stop payload does NOT have `stop_hook_active: true` (that flag means we
+    are already inside a stop-hook fix loop — bail immediately to avoid cycling)
   - The accumulator file exists and has entries
   - A prek.toml exists at the project root (skip non-prek projects)
 
 On prek failure: prints the last 30 lines of output to stderr (shown to Claude),
-exits 2 to surface the error. Claude must fix before moving on.
-
-The Stop hook must pass stdin through to stdout unchanged.
+exits 2 to surface the error. Claude must fix before moving on. If prek itself
+cannot run (missing `uv`, timeout), the hook prints ONE short notice and exits 1
+(non-blocking, visible to the user) — the gate being broken must be loud, but a
+Stop hook must never crash the turn with a traceback.
 """
 
 from __future__ import annotations
@@ -29,6 +32,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 __all__ = ["main"]
@@ -40,6 +44,12 @@ __all__ = ["main"]
 # per-commit speed cost. Modern prek accepts both `pre-push` and the legacy
 # `push` alias; we use the modern name.
 STAGES: tuple[str, ...] = ("pre-commit", "pre-push")
+
+# Stop hooks get a 60s budget (hooks.json). This is the TOTAL budget shared by
+# all stage runs across all project roots — a single deadline, not a per-call
+# timeout, so N sequential runs can't overflow the harness budget and get the
+# whole hook killed mid-run. Headroom below 60s so we kill prek, not vice versa.
+TOTAL_BUDGET_SECONDS = 50
 
 
 def find_project_root(file_path: str) -> Path | None:
@@ -67,7 +77,9 @@ def find_project_root(file_path: str) -> Path | None:
 COMMIT_CEREMONY_HOOKS: tuple[str, ...] = ("no-commit-to-branch",)
 
 
-def run_prek_stage(root: Path, files: list[str], stage: str) -> subprocess.CompletedProcess[str]:
+def run_prek_stage(
+    root: Path, files: list[str], stage: str, timeout: float
+) -> subprocess.CompletedProcess[str] | str:
     """Run prek for a single hook stage and return the CompletedProcess.
 
     Commit-ceremony hooks (see ``COMMIT_CEREMONY_HOOKS``) are skipped via the ``SKIP``
@@ -77,21 +89,31 @@ def run_prek_stage(root: Path, files: list[str], stage: str) -> subprocess.Compl
         root: Project root where prek.toml exists.
         files: List of file paths to check.
         stage: Hook stage name (e.g., 'pre-commit', 'pre-push').
+        timeout: Seconds left in the hook's total budget for this run.
 
     Returns:
-        CompletedProcess with prek output captured.
+        CompletedProcess with prek output captured, or a short error string if
+        prek could not run at all (missing `uv`, timeout) — a Stop hook must
+        never crash the turn with a traceback, but the broken gate must be
+        surfaced, so the caller reports the string to the user.
     """
     env = dict(os.environ)
     skip = [s for s in env.get("SKIP", "").split(",") if s.strip()]
     skip.extend(h for h in COMMIT_CEREMONY_HOOKS if h not in skip)
     env["SKIP"] = ",".join(skip)
-    return subprocess.run(
-        ["uv", "run", "prek", "run", "--hook-stage", stage, "--files", *files],
-        cwd=root,
-        capture_output=True,
-        text=True,
-        env=env,
-    )
+    try:
+        return subprocess.run(
+            ["uv", "run", "prek", "run", "--hook-stage", stage, "--files", *files],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            env=env,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        return f"prek (stage={stage}) timed out after {int(timeout)}s in {root}"
+    except OSError as exc:
+        return f"could not launch `uv run prek` ({exc})"
 
 
 def is_real_failure(combined: str) -> bool:
@@ -117,11 +139,15 @@ def is_real_failure(combined: str) -> bool:
 def main() -> int:
     """Main entry point."""
     raw = sys.stdin.read()
-    sys.stdout.write(raw)  # always pass through to stdout
 
     try:
         data = json.loads(raw)
     except (json.JSONDecodeError, ValueError):
+        return 0
+
+    # Already inside a stop-hook continuation — running again would loop:
+    # fail → Claude fixes → Stop fires → fail → …  Break the cycle here.
+    if data.get("stop_hook_active"):
         return 0
 
     session_id: str = data.get("session_id") or os.environ.get("CLAUDE_SESSION_ID", "no-session")
@@ -161,9 +187,26 @@ def main() -> int:
         return 0  # no prek.toml found for any edited file
 
     exit_code = 0
+    deadline = time.monotonic() + TOTAL_BUDGET_SECONDS
     for root, root_files in roots.items():
         for stage in STAGES:
-            result = run_prek_stage(root, root_files, stage)
+            remaining = deadline - time.monotonic()
+            if remaining < 5:
+                # Out of budget — say so rather than getting killed mid-run by
+                # the harness (which would silently drop remaining stages).
+                print(
+                    "[prek-stop-runner] gate incomplete: time budget exhausted; "
+                    f"skipped remaining stages ({stage} in {root} onward).",
+                    file=sys.stderr,
+                )
+                return max(exit_code, 1)
+
+            result = run_prek_stage(root, root_files, stage, timeout=remaining)
+            if isinstance(result, str):
+                # Infra failure (missing uv / timeout): the lint gate did NOT
+                # run. Exit 1 — visible to the user, non-blocking, no traceback.
+                print(f"[prek-stop-runner] gate did not run: {result}", file=sys.stderr)
+                return max(exit_code, 1)
             if result.returncode == 0:
                 continue
 

@@ -57,10 +57,15 @@ git rev-parse HEAD                        # record pre-merge HEAD so the merge c
 1. **Check the changes.** Preview what main brings in *before* touching the working tree, using
    `git merge-tree` (computes the would-be merge in the object store — no checkout, no index change):
    ```bash
-   MERGED_TREE=$(git merge-tree --write-tree --name-only HEAD origin/main)
-   echo "$MERGED_TREE"        # first line = tree OID; any following lines = textual-conflict paths
+   # `git merge-tree` exits non-zero when the merge WOULD conflict — tolerate that,
+   # its output is still valid (first line = tree OID, rest = textual-conflict paths).
+   MERGE_OUT=$(git merge-tree --write-tree --name-only HEAD origin/main) || true
+   TREE_OID=$(printf '%s\n' "$MERGE_OUT" | head -1)            # the would-be merged tree
+   CONFLICT_PATHS=$(printf '%s\n' "$MERGE_OUT" | tail -n +2)   # empty = clean textual merge
+   echo "$CONFLICT_PATHS"
    ```
-   Note the incoming commits and any textual-conflict paths — they feed steps 4–5.
+   Note the incoming commits and any textual-conflict paths — they feed steps 4–5. Use only
+   `$TREE_OID` (never the multi-line raw output) wherever a tree-ish is needed.
 
 2. **Check them semantically — delegate to a subagent.** This is the value-add: catch what a textual
    merge misses, *before* merging, so resolution is informed. Hand a focused subagent (a
@@ -72,13 +77,13 @@ git rev-parse HEAD                        # record pre-merge HEAD so the merge c
    git diff "$MB" origin/main                      # what main brings in
    git diff "$MB" HEAD                              # what this branch changed
    # dangling-reference check against the would-be merged tree, no checkout needed:
-   #   git grep -n "<old_symbol>" "$MERGED_TREE"
+   #   git grep -n "<old_symbol>" "$TREE_OID"
    ```
    The subagent classifies every conflict git would **not** flag, each with `file:line`, which side
    changed what, a severity, and a **proposed resolution**:
    - **Delete/modify** — a path in (deleted by us) ∩ (modified by them), or the reverse.
    - **Dangling reference** — main removed/renamed a symbol / export / type / config key / env var /
-     route the merged tree would still reference (`git grep` it in `$MERGED_TREE`), or the reverse.
+     route the merged tree would still reference (`git grep` it in `$TREE_OID`), or the reverse.
    - **Contradicting logic** — both sides changed related behavior in different files (changed
      signature vs. unchanged call site; changed schema/interface vs. code built on the old shape).
    - **Duplicate implementation** — both sides added the same capability in different places.

@@ -5,15 +5,17 @@ Fires on Edit|Write|MultiEdit. Pauses on prek.toml / .pre-commit-config.yaml /
 .ruff.toml / ruff.toml — these are lint configs and should only be changed when
 the user explicitly asks, not as a side-effect of a coding task.
 
-On match: exits 0 and emits `hookSpecificOutput.additionalContext` (a system
-reminder injected into Claude's context) telling Claude to STOP and ask the user
-for explicit confirmation before retrying. Claude must surface the request to the
-user; it must not proceed on its own judgment.
+On a confirm-required match (lint configs, Claude Code hooks/settings): exits 0
+and emits `hookSpecificOutput.permissionDecision: "ask"` — the harness PAUSES the
+tool call and asks the user for approval, with the explanation shown as the
+`permissionDecisionReason`. The edit only proceeds if the user explicitly
+approves it.
 
-Using exit 0 + JSON (rather than exit 1 + stderr) keeps the reminder from being
-rendered as a "hook error / non-blocking status code" in the transcript — it is
-guidance, not a failure. The check stays non-blocking: the edit is not halted,
-Claude is simply instructed to confirm first.
+On a warn-only match (mixed-purpose files like pyproject.toml): exits 0 and emits
+`hookSpecificOutput.additionalContext` (a system reminder injected into Claude's
+context). Using exit 0 + JSON (rather than exit 1 + stderr) keeps the reminder
+from being rendered as a "hook error" — it is guidance, not a failure, and the
+edit still proceeds.
 
 The goal: lint configs change only when the user consciously decides to change
 them, not when Claude is trying to silence a failing check.
@@ -44,6 +46,32 @@ def remind(message: str) -> int:
             "hookSpecificOutput": {
                 "hookEventName": "PreToolUse",
                 "additionalContext": message,
+            }
+        },
+        sys.stdout,
+    )
+    return 0
+
+
+def ask(reason: str) -> int:
+    """Pause the tool call and ask the user for explicit approval.
+
+    Prints PreToolUse JSON with `permissionDecision: "ask"` to stdout (exit 0) so
+    the harness halts the edit and shows `reason` to the user as the approval
+    prompt. Unlike `remind`, the edit does NOT proceed unless the user approves.
+
+    Args:
+        reason: Explanation shown to the user in the approval prompt.
+
+    Returns:
+        0 — always (the decision itself is carried in the JSON payload).
+    """
+    json.dump(
+        {
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "ask",
+                "permissionDecisionReason": reason,
             }
         },
         sys.stdout,
@@ -96,18 +124,17 @@ def main() -> int:
     if ("/.claude/hooks/" in file_path) or (
         in_claude and filename in {"settings.json", "settings.local.json"}
     ):
-        return remind(
-            f"[config-protection] STOP — `{filename}` is a Claude Code hook/settings file "
-            "(the safety/quality gate). Do NOT edit, disable, or rewire it without explicit user "
-            "confirmation. Surface the request to the user and wait for their yes before retrying."
+        return ask(
+            f"[config-protection] `{filename}` is a Claude Code hook/settings file "
+            "(the safety/quality gate). Editing, disabling, or rewiring it requires explicit "
+            "user approval."
         )
 
     if filename in CONFIRM_REQUIRED:
-        return remind(
-            f"[config-protection] STOP — do not edit `{filename}` without user confirmation. "
-            f"Ask: 'Do you want me to modify {filename}? "
-            "This is a linter/hook config.' "
-            "Wait for their explicit yes before retrying."
+        return ask(
+            f"[config-protection] `{filename}` is a linter/hook config. It should only change "
+            "when the user consciously decides to change it (not to silence a failing check). "
+            "Approve to allow this edit."
         )
 
     if filename in WARNED:

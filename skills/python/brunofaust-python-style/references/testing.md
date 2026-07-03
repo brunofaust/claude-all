@@ -37,10 +37,10 @@ has a specific replacement — use it.
 | `unittest.mock.patch` / `mocker.patch` on a module attribute | Dependency injection — pass the dependency into the constructor                          | `mock.patch` is race-prone under `pytest-xdist`; DI is thread-safe and obvious |
 | `mod._client = mock` (module-global assignment in test)      | Inject the client via fixture / factory                                                  | Race-prone under parallel test runs; banned by AST hook                        |
 | `Mock()` / `MagicMock()` for typed objects                   | `polyfactory` / `factory_boy` factory for the concrete type                              | Real types catch contract drift; mocks happily accept anything                 |
-| `scope="session"` for app / AWS clients                      | `scope="function"` (or `scope="module"` only when safe)                                  | Session-scoped state leaks between tests; MiniStack needs per-test isolation  |
+| `scope="session"` for app / AWS clients                      | `scope="function"` (or `scope="module"` only when safe)                                  | Session-scoped state leaks between tests; LocalStack needs per-test isolation  |
 | `monkeypatch.setattr(...)` without `MonkeyPatch.context()`   | `with MonkeyPatch.context() as mp: mp.setattr(...)`                                      | Explicit teardown; safe under parallel collection                              |
 | `@pytest.fixture` with side-effects but no `yield` cleanup   | Always `yield` + cleanup, even for "harmless" fixtures                                   | Resource leaks compound under `-n auto`                                        |
-| Mocking AWS with `moto` / `boto-mock` for integration tests  | MiniStack (Docker, managed by the project's pytest plugin)                               | Higher fidelity; catches real boto serialization bugs                          |
+| Mocking AWS with `moto` / `boto-mock` for integration tests  | LocalStack (Docker, managed by the project's pytest plugin)                               | Higher fidelity; catches real boto serialization bugs                          |
 | `unittest.mock.patch` / `MagicMock` module-patching in `tests/` | `pytest-mock` (`mocker` fixture) only when DI is genuinely impossible; `from unittest.mock import AsyncMock` for protocol stubs is the one allowed import | Plugin gives auto-cleanup; stdlib `patch` is easy to forget to stop            |
 | `assert x` with no message on complex objects                | `assert x, f"context: {x!r}"` or `pytest.fail(...)`                                      | Failure logs are unreadable otherwise                                          |
 | `time.sleep(N)` to wait for an async event                   | `await asyncio.wait_for(...)` / `pytest-asyncio` + polling helper                        | sleeps make tests flaky and slow                                               |
@@ -146,7 +146,7 @@ await db.insert_order(tenant_id=tenant_b.id, customer_id=cust_b)  # same tenant
 > Want the **database** to *prove* a test never crossed tenants (rather than
 > asserting it row-by-row)? See [`tenant-isolation.md`](tenant-isolation.md) —
 > optional Postgres RLS enforcement + a non-blocking audit table you query at
-> `pytest_sessionfinish`, with a no-code-change path for real lambdas in MiniStack.
+> `pytest_sessionfinish`, with a no-code-change path for real lambdas in LocalStack.
 
 **The seed simulates real data.** Production never shares a customer row across two
 tenants, so the seed must not either. If a test needs a customer in tenant B,
@@ -170,10 +170,10 @@ xdist isn't only a speed-up — it's the mechanism that *proves* rules 1–3 hol
 
 Practical consequences for writing tests under xdist:
 
-- **Resource names unique per worker / per test.** MiniStack buckets, queues,
+- **Resource names unique per worker / per test.** LocalStack buckets, queues,
   tables, S3 prefixes — suffix with the test's dynamic id or
   `os.environ["PYTEST_XDIST_WORKER"]` so two workers don't share infra (see
-  [§ MiniStack resource setup](#ministack-resource-setup)).
+  [§ LocalStack resource setup](#localstack-resource-setup)).
 - **No reliance on global counts or ordering** — your assertions read only your
   own ids.
 - **`-n0` is for debugging a single test, never the committed default.** If a test
@@ -225,7 +225,7 @@ Practical consequences for writing tests under xdist:
 - [ ] Every FK resolves inside one tenant; no cross-tenant row sharing in seeds.
 - [ ] Seed mirrors real cardinality — new row per tenant, never a borrowed one.
 - [ ] Assertions scope to the test's own ids (no global `COUNT(*)`).
-- [ ] MiniStack / external resource names are unique per test or per xdist worker.
+- [ ] LocalStack / external resource names are unique per test or per xdist worker.
 - [ ] Suite passes under `-n auto` **and** `pytest-randomly` (not just `-n0`).
 - [ ] No `@pytest.mark.xdist_group` unless user-approved with a documented reason comment.
 
@@ -243,10 +243,10 @@ Practical consequences for writing tests under xdist:
 
 - **Framework**: pytest with pytest-asyncio (auto mode)
 - **Parallelism**: pytest-xdist with workers (`-n auto --dist worksteal`)
-- **AWS Mocking**: MiniStack (Docker container, managed by custom pytest plugin) — a LocalStack drop-in on the same `:4566` endpoint (see [§ MiniStack](#ministack--the-aws-emulator-localstack-drop-in))
+- **AWS Mocking**: LocalStack (Docker container, managed by custom pytest plugin) on the `:4566` endpoint (see [§ LocalStack](#localstack--the-aws-emulator))
 - **Event Loop**: uvloop (session-scoped fixture)
 - **Leak Detection**: pyleak for task and thread leak detection
-- **Timeouts**: 5s per test, 30s per slow test, 60s per data/ministack test, 300s per session
+- **Timeouts**: 5s per test, 30s per slow test, 60s per data/localstack test, 300s per session
 
 #### pytest Plugins and Dependencies
 
@@ -262,7 +262,7 @@ Practical consequences for writing tests under xdist:
 - freezegun: freezes the datetime
 - coverage: coverage
 - filelock: lock based on file (to lock between xdist processes)
-- (no LocalStack-specific client — point boto3 at MiniStack via `endpoint_url` / `AWS_ENDPOINT_URL=http://localhost:4566`)
+- (no LocalStack-specific client — point boto3 at LocalStack via `endpoint_url` / `AWS_ENDPOINT_URL=http://localhost:4566`)
 - hypothesis: random value generator for tests
 
 #### pytest.ini Configuration
@@ -285,7 +285,7 @@ markers =
     unit: marks unit tests
     e2e: marks end-to-end tests
     slow: marks tests as slow
-    ministack: tests that expect a MiniStack environment (S3, DynamoDB, SQS, SNS, etc.)
+    localstack: tests that expect a LocalStack environment (S3, DynamoDB, SQS, SNS, etc.)
 ```
 
 #### Coverage threshold (pyproject.toml)
@@ -317,18 +317,18 @@ Run with: `uv run pytest --cov` — exits non-zero if coverage < 80%.
 #### Selective marker runs
 
 ```bash
-# Local fast loop — skip slow + ministack tests
-uv run pytest -m "not slow and not ministack"
+# Local fast loop — skip slow + localstack tests
+uv run pytest -m "not slow and not localstack"
 
 # Run only unit tests (fast CI lane)
 uv run pytest -m unit
 
 # Run integration + data layer (slow CI lane)
-uv run pytest -m "integration or data or ministack"
+uv run pytest -m "integration or data or localstack"
 
 # CI matrix example: split fast/slow into separate jobs
-# job-fast:  pytest -m "not slow and not ministack" --cov-fail-under=80
-# job-slow:  pytest -m "slow or ministack"
+# job-fast:  pytest -m "not slow and not localstack" --cov-fail-under=80
+# job-slow:  pytest -m "slow or localstack"
 ```
 
 ### Test Organization
@@ -378,8 +378,8 @@ def test_api_returns_404_for_missing_resource():
 ### Pytest Markers
 
 ```python
-@pytest.mark.ministack  # Tests requiring MiniStack (S3, DynamoDB, SQS, SNS, etc.)
-@pytest.mark.data  # Full data pipeline tests (probably uses MiniStack)
+@pytest.mark.localstack  # Tests requiring LocalStack (S3, DynamoDB, SQS, SNS, etc.)
+@pytest.mark.data  # Full data pipeline tests (probably uses LocalStack)
 @pytest.mark.slow  # Slow-running tests
 @pytest.mark.timeout(5)  # Override per-test timeout
 @pytest.mark.no_leaks_local(threads=False)  # Leak detection (exclude thread checks)
@@ -557,7 +557,7 @@ def _patch_configuration() -> Iterator[None]:
 
 ### Data Tests
 
-Data tests verify the full pipeline end-to-end (probably using MiniStack).
+Data tests verify the full pipeline end-to-end (probably using LocalStack).
 
 ```python
 @pytest.mark.data
@@ -629,32 +629,32 @@ async def test_get_files_pagination_and_filters() -> None:
         assert "prefix/file1.csv" not in keys
 ```
 
-### MiniStack — the AWS emulator (LocalStack drop-in)
+### LocalStack — the AWS emulator
 
-Integration / data tests run against **MiniStack** (`ministack.org`), a free,
-open-source LocalStack replacement that serves every AWS service on the **same
-`:4566` endpoint**. It is a true drop-in: point boto3 at it with
-`endpoint_url="http://localhost:4566"` (or `AWS_ENDPOINT_URL`) — no code change
-from a LocalStack setup. Use the default image for the common services; use the
-**`:full`** image when you need S3 Tables / Athena (DuckDB catalog).
+Integration / data tests run against **LocalStack**, the open-source AWS
+emulator that serves every AWS service on the **same `:4566` endpoint**. Point
+boto3 at it with `endpoint_url="http://localhost:4566"` (or
+`AWS_ENDPOINT_URL`) — no other code change. Use the default image for the
+common services; use the full-featured image when you need S3 Tables / Athena
+(DuckDB catalog).
 
 #### Lambda execution — pick an executor, mind real-runtime parity
 
-MiniStack can run a Lambda three ways (`LAMBDA_EXECUTOR`). The choice trades
+LocalStack can run a Lambda three ways (`LAMBDA_EXECUTOR`). The choice trades
 **container parity**, **speed**, and **log visibility** — decide per project:
 
 | `LAMBDA_EXECUTOR`        | How it runs the handler                                     | Trade-off                                                                                                                                                                                                                                                  |
 | ------------------------ | ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `local`                  | in MiniStack's own process (no sibling container)           | Simplest — every Lambda's stdout/stderr lands in the MiniStack server log, nothing leaks. **Loses real-runtime parity:** your code runs under MiniStack's bundled interpreter, so an interpreter- or C-ext-only construct (`orjson.orjson`, parenthesized `except (A, B)`) can break. Don't set `LAMBDA_STRICT` here. |
-| `docker-reuse`           | a warm container **pool**, reused for `LAMBDA_WARM_TTL_SECONDS` | Curbs the per-invoke container leak and keeps `docker logs <fn>-<uuid>` readable for the TTL window — **but a stale warm container can serve the wrong runtime**: a pool first spun under MiniStack's bundled interpreter keeps running your code under it (silent version corruption).                              |
+| `local`                  | in LocalStack's own process (no sibling container)           | Simplest — every Lambda's stdout/stderr lands in the LocalStack server log, nothing leaks. **Loses real-runtime parity:** your code runs under LocalStack's bundled interpreter, so an interpreter- or C-ext-only construct (`orjson.orjson`, parenthesized `except (A, B)`) can break. Don't set `LAMBDA_STRICT` here. |
+| `docker-reuse`           | a warm container **pool**, reused for `LAMBDA_WARM_TTL_SECONDS` | Curbs the per-invoke container leak and keeps `docker logs <fn>-<uuid>` readable for the TTL window — **but a stale warm container can serve the wrong runtime**: a pool first spun under LocalStack's bundled interpreter keeps running your code under it (silent version corruption).                              |
 | `docker` (strict parity) | a **fresh** `--rm` runtime container per invoke             | True parity — each invoke is your real image/interpreter. Costs a per-invoke cold start (**~3 s/lambda in our tests — not negligible**; weigh it against e2e fan-out). Containers are ephemeral: catch logs mid-invoke, or via the server log. Pair with `LAMBDA_STRICT=1`.                                          |
 
 **Why we run `docker` + `LAMBDA_STRICT=1`:** `docker-reuse` was the first pick (to
 curb the container leak), but its stale warm pool ran our newer-Python code under
-MiniStack's older bundled interpreter and choked (`No module named
+LocalStack's older bundled interpreter and choked (`No module named
 'orjson.orjson'`; *"multiple exception types must be parenthesized"*). Switching to
 `LAMBDA_EXECUTOR=docker` gives a fresh real-runtime container per invoke;
-`LAMBDA_STRICT=1` forbids MiniStack's silent in-process fallback — a missing
+`LAMBDA_STRICT=1` forbids LocalStack's silent in-process fallback — a missing
 container runtime then surfaces loudly as `Runtime.DockerUnavailable` instead of
 quietly running your code under the wrong interpreter. The leak `docker-reuse` was
 meant to solve is handled instead by reaping orphaned runtime containers (by
@@ -667,10 +667,10 @@ ancestor image) + `LAMBDA_DOCKER_FLAGS=-m 512m` + `LAMBDA_ACCOUNT_CONCURRENCY`.
 | `LAMBDA_DOCKER_FLAGS`            | `-m 512m` | Per-spawned-container memory cap (`-m` is whitelisted)                                            |
 | `LAMBDA_ACCOUNT_CONCURRENCY`     | `~cpu/2`  | Bound concurrent runtimes to host headroom so a fan-out burst can't spawn unbounded containers — size it `cpu/2` (simplest) or ~`RAM_GB/3` given the `-m 512m` per-container cap |
 | `LAMBDA_WARM_TTL_SECONDS`        | `90`      | *(`docker-reuse` only)* reap idle warm containers fast (the default ~900s pins RAM)               |
-| `MINISTACK_WORKER_THREADS`       | `16`      | Trim the oversized default 64-thread sync-offload pool                                            |
+| `LOCALSTACK_WORKER_THREADS`       | `16`      | Trim the oversized default 64-thread sync-offload pool                                            |
 | `PERSIST_STATE`                  | `0`       | No persistence — the provisioner re-creates all resources on each start                          |
 
-**Pin the Lambda runtime to your codebase's Python.** MiniStack runs a function
+**Pin the Lambda runtime to your codebase's Python.** LocalStack runs a function
 under a default/bundled interpreter unless told otherwise — so a 3.14 codebase
 must declare it explicitly, or you hit the same wrong-Python failures as the
 `docker-reuse` warm pool. Pin it **per function** in the `CreateFunction` call:
@@ -678,28 +678,28 @@ must declare it explicitly, or you hit the same wrong-Python failures as the
 ```python
 client.create_function(
     FunctionName="myapp-local-worker",
-    Runtime="python3.14",  # match the codebase — don't inherit MiniStack's default
+    Runtime="python3.14",  # match the codebase — don't inherit LocalStack's default
     Handler="handler.main",
     ...,
 )
 ```
 
-(Some MiniStack versions may also expose a server-level default-runtime env var —
+(Some LocalStack versions may also expose a server-level default-runtime env var —
 check your version; the per-function `Runtime` is the reliable, version-independent
 way to pin it.)
 
-A service-level compose `mem_limit` bounds **only** the MiniStack server process.
+A service-level compose `mem_limit` bounds **only** the LocalStack server process.
 The spawned Lambda/ECS runtimes are **sibling** host-Docker containers (their own
 cgroups) — cap *their* memory with `LAMBDA_DOCKER_FLAGS`, not `mem_limit`.
 
-#### Reading MiniStack logs after an e2e run
+#### Reading LocalStack logs after an e2e run
 
 A failed run surfaces in pytest only as a thin assertion — a `batchItemFailures`
 count, a DLQ message, a `0 processed`. The **root cause** (the exception, an
 `AccessDeniedException`, a `Could not parse SQLAlchemy URL`, …) is in CloudWatch,
-inside MiniStack. Keep the stack up after the run with `DISABLE_DOCKER_DOWN=1`
+inside LocalStack. Keep the stack up after the run with `DISABLE_DOCKER_DOWN=1`
 *(our working flag — it keeps containers/logs alive through teardown; not in the
-published config reference, so verify it against your MiniStack version)* so the
+published config reference, so verify it against your LocalStack version)* so the
 logs survive, then scan them through the `:4566` endpoint:
 
 ```bash
@@ -721,17 +721,17 @@ done
 
 Step Functions logs land under `/aws/vendedlogs/states/<state-machine>`. Raise the
 emulator's **own** verbosity with `LOG_LEVEL=DEBUG` (values `DEBUG|INFO|WARNING|ERROR`,
-default `INFO`) when MiniStack itself — not your handler — is misbehaving.
+default `INFO`) when LocalStack itself — not your handler — is misbehaving.
 
 **Reading these logs via an agent:** the real-AWS `cloudwatch-inspector` agent
-targets an `AWS_PROFILE`; for MiniStack pass the **local endpoint explicitly**
+targets an `AWS_PROFILE`; for LocalStack pass the **local endpoint explicitly**
 (`--endpoint-url=http://localhost:4566` + `test`/`test` creds) instead of a profile.
 
 #### Known gaps — re-check against the *current* version before relying on one
 
-MiniStack ships point releases every 1–3 days, so a gap today may be closed
+LocalStack ships point releases every 1–3 days, so a gap today may be closed
 tomorrow. **Before you architect a workaround around a missing feature, verify
-it's still missing in the version you run** (`ministack.org/docs` + the GitHub
+it's still missing in the version you run** (`localstack.org/docs` + the GitHub
 changelog).
 
 | Gap (as last verified)                                                                                                       | Impact / workaround                                                                                                                                                                       |
@@ -747,18 +747,18 @@ is absent: `AWS_ENDPOINT_URL_*` empty → real service; `ALLOW_INSECURE_*` unset
 strict. The mock-Bedrock base URL, the `:4566` endpoint override, and any
 insecure-URL allowance must all read empty/false in prod.
 
-### MiniStack resource setup
+### LocalStack resource setup
 
 1. Resource names must be unique across tests to avoid collisions with pytest-xdist workers.
 1. Create test-specific resources inside the test.
 1. Create SHARED resources in parallel during test session setup using `asyncio.TaskGroup`:
 
 ```python
-async def setup_ministack_resources() -> None:
+async def setup_localstack_resources() -> None:
     """Create all AWS resources needed for tests.
 
     Uses TaskGroup with a semaphore to create resources in parallel
-    while respecting MiniStack's concurrency limits.
+    while respecting LocalStack's concurrency limits.
     """
     semaphore = asyncio.Semaphore(20)
 
@@ -778,7 +778,7 @@ async def setup_ministack_resources() -> None:
             ],
         },
     ]
-    buckets = [{"bucket_name": f"bp-pytest-source-{i}"} for i in range(1, 5)]
+    buckets = [{"bucket_name": f"myapp-pytest-source-{i}"} for i in range(1, 5)]
 
     async with asyncio.TaskGroup() as tg:
         for topic in topics:
@@ -1234,8 +1234,8 @@ def test_create_user_rejects_invalid_email():
 # All tests (10 parallel workers)
 uv run pytest -n10
 
-# Without data/slow/ministack tests (quick check)
-uv run pytest tests -m "not slow and not data and not ministack"
+# Without data/slow/localstack tests (quick check)
+uv run pytest tests -m "not slow and not data and not localstack"
 
 # Single test (disable xdist for cleaner output)
 uv run pytest tests -n0
@@ -1314,7 +1314,7 @@ tests/unit/features/pii_detection/test_service.py
 ### Test categories
 
 - `tests/unit/` — pure logic, no I/O, fast
-- `tests/integration/` — MiniStack, real DB, real connectors with VCR cassettes
+- `tests/integration/` — LocalStack, real DB, real connectors with VCR cassettes
 - `tests/e2e/` — full workflow execution
 
 ### Rules

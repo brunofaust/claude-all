@@ -10,7 +10,7 @@ description: >-
   caller partitions a large range and dispatches several of these in parallel, then merges the
   reports. The whole-method skill is `diff-retrospective`; for chat-history mining use
   `friction-analyzer` / `session-harvest`.
-model: claude-sonnet-4-6
+model: claude-sonnet-5
 tools:
   - Bash
   - Read

@@ -210,5 +210,3 @@ per-tenant-FK rules this depends on.
 - [ ] Global claim is itself guarded against a second concurrent global run.
 - [ ] No foreign key resolves across tenants; a scoped run never reaches another tenant's rows.
 - [ ] e2e tests drive the handler scoped to their own seeded tenant.
-</content>
-</invoke>

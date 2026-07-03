@@ -10,7 +10,11 @@ Without tmux, a dev server run by Claude will:
   - Be unkillable without user intervention
 
 TMUX detection: TMUX env var is set inside any tmux session.
-Bypass: set CC_ALLOW_DEV_SERVER=1 to skip this check.
+Backgrounded commands (`run_in_background: true`) are exempt — they don't block
+the session, which is this hook's whole rationale.
+Bypass: prefix the command with `CC_ALLOW_DEV_SERVER=1 ` (inline marker in the
+command string — the primary escape hatch). Setting CC_ALLOW_DEV_SERVER in the
+hook's own environment also works.
 """
 
 from __future__ import annotations
@@ -44,8 +48,6 @@ def strip_heredoc(command: str) -> str:
     Args:
         command: The shell command string to strip heredoc content from.
     """
-    import re
-
     return re.sub(r"<<['\"]?\w+['\"]?.*", "", command, flags=re.DOTALL)
 
 
@@ -65,10 +67,26 @@ def main() -> int:
         return 0
 
     if os.environ.get("CC_ALLOW_DEV_SERVER"):
-        return 0  # explicit bypass
+        return 0  # explicit bypass via the hook's own environment
 
-    command: str = data.get("tool_input", {}).get("command", "")
-    if not command or not is_dev_server_command(command):
+    tool_input = data.get("tool_input", {})
+
+    command: str = tool_input.get("command", "")
+    if not command:
+        return 0
+
+    # Inline marker bypass: `CC_ALLOW_DEV_SERVER=1 npm run dev` sets the var in the
+    # COMMAND's env, not the hook's — accept it as an explicit, auditable override.
+    # Anchored to a LEADING env assignment: a mere mention of the marker (grep
+    # pattern, commit message) must not bypass.
+    if re.match(r"\s*(?:\w+=\S*\s+)*CC_ALLOW_DEV_SERVER=1\b", command):
+        return 0
+
+    # A backgrounded dev server doesn't block the session — the hook's whole rationale.
+    if tool_input.get("run_in_background"):
+        return 0
+
+    if not is_dev_server_command(command):
         return 0
 
     in_tmux = bool(os.environ.get("TMUX"))
@@ -80,7 +98,8 @@ def main() -> int:
         "Starting a dev server in the main session will block Claude and hide logs. "
         "Instead: open a terminal pane, run `tmux` (or attach to an existing session), "
         "then start the server there. "
-        "To bypass this check: set CC_ALLOW_DEV_SERVER=1.",
+        "To bypass this check, prefix the command with `CC_ALLOW_DEV_SERVER=1 ` "
+        "(or run it with run_in_background: true).",
         file=sys.stderr,
     )
     return 2  # hard block

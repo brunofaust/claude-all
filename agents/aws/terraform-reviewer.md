@@ -5,7 +5,7 @@ description: >-
   safe", "audit terraform plan", "check IAM in terraform", "any cost concerns in this plan". Reads
   `.tf` files and `terraform plan` output. Returns severity-rated assessment (security, cost, IAM
   scope, missing tags, deprecated resources). Never executes Terraform.
-model: claude-sonnet-4-6
+model: claude-sonnet-5
 tools:
   - Bash
   - Read
@@ -75,7 +75,7 @@ provide a saved plan (`terraform plan -out=tfplan.out`, e.g. via the
 
 ## Failure-mode-first review skeleton
 
-Reviews MUST lead with the 5 failure modes below (the WHAT), then summarize by severity (the SEVERITY). Failure-mode and severity are orthogonal axes — every finding gets bucketed into one failure mode AND tagged with a severity (BLOCK / HIGH / MEDIUM / INFO).
+Reviews MUST lead with the 5 failure modes below (the WHAT), then summarize by severity (the SEVERITY). Failure-mode and severity are orthogonal axes — every finding gets bucketed into one failure mode AND tagged with a severity (CRITICAL / HIGH / MEDIUM / LOW / INFO).
 
 The 5 failure modes:
 
@@ -85,10 +85,10 @@ The 5 failure modes:
 1. **Drift signals** — IaC vs actual AWS state, untagged manual changes, terraform state vs reality, unexpected recreates.
 1. **Compliance** — SOC2 / ISO27001 / HIPAA mappings (encryption at rest, logging, audit trails, KMS rotation, CloudTrail coverage).
 
-### Failure-mode-first output template
+### Output template (canonical)
 
 ```
-**Terraform review — <module/PR>**
+**Terraform review — <module/PR>** (N files reviewed; plan +A ~M -D if provided)
 
 ## 🆔 Identity churn
 - Role X gains `s3:*` on `arn:aws:s3:::myapp-prod-*` (was previously `s3:GetObject` only). Severity: HIGH.
@@ -97,51 +97,26 @@ The 5 failure modes:
 - (none found)
 
 ## 💥 Blast radius
-- aws_lambda_permission allows `*` SourceArn — any AWS service can invoke. Severity: BLOCK.
+- aws_lambda_permission allows `*` SourceArn — any AWS service can invoke. Severity: CRITICAL.
 
 ## 📉 Drift signals
-- 3 resources changed outside terraform (last apply 5d ago). Run `terraform plan` to see.
+- 3 resources changed outside terraform (last apply 5d ago). Run `terraform plan` to see. Severity: MEDIUM.
 
 ## 📋 Compliance
 - KMS key has no rotation policy (ISO 27001 A.10.1.2). Severity: MEDIUM.
 
-## Severity summary (back-compat)
-- BLOCK: 1, HIGH: 1, MEDIUM: 1, INFO: 0
+## Cost impact
+- Estimated monthly delta: $<amount> (rough order-of-magnitude; "depends on usage" when unknowable)
+- Largest contributors: <resource> — $<amount>/mo
+
+## Severity summary + verdict
+- CRITICAL: 1, HIGH: 1, MEDIUM: 2, LOW: 0, INFO: 0
+- **Verdict: BLOCK** — <1-2 sentence assessment: safe to apply, needs changes, or block>
 ```
 
-Each bullet: `<finding>. Severity: <BLOCK|HIGH|MEDIUM|INFO>.` Cite `file:line`. If a bucket is empty, say `(none found)` — do not omit the heading.
+Each bullet: `<finding>. Severity: <CRITICAL|HIGH|MEDIUM|LOW|INFO>.` Cite `file:line` and include a concrete fix for CRITICAL/HIGH findings. If a bucket is empty, say `(none found)` — do not omit the heading.
 
-## Output format (legacy severity-only — kept for back-compat)
-
-```
-[REVIEW] <directory or PR>
-[FILES] N reviewed
-[PLAN] +A ~M -D (if plan provided)
-
-[CRITICAL] (would block deployment)
-🚨 <file>:<line> — <issue>
-   Why: <explanation>
-   Fix: <concrete suggestion>
-
-[HIGH] (should fix before apply)
-⚠️ <file>:<line> — <issue>
-   Why: <explanation>
-   Fix: <concrete suggestion>
-
-[MEDIUM] (improvements)
-ℹ️ <file>:<line> — <issue>
-
-[LOW] (nitpicks)
-· <file>:<line> — <issue>
-
-[COST IMPACT]
-Estimated monthly delta: $<amount> (rough order-of-magnitude)
-Largest contributors:
-- <resource> — $<amount>/mo
-
-[SUMMARY]
-<2-3 sentence assessment: safe to apply, needs changes, or block>
-```
+Verdict rule (mechanical, per `code-review-discipline`): any CRITICAL or HIGH → **BLOCK**; only MEDIUM → **WARNING**; only LOW/INFO → **APPROVE**.
 
 ## Rules
 
@@ -153,6 +128,7 @@ Largest contributors:
     - **HIGH**: significant cost, security gap, or operational risk
     - **MEDIUM**: best practice deviation, fixable but not urgent
     - **LOW**: style, naming, comments
+    - **INFO**: observations, optional improvements
 - If reviewing a plan for production (workspace contains "prod"), apply stricter thresholds.
 - Cost estimates are rough — use ranges ($X–$Y) when uncertain. Don't fabricate precise numbers.
 - If you can't determine a cost without more context (data transfer patterns, usage), say "cost depends on usage" rather than guessing.

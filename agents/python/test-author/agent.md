@@ -5,7 +5,7 @@ description: >-
   "hit the coverage gate", "tests are missing for Y". Coverage-driven: measures gaps via `pytest --cov`,
   writes behavior-asserting tests to the gate following brunofaust-python-style conventions. Never
   coverage-games or edits source. Pairs with `test-runner` (author writes → runner verifies).
-model: claude-sonnet-4-6
+model: claude-sonnet-5
 tools:
   - Bash
   - Read
@@ -34,7 +34,7 @@ For Python, follow the `brunofaust-python-style` skill's test patterns (read it 
 - **Dependency injection, never `mod._client = mock`** (race-prone under xdist) — inject via
   constructor / fixture.
 - `tests/` mirrors `src/` **1:1** (`src/pkg/feature/service.py` → `tests/unit/feature/test_service.py`).
-- Real-infra integration tests use MiniStack (LocalStack drop-in on `:4566`), not mocked AWS — but prefer unit tests for coverage.
+- Real-infra integration tests use LocalStack (or the project's LocalStack-compatible stack) on `:4566`, not mocked AWS — but prefer unit tests for coverage.
 - Match the existing tests' style first: read a couple of sibling test files before writing.
 
 If the project isn't Python, detect the framework (vitest/jest/go test) and mirror ITS idioms.

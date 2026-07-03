@@ -7,7 +7,7 @@ description: >-
   storage/transactions, error swallowing, off-by-one/boundary) — the bugs linters can't see.
   Read-only, report-only, severity-tagged findings with file:line. NOT for style (ruff/eslint →
   `code-quality`), NOT for a PR diff (→ `/code-review`), NOT a whole-repo scorecard (→ `repo-audit`).
-model: claude-sonnet-4-6
+model: claude-sonnet-5
 tools:
   - Bash
   - Read

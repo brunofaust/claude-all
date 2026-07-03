@@ -236,26 +236,26 @@ curl -sI -L "$URL" | grep -iE "strict-transport|content-security|x-frame|x-conte
 
 After fetching robots.txt, cross-reference against the canonical AI crawler list:
 
-| Bot               | Owner        | Used for                           | Block impact                             |
-| ----------------- | ------------ | ---------------------------------- | ---------------------------------------- |
-| `GPTBot`          | OpenAI       | Training only                      | Low (training data)                      |
-| `OAI-SearchBot`   | OpenAI       | ChatGPT Search citations           | **HIGH — blocks AI citations**           |
-| `ChatGPT-User`    | OpenAI       | User-triggered browse from ChatGPT | **HIGH**                                 |
-| `ClaudeBot`       | Anthropic    | Training + real-time browsing      | **HIGH (both)**                          |
-| `Claude-Web`      | Anthropic    | Real-time browse from Claude       | **HIGH**                                 |
-| `anthropic-ai`    | Anthropic    | Training                           | Low                                      |
-| `PerplexityBot`   | Perplexity   | Perplexity index                   | **HIGH**                                 |
-| `Perplexity-User` | Perplexity   | User browse                        | **HIGH**                                 |
-| `Google-Extended` | Google       | Gemini/Bard training               | Low (Googlebot still feeds AI Overviews) |
-| `CCBot`           | Common Crawl | Feeds many models indirectly       | Medium                                   |
-| `Bytespider`      | ByteDance    | TikTok / Doubao                    | Niche                                    |
-| `Amazonbot`       | Amazon       | Alexa                              | Niche                                    |
+| Bot               | Owner        | Used for                           | Block impact                                        |
+| ----------------- | ------------ | ---------------------------------- | --------------------------------------------------- |
+| `GPTBot`          | OpenAI       | Training + feeds AI citations      | **HIGH — do NOT block (per `seo` skill)**            |
+| `OAI-SearchBot`   | OpenAI       | ChatGPT Search citations           | **HIGH — blocks AI citations**                       |
+| `ChatGPT-User`    | OpenAI       | User-triggered browse from ChatGPT | **HIGH**                                             |
+| `ClaudeBot`       | Anthropic    | Training + real-time browsing      | **HIGH — do NOT block (per `seo` skill)**            |
+| `Claude-Web`      | Anthropic    | Real-time browse from Claude       | **HIGH**                                             |
+| `anthropic-ai`    | Anthropic    | Training                           | Low                                                  |
+| `PerplexityBot`   | Perplexity   | Perplexity index + citations       | **HIGH — do NOT block (per `seo` skill)**            |
+| `Perplexity-User` | Perplexity   | User browse                        | **HIGH**                                             |
+| `Google-Extended` | Google       | Gemini training + AI visibility    | **HIGH — do NOT block (per `seo` skill)**            |
+| `CCBot`           | Common Crawl | Feeds many models indirectly       | Medium                                               |
+| `Bytespider`      | ByteDance    | TikTok / Doubao                    | Niche                                                |
+| `Amazonbot`       | Amazon       | Alexa                              | Niche                                                |
 
-If robots.txt blocks any "HIGH-impact" bot, flag as 🔴 BLOCK. If only training bots blocked, mention as INFO.
+If robots.txt blocks any HIGH-impact bot — including `GPTBot`, `ClaudeBot`, `PerplexityBot`, `Google-Extended` (canonical stance from the `seo` skill: never block these; they feed AI citations) — flag as 🔴 BLOCK. Blocking only `anthropic-ai` / `CCBot` / niche bots → 🔵 INFO.
 
 ## Output format
 
-```
+````
 # SEO Audit — <URL>
 
 ## ✓ Strong points
@@ -267,7 +267,7 @@ If robots.txt blocks any "HIGH-impact" bot, flag as 🔴 BLOCK. If only training
 
 ## 🔴 BLOCK (must fix)
 1. **No <h1> on the page** — biggest on-page SEO miss. Add an SSR <h1>.
-2. **AI search crawlers blocked in robots.txt** — `OAI-SearchBot`, `ClaudeBot`, `Claude-Web`, `PerplexityBot` all disallowed. Allow them while keeping training bots blocked. Sample fix:
+2. **AI crawlers blocked in robots.txt** — `OAI-SearchBot`, `ClaudeBot`, `Claude-Web`, `PerplexityBot` all disallowed. Allow them (and don't block `GPTBot`/`Google-Extended` either — they feed AI citations, per the `seo` skill). Sample fix:
 ```
 
 User-agent: OAI-SearchBot
@@ -292,7 +292,7 @@ Allow: /
 
 ---
 **Tools run:** Mozilla Observatory ✓, W3C ✓, on-page scrape ✓, robots.txt ✓, headers ✓, PSI ✗ (429 rate-limit — retry from user's machine).
-```
+````
 
 ## Severity rubric
 

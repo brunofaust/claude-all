@@ -85,21 +85,36 @@ SAFE_RM_DIRS: frozenset[str] = frozenset(
     ]
 )
 
-# Explicit, auditable override markers.
-OVERRIDE_MARKERS: tuple[str, ...] = ("GUARD_OK=1", "# guard:allow", "#guard:allow")
+# Explicit, auditable override markers. GUARD_OK=1 must be a leading env
+# assignment (optionally after other assignments); `# guard:allow` must be a
+# trailing comment — a mere mention inside a quoted string must NOT bypass.
+OVERRIDE_RE: re.Pattern[str] = re.compile(
+    r"^\s*(?:\w+=\S*\s+)*GUARD_OK=1\b|(?:^|\s)#\s?guard:allow\s*$"
+)
 
 # (compiled regex, human reason) — BLOCK these (exit 2).
 BLOCK_PATTERNS: list[tuple[re.Pattern[str], str]] = [
+    # Flag character classes are case-insensitive ([a-zA-Z], [rRfF]) so `rm -R /`
+    # and `rm -Rf ~` are caught; target matching stays case-sensitive. The dash is
+    # MANDATORY — `-?` would let a bare filename containing r/f (`rm tempfile ~/x`)
+    # match as a flag and hard-block a plain delete. The trailing group accepts
+    # `*` / `\*` so `rm -rf /*` (and `rm -rf /\*`) is also blocked.
     (
-        re.compile(r"\brm\s+(-[a-z]*\s+)*-?[a-z]*[rf][a-z]*\s+(-[a-z]+\s+)*(/|~|\$HOME)(\s|/|$)"),
+        re.compile(
+            r"\brm\s+(-[a-zA-Z]*\s+)*-[a-zA-Z]*[rRfF][a-zA-Z]*\s+"
+            r"(-[a-zA-Z]+\s+)*(/|~|\$HOME)(\s|/|\\?\*|$)"
+        ),
         "recursive delete of / ~ or $HOME",
     ),
     (
-        re.compile(r"\brm\s+(-[a-z]*\s+)*-?[a-z]*[rf][a-z]*\s+(-[a-z]+\s+)*(\*|\.|\.\.)(\s|$)"),
+        re.compile(
+            r"\brm\s+(-[a-zA-Z]*\s+)*-[a-zA-Z]*[rRfF][a-zA-Z]*\s+"
+            r"(-[a-zA-Z]+\s+)*(\*|\.|\.\.)(\s|$)"
+        ),
         "recursive delete of '*', '.', or '..' (whole tree)",
     ),
     (
-        re.compile(r"\brm\s+(-[a-z]*\s+)*-?[a-z]*[rf][a-z]*\s+(--no-preserve-root)"),
+        re.compile(r"\brm\s+(-[a-zA-Z]*\s+)*-[a-zA-Z]*[rRfF][a-zA-Z]*\s+(--no-preserve-root)"),
         "rm --no-preserve-root",
     ),
     (re.compile(r"\b(mkfs|fdisk|wipefs)\b"), "disk format / partition"),
@@ -142,7 +157,10 @@ BLOCK_PATTERNS: list[tuple[re.Pattern[str], str]] = [
 
 # (compiled regex, human reason) — WARN only (exit 0 + additionalContext, non-blocking).
 WARN_PATTERNS: list[tuple[re.Pattern[str], str]] = [
-    (re.compile(r"\brm\s+(-[a-z]*\s+)*-?[a-z]*[rf][a-z]*\s"), "broad recursive delete (rm -rf)"),
+    (
+        re.compile(r"\brm\s+(-[a-zA-Z]*\s+)*-[a-zA-Z]*[rRfF][a-zA-Z]*\s"),
+        "broad recursive delete (rm -rf)",
+    ),
     (re.compile(r"\bchmod\s+-R\s+777\b"), "chmod -R 777 (world-writable)"),
     (
         # match a pipe into any shell: sh, bash, zsh, dash, ksh
@@ -163,7 +181,7 @@ def rm_rf_targets_are_safe(command: str) -> bool:
         True if all rm -rf targets are in SAFE_RM_DIRS.
     """
     found_safe = False
-    for m in re.finditer(r"\brm\s+(?:-[a-z]+\s+)*(.+?)(?:&&|;|\||$)", command):
+    for m in re.finditer(r"\brm\s+(?:-[a-zA-Z]+\s+)*(.+?)(?:&&|;|\||$)", command):
         targets = m.group(1).split()
         # strip flags
         targets = [t for t in targets if not t.startswith("-")]
@@ -190,7 +208,7 @@ def main() -> int:
     if not command:
         return 0
 
-    if any(marker in command for marker in OVERRIDE_MARKERS):
+    if OVERRIDE_RE.search(command):
         return 0  # explicit, auditable override
 
     # Allow routine `rm -rf <build-dir>` even though it matches a block/warn pattern.
@@ -211,7 +229,10 @@ def main() -> int:
 
     for pattern, reason in WARN_PATTERNS:
         if pattern.search(command):
-            if rm_is_safe:
+            # Scope the safe-rm skip to rm-related warnings only — a routine
+            # `rm -rf node_modules` must not suppress unrelated warnings
+            # (pipe-to-shell, chmod 777, ...) elsewhere in the same command.
+            if rm_is_safe and reason.startswith(("broad recursive delete", "recursive delete")):
                 continue
             json.dump(
                 {

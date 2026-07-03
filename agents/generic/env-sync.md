@@ -5,7 +5,7 @@ description: >-
   up to date", "sync staging", "deploy all changes". Orchestrates: audit → tf-plan → confirm → tf-apply
   → Lambda deploy → migrations → smoke test. Always confirms plan with user before executing. Hard
   blocks on prod/production/prd environments.
-model: claude-sonnet-4-6
+model: claude-sonnet-5
 tools:
   - Bash
   - Read

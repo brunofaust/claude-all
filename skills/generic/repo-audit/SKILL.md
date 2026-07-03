@@ -158,7 +158,7 @@ translation* table below to pick the actual tool. (`<src>` = the source root.)
 
 > **Frontend repos** add UI lenses that are dimensions 1–12 specialised for the view layer — delegate
 > them to the dedicated skills: `react-correctness` (hooks rules, effect deps, keys, render safety),
-> `react-testing`, `vercel-composition-patterns`, `web-design-guidelines` (design-system adherence + a11y),
+> `react-testing`, `composition-patterns`, `web-design-guidelines` (design-system adherence + a11y),
 > `web-security` (XSS / CSP / secrets in bundles), `seo` (Core Web Vitals, meta, structured data).
 > Plus: no `any` across component boundaries, bounded component size, no business logic in components.
 
@@ -211,7 +211,7 @@ CFN/SAM/CDK, `serverless.yml`), data/DB (ORM, migrations), async/messaging, test
 | --- | --- |
 | Python | `brunofaust-python-style`, `prek`, `verification-loop`, `code-review-discipline`, `lint-fixer`, `test-runner` |
 | TypeScript / JS (any) | `prek` (or husky), `verification-loop`, `code-review-discipline`, `lint-fixer` |
-| React / frontend | `react-correctness`, `react-testing`, `vercel-composition-patterns`, `web-design-guidelines`, `web-security`, `seo` |
+| React / frontend | `react-correctness`, `react-testing`, `composition-patterns`, `web-design-guidelines`, `web-security`, `seo` |
 | FastAPI / any API surface | `web-security`, `security-audit` |
 | AWS resources | `aws-architecture`, `aws-cost-optimization`, `iam-auditor`, `cloudformation-reviewer`, relevant `*-inspector` agents |
 | Terraform / CloudFormation | `cloudformation-reviewer` / `terraform-reviewer` agents, `aws-architecture` |
@@ -234,7 +234,7 @@ PROJECT PROFILE & RECOMMENDATIONS
 Profile: TypeScript · Next.js/React · Vercel · Postgres(Prisma) · vitest · eslint (no strict tsc)
 
 Install now (existing claude-all resources):
-  ✓ react-correctness, react-testing, vercel-composition-patterns   — React layer
+  ✓ react-correctness, react-testing, composition-patterns   — React layer
   ✓ web-design-guidelines, web-security, seo                  — UI / public surface
   ✓ verification-loop, code-review-discipline, lint-fixer     — review + gate baseline
 
@@ -366,7 +366,7 @@ ______________________________________________________________________
 | `prek` | how to wire gates + baseline-and-ratchet without a backlog (applies to every stack's gate) |
 | `code-review-discipline` | severity model, size/complexity gates, report-only rule |
 | `verification-loop` | the per-PR gate the roadmap leads toward — repo-audit is the macro, one-time map |
-| `react-correctness` / `react-testing` / `vercel-composition-patterns` / `web-design-guidelines` / `web-security` / `seo` | own the frontend/UI lenses (dims 1–12 for the view layer) |
+| `react-correctness` / `react-testing` / `composition-patterns` / `web-design-guidelines` / `web-security` / `seo` | own the frontend/UI lenses (dims 1–12 for the view layer) |
 | `security-audit` | owns dimension 12 (delegate, don't reimplement) |
 | `aws-architecture` / `aws-cost-optimization` / `iam-auditor` / `cloudformation-reviewer` | own dimension 13 (IaC) |
 | `session-harvest` | owns dimension 14 — mines assistant histories into a resource backlog |

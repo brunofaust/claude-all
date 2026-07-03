@@ -25,10 +25,21 @@ from pathlib import Path
 
 __all__ = ["find_violations", "main"]
 
-BANNED_STEMS: frozenset[str] = frozenset({"helpers", "utils", "util", "common", "misc", "shared"})
+BANNED_STEMS: frozenset[str] = frozenset(
+    {"helper", "helpers", "utils", "util", "common", "misc", "shared"}
+)
 CODE_SUFFIXES: frozenset[str] = frozenset(
     {".py", ".js", ".jsx", ".ts", ".tsx", ".go", ".rs", ".rb", ".java", ".kt"}
 )
+# Vendored/generated trees are not ours to name; hidden dirs (.git, .venv, …) too.
+EXCLUDED_DIRS: frozenset[str] = frozenset(
+    {"node_modules", "dist", "build", "vendor", "__pycache__", ".venv", "venv"}
+)
+
+
+def is_excluded(rel: Path) -> bool:
+    """True if any directory component of ``rel`` is hidden or in ``EXCLUDED_DIRS``."""
+    return any(part in EXCLUDED_DIRS or part.startswith(".") for part in rel.parts[:-1])
 
 
 def find_violations(roots: list[Path]) -> list[str]:
@@ -38,7 +49,9 @@ def find_violations(roots: list[Path]) -> list[str]:
         if root.is_file():
             files.append(root)
         elif root.is_dir():
-            files.extend(p for p in root.rglob("*") if p.is_file())
+            files.extend(
+                p for p in root.rglob("*") if p.is_file() and not is_excluded(p.relative_to(root))
+            )
     for file in files:
         if file.suffix in CODE_SUFFIXES and file.stem.lower() in BANNED_STEMS:
             findings.append(

@@ -15,6 +15,11 @@ runs top-level code and may need the app/DB). It reads ``revision`` /
 ``down_revision`` assignments via ``ast``. Files it cannot parse are skipped
 (fail-open) — a sibling migration-integrity gate owns those.
 
+Each root argument is treated as ONE INDEPENDENT migration tree and analysed on
+its own graph — pass one directory per Alembic environment (e.g. ``migrations/``
+per service). Do NOT split a single tree's files across multiple root arguments:
+per-root analysis would then report false dangling ``down_revision`` pointers.
+
 CONTRACT
 --------
 Prints one ``key: message`` finding per problem to stdout; exits 0 on success so
@@ -78,8 +83,12 @@ def parse_file(path: Path) -> Revision | None:
     return Revision(path, revision, down)
 
 
-def analyse(revisions: list[Revision]) -> list[str]:
-    """Return findings: multiple heads, dangling down-revisions, over-length ids."""
+def analyse(revisions: list[Revision], label: str = "migrations") -> list[str]:
+    """Return findings: multiple heads, dangling down-revisions, over-length ids.
+
+    ``label`` names the migration tree in the multiple-heads finding so findings
+    from different roots stay distinct baseline keys.
+    """
     findings: list[str] = []
     ids = {r.revision for r in revisions if r.revision}
     referenced: set[str] = set()
@@ -101,7 +110,7 @@ def analyse(revisions: list[Revision]) -> list[str]:
     heads = sorted(ids - referenced)
     if len(heads) > 1:
         findings.append(
-            f"migrations: {len(heads)} heads {heads} — expected 1 "
+            f"{label}: {len(heads)} heads {heads} — expected 1 "
             "(branches diverged; create a merge migration)"
         )
     return findings
@@ -109,17 +118,31 @@ def analyse(revisions: list[Revision]) -> list[str]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Single-migration-head + revision-id checker.")
-    parser.add_argument("roots", nargs="+", type=Path, help="migration dirs (or files) to scan")
+    parser.add_argument(
+        "roots",
+        nargs="+",
+        type=Path,
+        help="migration trees to scan — each DIRECTORY is analysed as an INDEPENDENT "
+        "graph (one dir per Alembic environment; never split one tree across dirs); "
+        "loose FILE arguments are combined into ONE graph",
+    )
     args = parser.parse_args(argv)
-    files: list[Path] = []
+    # Each dir = one independent graph (merging environments fakes extra heads),
+    # but loose file args belong to ONE tree — analysing each file alone would
+    # report a guaranteed-false dangling down_revision per file and could never
+    # see a multi-head divergence spread across the files.
+    groups: list[tuple[str, list[Path]]] = []
+    loose_files = [r for r in args.roots if r.is_file() and r.suffix == ".py"]
+    if loose_files:
+        groups.append((", ".join(str(f) for f in loose_files), loose_files))
     for root in args.roots:
-        if root.is_file() and root.suffix == ".py":
-            files.append(root)
-        elif root.is_dir():
-            files.extend(p for p in root.rglob("*.py") if not p.name.startswith("__"))
-    revisions = [rev for rev in (parse_file(f) for f in files) if rev is not None]
-    for finding in analyse(revisions):
-        print(finding)
+        if root.is_dir():
+            files = [p for p in root.rglob("*.py") if not p.name.startswith("__")]
+            groups.append((str(root), files))
+    for label, files in groups:
+        revisions = [rev for rev in (parse_file(f) for f in files) if rev is not None]
+        for finding in analyse(revisions, label=label):
+            print(finding)
     return 0
 
 

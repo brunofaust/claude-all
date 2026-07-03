@@ -1,5 +1,5 @@
 {
-  "_comment": "Registry of resources vendored (copied) from third-party repos. Drives scripts/vendor_sync.py and documents provenance/attribution. See the vendored-sources skill. Keep vendored files byte-identical to upstream; put local additions in local_only so the sync preserves them.",
+  "_comment": "Registry of resources vendored (copied) from third-party repos. Drives scripts/vendor_sync.py and documents provenance/attribution. See the vendored-sources skill. Keep vendored files byte-identical to upstream; put local additions in local_only so the sync preserves them. vendor_mode 'watch' entries track upstreams a resource was DERIVED from (synthesized, not copied): the sync never writes their files — it only reports upstream commits touching source.path since last_reviewed; after reviewing/porting, run scripts/vendor_sync.py --ack <id>.",
   "vendored": [
     {
       "id": "humanink",
@@ -52,8 +52,8 @@
       ],
       "frontmatter_inject": {},
       "last_synced": {
-        "date": "2026-06-06",
-        "commit": "4ec6f84b61cd3c931046c3e6e398f3ae7de372f7"
+        "date": "2026-07-03",
+        "commit": "f8a72b9603728bb92a217a879b7e62e43ad76c81"
       }
     },
     {
@@ -76,8 +76,8 @@
       ],
       "frontmatter_inject": {},
       "last_synced": {
-        "date": "2026-06-06",
-        "commit": "4ec6f84b61cd3c931046c3e6e398f3ae7de372f7"
+        "date": "2026-07-03",
+        "commit": "f8a72b9603728bb92a217a879b7e62e43ad76c81"
       }
     },
     {
@@ -118,6 +118,74 @@
       "author": "Vercel Labs",
       "notes": "Local wrapper skill that fetches upstream guidelines live at runtime — nothing vendored, so the sync script skips it (always latest).",
       "last_synced": {
+        "date": null,
+        "commit": null
+      }
+    },
+    {
+      "id": "adversarial-verification@superpowers",
+      "kind": "skill",
+      "path": "skills/generic/adversarial-verification",
+      "vendor_mode": "watch",
+      "source": {
+        "repo": "https://github.com/obra/superpowers",
+        "ref": "main",
+        "path": "skills/verification-before-completion"
+      },
+      "author": "Jesse Vincent (obra)",
+      "notes": "Our skill was SYNTHESIZED from this source (not copied) — watch-only; port improvements by hand, then --ack.",
+      "last_reviewed": {
+        "date": null,
+        "commit": null
+      }
+    },
+    {
+      "id": "adversarial-verification@adversarial-review",
+      "kind": "skill",
+      "path": "skills/generic/adversarial-verification",
+      "vendor_mode": "watch",
+      "source": {
+        "repo": "https://github.com/robertoecf/adversarial-review",
+        "ref": "main",
+        "path": "."
+      },
+      "author": "robertoecf",
+      "notes": "Synthesis source (review-triad plugin lives at repo root). Watch-only. A third source, alirezarezvani/claude-skills 'adversarial-reviewer', no longer exists upstream (checked 2026-07-03) and is not watched.",
+      "last_reviewed": {
+        "date": null,
+        "commit": null
+      }
+    },
+    {
+      "id": "self-rationalization-guard@superpowers",
+      "kind": "skill",
+      "path": "skills/generic/self-rationalization-guard",
+      "vendor_mode": "watch",
+      "source": {
+        "repo": "https://github.com/obra/superpowers",
+        "ref": "main",
+        "path": "skills/writing-skills"
+      },
+      "author": "Jesse Vincent (obra)",
+      "notes": "Synthesis source. Watch-only; port improvements by hand, then --ack.",
+      "last_reviewed": {
+        "date": null,
+        "commit": null
+      }
+    },
+    {
+      "id": "self-rationalization-guard@kadaliao",
+      "kind": "skill",
+      "path": "skills/generic/self-rationalization-guard",
+      "vendor_mode": "watch",
+      "source": {
+        "repo": "https://github.com/kadaliao/claude-code-skills-collection",
+        "ref": "master",
+        "path": "."
+      },
+      "author": "kadaliao",
+      "notes": "Synthesis source (skills at repo root). Watch-only; port improvements by hand, then --ack.",
+      "last_reviewed": {
         "date": null,
         "commit": null
       }

@@ -253,7 +253,7 @@ Detected languages: Python, TypeScript
 | Directory        | Referenced in       |
 |------------------|---------------------|
 | .worktrees/fix   | .gitignore line 42  |
-| .busydone        | .gitignore line 67  |
+| .myapp-cache        | .gitignore line 67  |
 
 Proceed with main cleanup? (yes / no)
 ```
@@ -330,7 +330,7 @@ Reply per-row (e.g. 1=d 2=ds) or one answer for all (s / d / ds):
 | # | Directory       | Referenced in      | Options                                      |
 |---|-----------------|--------------------|--------------------------------------------- |
 | 1 | .worktrees/fix  | .gitignore:42      | (s) skip  (d) delete only  (ds) delete+sync  |
-| 2 | .busydone       | .gitignore:67      | (s) skip  (d) delete only  (ds) delete+sync  |
+| 2 | .myapp-cache       | .gitignore:67      | (s) skip  (d) delete only  (ds) delete+sync  |
 
   s  = leave everything as-is
   d  = delete the directory, keep the ignore-file entry
@@ -378,7 +378,7 @@ A plain `git push` will NOT remove them from origin.
 
 | Directory      | Files in origin |
 |----------------|-----------------|
-| .busydone      | 3               |
+| .myapp-cache      | 3               |
 | old_scripts/   | 12              |
 
 To remove from origin, git needs to stage the deletion and create a commit.
@@ -436,11 +436,11 @@ Main cleanup:
 
 Ignore-referenced dirs:
   .worktrees/fix  → deleted, .gitignore entry removed (ds)
-  .busydone       → deleted, .gitignore entry kept (d)
+  .myapp-cache       → deleted, .gitignore entry kept (d)
   old_tmp/        → skipped (s)
 
 Origin ghost check:
-  .busydone       → staged for removal (git rm --cached done; commit + push pending)
+  .myapp-cache       → staged for removal (git rm --cached done; commit + push pending)
   old_scripts/    → skipped, still in origin
 
 Verified:

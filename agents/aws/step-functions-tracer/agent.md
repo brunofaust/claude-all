@@ -101,7 +101,7 @@ Correct (IAM / permissions errors — most commonly misstated):
 ```
 cause: |
   An error occurred (AccessDeniedException) when calling the GetParameter
-  operation: User: arn:aws:sts::123456789012:assumed-role/myapp-dev-invoke-service/...
+  operation: User: arn:aws:sts::123456789012:assumed-role/myapp-dev-worker/...
   is not authorized to perform: ssm:GetParameter on resource:
   arn:aws:ssm:us-east-1:123456789012:parameter/myapp/dev/secret because no
   identity-based policy allows the ssm:GetParameter action

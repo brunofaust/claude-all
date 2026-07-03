@@ -588,7 +588,9 @@ def hook_symlink_dest(level: str, item: Item) -> Path:
 def inject_hook(item: Item, level: str) -> str | None:
     """Install hook: symlink script to .claude/hooks/, merge into settings.json.
 
-    Idempotent — re-install replaces the entry keyed by command path.
+    Idempotent — re-install sweeps ALL events for entries whose command basename
+    matches this hook and replaces them, so an event/matcher change in hook.json
+    never leaves a stale double-firing entry behind.
 
     Args:
         item: The resource item whose hook files to install.
@@ -633,6 +635,11 @@ def inject_hook(item: Item, level: str) -> str | None:
         settings = {}
 
     settings.setdefault("hooks", {})
+    # Drop any prior entry for this hook anywhere — the hook.json's event or
+    # matcher may have changed between versions, so a same-block dedup would
+    # leave a stale entry double-firing. Sweep ALL events by command basename
+    # (same semantics as install_standalone_hook).
+    purge_hook_entries(settings, dest.name)
     event_blocks = settings["hooks"].setdefault(event, [])
 
     # Find or create a block with the matching matcher
@@ -646,9 +653,7 @@ def inject_hook(item: Item, level: str) -> str | None:
         event_blocks.append(target_block)
 
     target_block.setdefault("hooks", [])
-    # Dedup by command path
     cmd_str = str(dest)
-    target_block["hooks"] = [h for h in target_block["hooks"] if h.get("command") != cmd_str]
     target_block["hooks"].append(
         {
             "type": "command",
@@ -810,6 +815,60 @@ def command_hook_basename(cmd: str) -> str:
     return name if name.endswith(".py") else ""
 
 
+def command_targets_managed_hook(cmd: str, target_basename: str) -> bool:
+    """True if *cmd* runs a script named *target_basename* out of a ``.claude/hooks/`` dir.
+
+    Only entries claude-all itself could have wired (any scope, any prior path
+    style — absolute or ``$CLAUDE_PROJECT_DIR/.claude/hooks/…``) qualify. A
+    user's own hook that merely shares the filename but lives elsewhere (e.g.
+    ``~/dotfiles/hooks/x.py``) is NOT matched and never unwired.
+
+    Args:
+        cmd: The hook's ``command`` string from settings.json.
+        target_basename: Script filename of the hook being (re)installed.
+    """
+    if command_hook_basename(cmd) != target_basename:
+        return False
+    token = Path(cmd.strip().split()[-1].strip("\"'"))
+    parent = token.parent
+    return parent.name == "hooks" and parent.parent.name == ".claude"
+
+
+def purge_hook_entries(settings: dict, target_basename: str) -> None:
+    """Drop every managed hook entry (across ALL events/matchers) for this script.
+
+    A hook's ``hook.json`` may change event or matcher between versions — a
+    same-event/same-matcher dedup would leave the stale entry behind and the
+    hook would double-fire. Sweeping across the whole ``hooks`` mapping makes
+    re-install cleanly replace any prior claude-all wiring. Matching requires
+    BOTH the command basename AND a ``.claude/hooks/`` path (see
+    ``command_targets_managed_hook``) so a foreign hook sharing the filename is
+    never touched. Entries/blocks with unexpected shapes (written by other
+    tools or by hand) are left untouched rather than crashing the install.
+    Mutates ``settings`` in place; empty managed blocks and events are pruned.
+    """
+    hooks = settings.get("hooks")
+    if not isinstance(hooks, dict):
+        return
+    for ev, blocks in list(hooks.items()):
+        if not isinstance(blocks, list):
+            continue  # foreign shape — leave untouched
+        for block in blocks:
+            if not isinstance(block, dict) or not isinstance(block.get("hooks"), list):
+                continue
+            block["hooks"] = [
+                h
+                for h in block["hooks"]
+                if not (
+                    isinstance(h, dict)
+                    and command_targets_managed_hook(h.get("command", ""), target_basename)
+                )
+            ]
+        hooks[ev] = [b for b in blocks if not isinstance(b, dict) or b.get("hooks")]
+        if not hooks[ev]:
+            del hooks[ev]
+
+
 def install_standalone_hook(item: Item, level: str) -> str:
     """Install a standalone ``hooks/`` script: symlink + wire into settings.json.
 
@@ -859,16 +918,7 @@ def install_standalone_hook(item: Item, level: str) -> str:
     settings.setdefault("hooks", {})
 
     # Drop any prior entry for this hook anywhere (basename match), then re-add fresh.
-    for ev, blocks in list(settings["hooks"].items()):
-        for block in blocks:
-            block["hooks"] = [
-                h
-                for h in block.get("hooks", [])
-                if command_hook_basename(h.get("command", "")) != target_basename
-            ]
-        settings["hooks"][ev] = [b for b in blocks if b.get("hooks")]
-        if not settings["hooks"][ev]:
-            del settings["hooks"][ev]
+    purge_hook_entries(settings, target_basename)
 
     event_blocks = settings.setdefault("hooks", {}).setdefault(event, [])
     target_block = next((b for b in event_blocks if b.get("matcher") == matcher), None)
@@ -1386,18 +1436,24 @@ def main(argv: list[str]) -> int:
     target_root = USER_CLAUDE_DIR if level == "user" else (Path.cwd() / ".claude")
 
     print(f"\nInstalling {len(chosen)} item(s) → {target_root}\n")
+    failures = 0
     for it in chosen:
         try:
             msg = install_item(it, target_root)
             print(f"  ✓ {msg}")
         except OSError as e:
             print(f"  ✗ {it.kind}/{it.name}: {e}", file=sys.stderr)
+            failures += 1
         except subprocess.CalledProcessError as e:
             print(
                 f"  ✗ {it.kind}/{it.name}: command failed ({e.returncode})",
                 file=sys.stderr,
             )
+            failures += 1
 
+    if failures:
+        print(f"\nDone with {failures} failure(s) — see errors above.", file=sys.stderr)
+        return 1
     print("\nDone. Symlinks → edits in repo propagate to install location.")
     return 0
 

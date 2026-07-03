@@ -5,7 +5,7 @@ description: >-
   "review structured data", "before deploy SEO check", "review the SEO of file X". Reads HTML/JSX/TSX,
   robots.txt, sitemap.xml source files — never fetches live URLs. Returns severity-scored report
   (BLOCK/HIGH/MEDIUM/INFO). For live-URL audits use `seo-runner`.
-model: claude-sonnet-4-6
+model: claude-sonnet-5
 tools:
   - Read
   - Glob
@@ -162,7 +162,8 @@ Validate JSON-LD JSON parses (best-effort with regex extract + `json.loads`).
 If present at project root or `public/`:
 
 - Parse it. List which user-agents are allow/disallow.
-- 🔴 BLOCK: AI search bots disallowed (`OAI-SearchBot`, `Claude-Web`, `Perplexity-User`, `PerplexityBot`, `ClaudeBot`). Distinguish from training bots (`GPTBot`, `anthropic-ai`, `CCBot`, `Google-Extended`) which are OK to block.
+- 🔴 BLOCK: AI search/browse bots disallowed (`OAI-SearchBot`, `ChatGPT-User`, `Claude-Web`, `Perplexity-User`, `PerplexityBot`, `ClaudeBot`) — cuts off real-time AI citations.
+- 🟠 HIGH: `GPTBot` or `Google-Extended` disallowed. Per the `seo` skill, do NOT block `GPTBot`, `ClaudeBot`, `PerplexityBot`, or `Google-Extended` — they feed AI citations and generative-engine visibility. (Blocking only `anthropic-ai` / `CCBot` is a defensible judgment call — note as 🔵 INFO.)
 - 🟠 HIGH: `Disallow: /` for `User-agent: *`.
 - 🟠 HIGH: no `Sitemap:` directive.
 
@@ -231,7 +232,7 @@ Same shape as `migration-reviewer` and `seo-runner`. File:line refs are non-nego
 ### 1. JSON-LD with no `@type` — app/page.tsx:42
 ```tsx
 <script type="application/ld+json">{JSON.stringify({ '@context': 'https://schema.org', name: 'MyApp', url: '...' })}</script>
-````
+```
 
 `@type` is required. Likely meant `Organization`.
 
@@ -246,11 +247,11 @@ Same shape as `migration-reviewer` and `seo-runner`. File:line refs are non-nego
 })}</script>
 ```
 
-### 2. AI search crawlers blocked — public/robots.txt:23-32
+### 2. AI crawlers blocked — public/robots.txt:23-32
 
-Blocking `OAI-SearchBot`, `ClaudeBot`, `Claude-Web`, `PerplexityBot` cuts off real-time AI citations. (Training bots `GPTBot`, `anthropic-ai`, `CCBot`, `Google-Extended` are fine to block.)
+Blocking `OAI-SearchBot`, `ClaudeBot`, `Claude-Web`, `PerplexityBot` cuts off real-time AI citations. Do NOT block `GPTBot` or `Google-Extended` either — per the `seo` skill they also feed AI citations.
 
-**Fix:** add explicit `Allow: /` blocks for the search-time crawlers BEFORE the `Disallow: /` blocks for training crawlers.
+**Fix:** add explicit `Allow: /` blocks for `OAI-SearchBot`, `ChatGPT-User`, `ClaudeBot`, `Claude-Web`, `PerplexityBot`, `Perplexity-User` and remove the `Disallow` blocks for `GPTBot` / `Google-Extended`.
 
 ### 3. `<h1>` missing on home page — app/page.tsx (no h1 in tree)
 
@@ -285,8 +286,7 @@ Two content images missing `alt`.
 1. Add <h1> to home page (10m, on-page SEO)
 1. Article schema on blog posts (1h, snippet eligibility)
 1. Trim products title to ≤60c (5m)
-
-```
+````
 
 ## Severity rubric (mirror seo-runner)
 
@@ -312,4 +312,3 @@ If you can't infer from the code:
 - For Next.js: prefer flagging `generateMetadata` / `metadata` issues over raw `<Head>` (App Router is the modern way).
 - For each BLOCK, provide a code-block-level fix snippet, not just prose.
 - Pair findings with the `seo` skill — reference the skill section if a user wants the "why".
-```
