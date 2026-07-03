@@ -20,13 +20,18 @@ hooks = [
     id = "check-yaml",
     name = "✅ check · Validate yaml files"
   },
+  # Whitespace/EOL fixers skip vendored dirs — vendored files must stay
+  # byte-identical to upstream even when upstream ships trailing whitespace;
+  # a local "fix" would make vendor_sync --check report drift forever.
   {
     id = "end-of-file-fixer",
-    name = "✅ check · Fix end of file"
+    name = "✅ check · Fix end of file",
+    exclude = { glob = ["skills/frontend/react-best-practices/**", "skills/frontend/composition-patterns/**", "skills/frontend/react-view-transitions/**", "skills/generic/humanink/**"] }
   },
   {
     id = "trailing-whitespace",
-    name = "✅ check · Trailing whitespaces"
+    name = "✅ check · Trailing whitespaces",
+    exclude = { glob = ["skills/frontend/react-best-practices/**", "skills/frontend/composition-patterns/**", "skills/frontend/react-view-transitions/**", "skills/generic/humanink/**"] }
   },
   {
     id = "debug-statements",
@@ -34,7 +39,8 @@ hooks = [
   },
   {
     id = "mixed-line-ending",
-    name = "✅ check · Mixed line ending"
+    name = "✅ check · Mixed line ending",
+    exclude = { glob = ["skills/frontend/react-best-practices/**", "skills/frontend/composition-patterns/**", "skills/frontend/react-view-transitions/**", "skills/generic/humanink/**"] }
   },
   {
     id = "check-case-conflict",
