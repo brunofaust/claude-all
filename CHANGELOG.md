@@ -22,3 +22,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   can't share code via imports, so their small dispatch helpers are expected to overlap.
 - Documented missing docstring parameters on `purge_hook_entries`, `context_tokens`,
   `load_baseline`, `compare`, `calls_with_scope`, `literal`, `parse_file`, and `nudge`.
+- Merged PR #66: ported upstream findings into the `adversarial-verification` and
+  `self-rationalization-guard` skills.
