@@ -42,7 +42,11 @@ PROBE_RE = re.compile(
 
 
 def nudge(message: str) -> int:
-    """Emit a non-error reminder into Claude's context, then allow the tool."""
+    """Emit a non-error reminder into Claude's context, then allow the tool.
+
+    Args:
+        message: The reminder text to inject as additional context.
+    """
     json.dump(
         {"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": message}},
         sys.stdout,

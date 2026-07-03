@@ -6,26 +6,29 @@ Claude Code agents, skills, plugins, and MCP configurations. One place to manage
 
 ```
 claude-all/
-├── claude-all                # Bash wrapper → dispatches to claude-all.py
-├── claude-all.py             # Interactive TUI installer (curses)
-├── agents/
-│   ├── generic/              # Language-agnostic, project-agnostic
-│   ├── aws/                  # AWS-specific tooling
-│   ├── databases/            # Non-AWS database tooling
-│   ├── python/               # Python-specific
-│   ├── web/                  # Web / SEO agents
-│   └── support/              # Cross-cutting: debugging, incidents
-├── skills/                   # Reusable skills (e.g., python style)
-├── hooks/                    # Claude Code hook scripts (PreToolUse / PostToolUse / Stop)
-├── plugins/                  # Claude Code plugins
-├── mcps/                     # MCP server configurations
-├── tools/                    # OS-level CLI tools (brew)
-├── instructions/            # Standalone ~/.claude/CLAUDE.md snippets (no resource to install)
+├── pyproject.toml            # Packaging — hatchling build, `claude-all` console script
+├── src/claude_all/
+│   ├── cli.py                 # Interactive TUI installer (curses)
+│   ├── agents/
+│   │   ├── generic/           # Language-agnostic, project-agnostic
+│   │   ├── aws/                # AWS-specific tooling
+│   │   ├── databases/          # Non-AWS database tooling
+│   │   ├── python/             # Python-specific
+│   │   ├── web/                # Web / SEO agents
+│   │   └── support/            # Cross-cutting: debugging, incidents
+│   ├── skills/                # Reusable skills (e.g., python style)
+│   ├── hooks/                 # Claude Code hook scripts (PreToolUse / PostToolUse / Stop)
+│   ├── plugins/                # Claude Code plugins
+│   ├── mcps/                   # MCP server configurations
+│   ├── tools/                  # OS-level CLI tools (brew)
+│   └── instructions/           # Standalone ~/.claude/CLAUDE.md snippets (no resource to install)
 └── README.md
 ```
 
 claude-all is **coding-scoped**: every resource is tooling that improves how Claude works on a
-codebase. Resource categories (`agents/`, `skills/`, `hooks/`, …) live at the repo root.
+codebase. Resource categories (`agents/`, `skills/`, `hooks/`, …) live under `src/claude_all/` so
+they ship inside the installed package — the `claude-all` CLI finds them relative to its own
+install location, whether that's a `uv tool install` or an editable git clone.
 
 ## Installation
 
@@ -33,6 +36,7 @@ codebase. Resource categories (`agents/`, `skills/`, `hooks/`, …) live at the 
 
 - macOS or Linux
 - Python 3.11+ (stdlib only — no pip installs)
+- [`uv`](https://docs.astral.sh/uv/) in PATH
 - `claude` CLI in PATH (for plugins with `type: claude-marketplace`)
 - `pipx` in PATH (for plugins with `type: pip`)
 
@@ -52,19 +56,25 @@ After `pipx ensurepath`, restart your shell so `pipx` is on PATH.
 
 ### Setup
 
+**Install (recommended):**
+
 ```bash
-# 1. Clone the repository (anywhere — pick your own path)
+uv tool install git+https://github.com/brunofaust/claude-all.git
+```
+
+This puts `claude-all` on PATH. To update: `uv tool upgrade claude-all` (or re-run the install
+command with `--force`). Pin to a tag: `uv tool install "git+https://github.com/brunofaust/claude-all.git@vX.Y.Z"`.
+
+**Development setup** (for editing agents/skills in this repo):
+
+```bash
 git clone https://github.com/brunofaust/claude-all.git
 cd claude-all
-
-# 2. Make the wrapper executable
-chmod +x claude-all claude-all.py
-
-# 3. Add the cloned directory to your PATH
-#    $(pwd) expands to the current directory at setup time.
-echo "export PATH=\"$(pwd):\$PATH\"" >> ~/.zshrc
-source ~/.zshrc
+uv sync --dev
 ```
+
+`uv sync` does an editable install, so `uv run claude-all` picks up edits to `agents/`, `skills/`,
+etc. immediately — no reinstall needed.
 
 ### Usage
 
@@ -111,17 +121,20 @@ claude-all
 
 ### Installation method
 
-Symlinks. Edits in this repo propagate to every project where the items are installed. To "update", just `git pull` here.
+Symlinks, pointing back into wherever `claude-all` itself is installed — a `uv tool install` copy,
+or this repo when set up via the development setup. Update that source (`uv tool upgrade claude-all`,
+or `git pull` in a dev clone) and every project's symlinks pick up the change automatically; no
+reinstall needed.
 
 ### CLAUDE.md auto-injection
 
 Any resource may ship a `claude_md.md` snippet:
 
-- Flat agent (single file): `agents/<cat>/<name>.claude_md.md`
-- Folder agent (ships companions): `agents/<cat>/<name>/claude_md.md` (alongside `agent.md`)
+- Flat agent (single file): `src/claude_all/agents/<cat>/<name>.claude_md.md`
+- Folder agent (ships companions): `src/claude_all/agents/<cat>/<name>/claude_md.md` (alongside `agent.md`)
 - Skills / plugins / mcps (dir): `<resource-dir>/claude_md.md`
 
-Agents use a **hybrid layout**: a bare agent stays a single file `agents/<cat>/<name>.md`; an agent that ships companions (a `claude_md.md` snippet and/or a `hook.py`/`hook.json`) becomes a folder `agents/<cat>/<name>/` containing `agent.md` + those companions, so everything groups in one place. The installer discovers both forms.
+Agents use a **hybrid layout**: a bare agent stays a single file `src/claude_all/agents/<cat>/<name>.md`; an agent that ships companions (a `claude_md.md` snippet and/or a `hook.py`/`hook.json`) becomes a folder `src/claude_all/agents/<cat>/<name>/` containing `agent.md` + those companions, so everything groups in one place. The installer discovers both forms.
 
 On install, the snippet is wrapped in tags and appended to the target `CLAUDE.md`:
 
@@ -330,7 +343,7 @@ All agents follow the same pattern: a detailed `description` so Claude Code's au
 | diff-retrospective          | Turn a range of merged PRs/commits into durable guardrails — read the DIFFS (not descriptions), cluster recurring root causes, and emit per cluster (a) a CLAUDE.md rule and (b) where possible an executable checker. Complements `session-harvest` / `friction-analyzer` (chat histories) by mining the SHIPPED CODE. Pairs with the `lessons-extractor` agent for parallel fan-out.                |
 | research-before-build       | Step-0 reuse discipline before writing net-new code — walk the hierarchy (internal codebase → Context7/vendor docs → `gh search` for an 80%-solution → package registries → web), then adopt/fork/wrap/build with explicit license/maintenance/supply-chain criteria + a short research note. Reuse beats generation on tokens + reliability.                               |
 | security-audit              | Whole-system security audit + threat modeling — OWASP Top 10 + STRIDE, six layers (app / secrets / dependency supply-chain / CI-CD / LLM-AI / cloud-infra), daily zero-noise gate vs deep periodic mode + a "build safe action-taking tools" section (dry-run default, bounded params, rollback). Complements `web-security` (frontend) + `iam-auditor` (AWS IAM). |
-| claude-hooks                | Authoring + debugging Claude Code hooks — events/matchers, the stdin/stderr/exit-code contract, the two archetypes (guard blocks with exit 2 vs utility never breaks a turn → exit 0), resilient-shim pattern, exit-code capture, `settings.json` wiring, and payload testing. References the repo's `hooks/` examples.                                              |
+| claude-hooks                | Authoring + debugging Claude Code hooks — events/matchers, the stdin/stderr/exit-code contract, the two archetypes (guard blocks with exit 2 vs utility never breaks a turn → exit 0), resilient-shim pattern, exit-code capture, `settings.json` wiring, and payload testing. References the repo's `src/claude_all/hooks/` examples.                                              |
 | wait-for-ready              | Poll a service / container / port / DB until healthy (timeout + interval) instead of a fixed `sleep N` — a generic `wait_until` poller plus ready-made probes (HTTP health, TCP port, `pg_isready`, docker healthy, compose up). Ships a PreToolUse hook that catches `sleep && curl` poll-by-delay loops and points here.                                                  |
 | humanink                    | Detect + rewrite AI writing patterns so text reads human — 35 patterns, AI-probability score (0–100), context modes (academic/casual/corporate/creative) + severity levels, style fingerprinting. Multilingual: English / Brazilian Portuguese / Spanish (also French, German, Japanese, Italian); force a language with `--pt` / `--es`. Vendored from [sirambrosio/humanink](https://github.com/sirambrosio/humanink) (MIT). |
 | repo-audit                  | Whole-repo, point-in-time code-quality audit for an existing/brownfield codebase in ANY language. Audits against generic boundaries (format/lint, type safety, complexity, layering) and also drives `session-harvest`. For bug hunts, fans out parallel deep-dive lanes (`bug-hunter` for hot code, bespoke one-off prompts for infra configs). See "First run — audit & customize per project" above.                                                                                                                                                                                                                                                |
@@ -373,7 +386,7 @@ All four kept under one `frontend/` folder — React-specific items are a subset
 
 ### 3. Hooks
 
-Standalone hook scripts in `hooks/`, installed as a first-class kind — `claude-all --user hooks` (or `--project`) symlinks each `<name>.py` into `.claude/hooks/` and wires it into `.claude/settings.json` per the `hooks/hooks.json` manifest (`event` + `matcher` + `timeout`). Re-install sweeps and replaces any prior entry for the hook's script across all events (scoped to `.claude/hooks/` paths, so a same-named script living elsewhere is left untouched) — no double-firing. Most hooks are **non-blocking** reminders — exit 0 + JSON `hookSpecificOutput.additionalContext` (not `stderr`/exit 1, which the harness renders as a hook error). `destructive-command-guard` and `prek-stop-runner` (on a real prek failure) **hard-block** (exit 2); `config-protection` pauses the tool call for approval via `permissionDecision: "ask"`.
+Standalone hook scripts in `src/claude_all/hooks/`, installed as a first-class kind — `claude-all --user hooks` (or `--project`) symlinks each `<name>.py` into `.claude/hooks/` and wires it into `.claude/settings.json` per the `hooks/hooks.json` manifest (`event` + `matcher` + `timeout`). Re-install sweeps and replaces any prior entry for the hook's script across all events (scoped to `.claude/hooks/` paths, so a same-named script living elsewhere is left untouched) — no double-firing. Most hooks are **non-blocking** reminders — exit 0 + JSON `hookSpecificOutput.additionalContext` (not `stderr`/exit 1, which the harness renders as a hook error). `destructive-command-guard` and `prek-stop-runner` (on a real prek failure) **hard-block** (exit 2); `config-protection` pauses the tool call for approval via `permissionDecision: "ask"`.
 
 | Hook                           | Event         | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | ------------------------------ | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -388,7 +401,7 @@ Standalone hook scripts in `hooks/`, installed as a first-class kind — `claude
 
 ### 4. Plugins
 
-Each plugin lives at `plugins/<name>/plugin.json`. The installer dispatches on the `type` field:
+Each plugin lives at `src/claude_all/plugins/<name>/plugin.json`. The installer dispatches on the `type` field:
 
 | Type                 | Installer                                                 | Required fields                                  |
 | -------------------- | --------------------------------------------------------- | ------------------------------------------------ |
@@ -417,7 +430,7 @@ Installed plugins:
 
 ### 5. MCPs
 
-Each MCP lives at `mcps/<name>/mcp.json`. Installer runs `claude mcp add` at the chosen scope (`--user` → user scope, `--project` → writes `.mcp.json` in cwd).
+Each MCP lives at `src/claude_all/mcps/<name>/mcp.json`. Installer runs `claude mcp add` at the chosen scope (`--user` → user scope, `--project` → writes `.mcp.json` in cwd).
 
 Schema:
 
@@ -463,7 +476,7 @@ Installed MCPs:
 
 ### 6. Tools
 
-CLI tools installed at the OS level (not into `~/.claude/`). Each tool lives at `tools/<name>/tool.json`. Currently only `type: brew` (Homebrew) is supported.
+CLI tools installed at the OS level (not into `~/.claude/`). Each tool lives at `src/claude_all/tools/<name>/tool.json`. Currently only `type: brew` (Homebrew) is supported.
 
 Schema:
 
@@ -504,7 +517,7 @@ Installed tools:
 ### 7. Instructions (standalone CLAUDE.md snippets)
 
 A resource whose **only** effect is injecting a tagged block into `~/.claude/CLAUDE.md` — no
-agent/skill/hook/tool to install. Each lives at `instructions/<name>/claude_md.md` and is installed
+agent/skill/hook/tool to install. Each lives at `src/claude_all/instructions/<name>/claude_md.md` and is installed
 with `claude-all --all --user <name>`. Use for main-session dispatch rules that target built-in
 agents or cut across many agents (so they don't belong to any single agent's companion).
 
@@ -551,7 +564,7 @@ Then hand the extract to Claude with a prompt like:
 
 > Analyze this Claude Code session history (prompts + tool calls; outputs were stripped). Identify (1) **delegation gaps** — Bash/search/test/lint commands that ran inline in the main session but should route to a sub-agent; (2) **repeated manual sequences** worth turning into a skill or hook; (3) **agent-coverage holes**. Rank findings by token impact and propose concrete agent or dispatch-rule changes.
 
-The `test-runner` / `lint-fixer` routing and the rules in `instructions/` came directly from runs of this analysis.
+The `test-runner` / `lint-fixer` routing and the rules in `src/claude_all/instructions/` came directly from runs of this analysis.
 
 The **`session-harvest`** skill automates and generalizes this recipe: it mines histories across **Claude Code, Cursor, Codex, and GitHub Copilot** and returns a prioritized backlog of resources to create (skills / agents / hooks / instructions), each with an estimated % improvement. Run it instead of doing the `jq` extraction by hand.
 
@@ -571,8 +584,8 @@ claude-all gets better the more projects it sees. When `repo-audit` or `session-
 reusable skill, agent, hook, or instruction in your project — something generic enough to help others,
 not project-specific — **open a PR back into this repo** so the whole team benefits.
 
-1. Branch and add the resource under the right category (`agents/` · `skills/` · `hooks/` ·
-   `instructions/`), following "Adding a new agent" / "Adding a new agent or skill" in `CLAUDE.md`.
+1. Branch and add the resource under the right category (`src/claude_all/agents/` · `src/claude_all/skills/` · `src/claude_all/hooks/` ·
+   `src/claude_all/instructions/`), following "Adding a new agent" / "Adding a new agent or skill" in `CLAUDE.md`.
 1. **Strip all project specifics** — use the generic placeholders in `CLAUDE.md` (`myapp`, `acme`,
    `example.com`, `TICK-`, …). No real project, company, domain, ARN, or internal tool names.
 1. Run the gate: `prek run --all-files` (ruff + mypy + typos + the rest).

@@ -3,10 +3,10 @@
 agents/skills/plugins/mcps to ~/.claude/ (user) or ./.claude/ (project).
 
 Usage:
-    claude-all.py                       # interactive menu (all items)
-    claude-all.py skills aws            # filter to skills/aws
-    claude-all.py --list [filter...]    # list, no install
-    claude-all.py --help
+    claude-all                          # interactive menu (all items)
+    claude-all skills aws               # filter to skills/aws
+    claude-all --list [filter...]       # list, no install
+    claude-all --help
 
 Keys in TUI:
     ↑/↓ or j/k   move
@@ -33,7 +33,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
-__all__ = ["main"]
+__all__ = ["main", "run"]
 
 
 REPO_ROOT = Path(__file__).resolve().parent
@@ -846,6 +846,10 @@ def purge_hook_entries(settings: dict, target_basename: str) -> None:
     never touched. Entries/blocks with unexpected shapes (written by other
     tools or by hand) are left untouched rather than crashing the install.
     Mutates ``settings`` in place; empty managed blocks and events are pruned.
+
+    Args:
+        settings: The ``.claude/settings.json`` contents, mutated in place.
+        target_basename: The hook script's filename (e.g. ``foo.py``) to sweep.
     """
     hooks = settings.get("hooks")
     if not isinstance(hooks, dict):
@@ -1458,5 +1462,10 @@ def main(argv: list[str]) -> int:
     return 0
 
 
-if __name__ == "__main__":
+def run() -> None:
+    """Console-script entry point (`claude-all` on PATH)."""
     sys.exit(main(sys.argv[1:]))
+
+
+if __name__ == "__main__":
+    run()

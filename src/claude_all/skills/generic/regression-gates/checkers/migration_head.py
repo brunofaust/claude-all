@@ -48,7 +48,11 @@ class Revision:
 
 
 def literal(node: ast.expr) -> tuple[str | None, ...]:
-    """Flatten a down_revision RHS (str | None | tuple/list of those) to a tuple."""
+    """Flatten a down_revision RHS (str | None | tuple/list of those) to a tuple.
+
+    Args:
+        node: The AST expression assigned to ``down_revision``.
+    """
     if isinstance(node, ast.Constant):
         return (node.value if isinstance(node.value, str) else None,)
     if isinstance(node, ast.Tuple | ast.List):
@@ -61,7 +65,11 @@ def literal(node: ast.expr) -> tuple[str | None, ...]:
 
 
 def parse_file(path: Path) -> Revision | None:
-    """Extract ``revision`` / ``down_revision`` from a migration file (no import)."""
+    """Extract ``revision`` / ``down_revision`` from a migration file (no import).
+
+    Args:
+        path: Path to the migration file.
+    """
     try:
         tree = ast.parse(path.read_text(encoding="utf-8"))
     except (SyntaxError, ValueError, UnicodeDecodeError):

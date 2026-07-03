@@ -75,7 +75,12 @@ def setdefault_key(call: ast.Call) -> str | None:
 
 
 def calls_with_scope(node: ast.AST, scope: str = "<module>") -> Iterator[tuple[ast.Call, str]]:
-    """Yield each ``ast.Call`` with the dotted name of its enclosing def/class scope."""
+    """Yield each ``ast.Call`` with the dotted name of its enclosing def/class scope.
+
+    Args:
+        node: The AST subtree to walk.
+        scope: The dotted name of ``node``'s enclosing def/class, for recursion.
+    """
     for child in ast.iter_child_nodes(node):
         child_scope = scope
         if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):

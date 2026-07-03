@@ -26,12 +26,12 @@ hooks = [
   {
     id = "end-of-file-fixer",
     name = "✅ check · Fix end of file",
-    exclude = { glob = ["skills/frontend/react-best-practices/**", "skills/frontend/composition-patterns/**", "skills/frontend/react-view-transitions/**", "skills/generic/humanink/**"] }
+    exclude = { glob = ["src/claude_all/skills/frontend/react-best-practices/**", "src/claude_all/skills/frontend/composition-patterns/**", "src/claude_all/skills/frontend/react-view-transitions/**", "src/claude_all/skills/generic/humanink/**"] }
   },
   {
     id = "trailing-whitespace",
     name = "✅ check · Trailing whitespaces",
-    exclude = { glob = ["skills/frontend/react-best-practices/**", "skills/frontend/composition-patterns/**", "skills/frontend/react-view-transitions/**", "skills/generic/humanink/**"] }
+    exclude = { glob = ["src/claude_all/skills/frontend/react-best-practices/**", "src/claude_all/skills/frontend/composition-patterns/**", "src/claude_all/skills/frontend/react-view-transitions/**", "src/claude_all/skills/generic/humanink/**"] }
   },
   {
     id = "debug-statements",
@@ -40,7 +40,7 @@ hooks = [
   {
     id = "mixed-line-ending",
     name = "✅ check · Mixed line ending",
-    exclude = { glob = ["skills/frontend/react-best-practices/**", "skills/frontend/composition-patterns/**", "skills/frontend/react-view-transitions/**", "skills/generic/humanink/**"] }
+    exclude = { glob = ["src/claude_all/skills/frontend/react-best-practices/**", "src/claude_all/skills/frontend/composition-patterns/**", "src/claude_all/skills/frontend/react-view-transitions/**", "src/claude_all/skills/generic/humanink/**"] }
   },
   {
     id = "check-case-conflict",
@@ -147,12 +147,12 @@ hooks = [
     # misspellings + multi-language sample words; exclude it so typos doesn't flag or
     # rewrite those examples. (This is the skill's own "scope-exclude a path" lever,
     # applied to itself.)
-    exclude = { glob = ["skills/generic/prek/**", "skills/generic/humanink/**"] }
+    exclude = { glob = ["src/claude_all/skills/generic/prek/**", "src/claude_all/skills/generic/humanink/**"] }
   }
 ]
 
 # ── Type checking (mypy) ─────────────────────────────────────────────────────
-# Scoped to the installer, scripts/, hooks/ and tools/. Skill-embedded hook.py
+# Scoped to the installer, scripts/, src/claude_all/hooks/ and src/claude_all/tools/. Skill-embedded hook.py
 # files all share the module name "hook", which mypy refuses to check in one
 # batch — those stay covered by ruff + vulture.
 [[repos]]
@@ -162,7 +162,7 @@ hooks = [
   {
     id = "mypy",
     name = "🐍 python · Type-check with mypy",
-    files = '^(claude-all\.py|scripts/.*\.py|hooks/.*\.py|tools/.*\.py)$'
+    files = '^(src/claude_all/cli\.py|scripts/.*\.py|src/claude_all/hooks/.*\.py|src/claude_all/tools/.*\.py)$'
   }
 ]
 
@@ -226,8 +226,8 @@ hooks = [
     name = "🔍 content · Banned project names / artifacts",
     entry = 'busydone|BDD#|[Mm]ini[Ss]tack|</content>|</invoke>',
     language = "pygrep",
-    files = '^(agents|skills|instructions)/',
-    exclude = { glob = ["skills/frontend/react-best-practices/**", "skills/frontend/composition-patterns/**", "skills/frontend/react-view-transitions/**", "skills/generic/humanink/**"] }
+    files = '^src/claude_all/(agents|skills|instructions)/',
+    exclude = { glob = ["src/claude_all/skills/frontend/react-best-practices/**", "src/claude_all/skills/frontend/composition-patterns/**", "src/claude_all/skills/frontend/react-view-transitions/**", "src/claude_all/skills/generic/humanink/**"] }
   }
 ]
 

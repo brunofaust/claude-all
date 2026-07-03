@@ -1,0 +1,17 @@
+# codecongruence config for claude-all.
+# See https://github.com/brunofaust/codecongruence for the full option reference
+# (codecongruence.toml.example in that repo documents every rule/key).
+
+[rules.duplicate_functions]
+# Hook scripts under src/claude_all/hooks/ and every skill's hook.py companion
+# are deployed as individually-symlinked, standalone single files (see cli.py's
+# hook_symlink_dest / install_standalone_hook) — they cannot share code via a
+# sibling import. regression-gates/checkers/*.py are copy-into-your-project
+# templates (see that skill's SKILL.md), meant to be lifted as single files
+# into a consuming repo's own CI. Both patterns are expected to duplicate small
+# dispatch helpers (main/remind/ask/nudge/iter_py_files) by design.
+exclude = [
+  "src/claude_all/hooks/**",
+  "src/claude_all/skills/**/hook.py",
+  "src/claude_all/skills/generic/regression-gates/checkers/**",
+]
