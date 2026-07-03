@@ -5,7 +5,7 @@ description: >-
   "alembic duplicate revision", "divergent heads", "any locking risks in this migration", "check
   migration before deploy". Returns risk-scored report (BLOCK/WARN/INFO). Read-only — never applies
   migrations; runs only read-only alembic introspection (heads / current / history).
-model: claude-sonnet-4-6
+model: claude-sonnet-5
 tools:
   - Read
   - Glob
@@ -111,7 +111,7 @@ op.add_column(
     "orders",
     sa.Column("status", sa.String(), nullable=False, server_default="pending"),
 )
-````
+```
 
 ## ⚠ WARN (should fix)
 
@@ -151,8 +151,7 @@ ______________________________________________________________________
 - `uv run alembic heads` → should show 1 head (no unresolved branches)
 - `uv run alembic check` → should report no drift
 - `uv run alembic upgrade head --sql > /tmp/m.sql && less /tmp/m.sql` → eyeball generated SQL
-
-```
+````
 
 ## Severity guidance
 
@@ -174,4 +173,3 @@ If you can't tell:
 - Don't pad the report — every BLOCK/WARN/INFO must be actionable.
 - If the migration is clean, return one line: `✓ migration 134_add_status_to_orders.py — clean, no issues.`
 - Pair with the `alembic-migration` skill — both reference the same patterns.
-```

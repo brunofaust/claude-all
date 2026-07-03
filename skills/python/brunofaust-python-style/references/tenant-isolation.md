@@ -63,7 +63,7 @@ DATABASE_URL=postgresql://tenant_<A>:pw@host:5432/app
 
 **Vector B — session GUC (one role).** One app role; the tenant rides in
 `app.current_tenant`, set either by the **app** (`SET LOCAL`, recommended for prod —
-this is the busydone plan: set `org_id` on every handler from the payload) or, for
+this is the myapp plan: set `org_id` on every handler from the payload) or, for
 no-code-change tests, baked into the DSN at connect time:
 
 ```
@@ -94,7 +94,7 @@ NULL` matches no row → **unset tenant denies everything** (reads return empty,
 fail the `WITH CHECK`). A query that forgot its tenant filter can now only ever see
 its own tenant's rows — the leak is structurally impossible, not merely discouraged.
 
-Put this in **migrations** so prod *and* the MiniStack DB (provisioned from the same
+Put this in **migrations** so prod *and* the LocalStack DB (provisioned from the same
 migrations) carry it — then e2e validates the real guard, not a test-only shim. If
 you'd rather start test-only, create the policies in a pytest-init fixture.
 
@@ -161,7 +161,7 @@ row as *"this session reached into another tenant's data,"* not a byte-exact
 returned-row count. For an exact "the result the app **got** contained foreign rows"
 check, inspect returned rows **app-side** — a SQLAlchemy `after_cursor_execute` hook
 or result wrapper in the **test** connection (not product code). That's in-process,
-so for real MiniStack lambdas the server-side policy (accept the over-report) or
+so for real LocalStack lambdas the server-side policy (accept the over-report) or
 `pgaudit` are the no-code options.
 
 Other caveats: a function call per scanned row (cost — scope to suspect tables / e2e,
@@ -190,12 +190,12 @@ WHERE declared_tenant IS DISTINCT FROM row_tenant;   -- any row = a leak
 Empty = no session ever touched a foreign tenant. Group by `test_id` for a per-test
 leak report.
 
-## e2e with real (unchanged) lambdas in MiniStack
+## e2e with real (unchanged) lambdas in LocalStack
 
-The lambdas in e2e are the **real prod binaries** running in MiniStack — you can't
+The lambdas in e2e are the **real prod binaries** running in LocalStack — you can't
 edit them. Two paths, depending on whether the handler already sets the tenant:
 
-- **Handler sets the tenant from the payload (the busydone plan).** Then the real
+- **Handler sets the tenant from the payload (the myapp plan).** Then the real
   lambda code sets `app.current_tenant` itself from its scoped event — **e2e needs
   nothing extra**. This dovetails with two existing rules: scoped processes
   ([`scoped-processes.md`](scoped-processes.md)) make each invocation single-tenant,
@@ -238,7 +238,7 @@ WHERE a.attname = 'tenant_id' AND c.relkind = 'r'
 
 - App-side `WHERE tenant_id` is still your first line; this is **defense in depth**.
 - The no-code-change e2e path is a **detector**, not prod enforcement — prod gets the
-  guard only when the app sets the tenant (the busydone plan) or you route per-tenant
+  guard only when the app sets the tenant (the myapp plan) or you route per-tenant
   connections.
 - Everything here is env-gated: roles/policies/audit are created only when the
   isolation switch is on, so prod is byte-for-byte unchanged when you don't opt in.
@@ -255,4 +255,3 @@ WHERE a.attname = 'tenant_id' AND c.relkind = 'r'
 - [ ] `pytest_sessionfinish` asserts no `declared_tenant <> row_tenant` rows.
 - [ ] Coverage test asserts every `tenant_id` table has RLS + a policy.
 - [ ] e2e: real handler sets the tenant from the scoped payload, or env-inject as fallback.
-</content>

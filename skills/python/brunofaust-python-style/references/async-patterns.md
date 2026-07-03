@@ -816,5 +816,5 @@ async with storage_client() as client:
 | Database batch operations  | 50    | Throughput limits            |
 | File processing / logging  | 25    | Moderate parallelism         |
 | API key validation         | 10    | Balance speed vs. throttling |
-| Test resource creation     | 20    | Fast but safe for MiniStack  |
+| Test resource creation     | 20    | Fast but safe for LocalStack  |
 | General external API calls | 10    | Conservative default         |

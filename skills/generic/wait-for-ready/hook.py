@@ -14,7 +14,9 @@ it is NOT rendered as a hook error) pointing at the `wait-for-ready` skill, whic
 polls until the service/container is actually healthy (timeout + interval). This
 hook is installed alongside that skill, so the skill it points to is always present.
 
-Bypass: set CC_ALLOW_SLEEP=1 to skip the check.
+Bypass: prefix the command with `CC_ALLOW_SLEEP=1 ` (inline marker in the command
+string — the primary escape hatch). Setting CC_ALLOW_SLEEP in the hook's own
+environment also works.
 """
 
 from __future__ import annotations
@@ -58,10 +60,16 @@ def main() -> int:
         return 0
 
     if os.environ.get("CC_ALLOW_SLEEP"):
-        return 0  # explicit bypass
+        return 0  # explicit bypass via the hook's own environment
 
     command: str = data.get("tool_input", {}).get("command", "")
     if not command:
+        return 0
+
+    # Inline marker bypass: `CC_ALLOW_SLEEP=1 sleep 30 && ...` sets the var in the
+    # COMMAND's env, not the hook's — accept it as an explicit, auditable override.
+    # Anchored to a LEADING env assignment: a mere mention must not bypass.
+    if re.match(r"\s*(?:\w+=\S*\s+)*CC_ALLOW_SLEEP=1\b", command):
         return 0
 
     sleeps = [float(m) for m in SLEEP_RE.findall(command)]
@@ -82,7 +90,8 @@ def main() -> int:
         "(too short → probe fails; too long → wasted wait). Use the `wait-for-ready` skill to poll "
         "the URL/container until it is actually healthy (with a timeout + interval) instead of a "
         "fixed `sleep`. For a genuinely long wait, run it in the background rather than blocking. "
-        "Set CC_ALLOW_SLEEP=1 to bypass when a literal fixed sleep is truly intended."
+        "Prefix the command with `CC_ALLOW_SLEEP=1 ` to bypass when a literal fixed sleep is "
+        "truly intended."
     )
 
 

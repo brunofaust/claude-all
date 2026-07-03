@@ -1,7 +1,7 @@
 ---
 name: aws-architecture
 description: >-
-  AWS serverless + event-driven architecture patterns. Use when: designing Lambda functions, picking between SQS/SNS/EventBridge, sizing DynamoDB capacity, designing Step Functions workflows, choosing API Gateway flavour, designing ECS / Fargate services, reviewing IaC (Terraform/CloudFormation) for AWS architectural fitness, debugging Lambda cold starts, sizing visibility timeouts, picking partition keys, designing DLQ + retry strategies, or reviewing AWS cost / performance trade-offs.
+  AWS serverless + event-driven architecture patterns. Use when: designing Lambda functions, picking between SQS/SNS/EventBridge, sizing DynamoDB capacity, designing Step Functions workflows, choosing API Gateway flavour, designing ECS / Fargate services, reviewing IaC (Terraform/CloudFormation) for AWS architectural fitness, debugging Lambda cold starts, sizing visibility timeouts, picking partition keys, designing DLQ + retry strategies, or reviewing AWS cost / performance trade-offs. Not for executing terraform/aws commands — those go through the deployer/inspector agents (terraform-deployer, aws-lambda-deployer, AWS read-only inspectors).
 disable-model-invocation: false
 user-invocable: true
 ---
@@ -11,6 +11,17 @@ user-invocable: true
 Anchored to **AWS Well-Architected Framework** (Reliability, Performance, Cost, Operational Excellence, Security, Sustainability) + the **Serverless Application Lens**. Focus: serverless + event-driven workloads at production scale.
 
 This skill encodes the "what to do" and the "why" — for execution of `terraform`/`aws` commands use the existing agents (`terraform-deployer`, `aws-lambda-deployer`, AWS read-only inspectors).
+
+## Table of references
+
+Deeper recipes live under `references/`. Read the matching file before deep work in that area:
+
+| If you are…                                                                  | Read                                                                  |
+| ----------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| Making an async Lambda idempotent (Powertools recipe + JMESPath key matrix)  | [`references/idempotency.md`](references/idempotency.md)              |
+| Choosing RDS vs DynamoDB per table, or planning a relational → DDB migration | [`references/rds-vs-dynamodb.md`](references/rds-vs-dynamodb.md)      |
+| Organizing boto3/aiobotocore code (`core/aws/` owner-per-service layout)     | [`references/client-wrappers.md`](references/client-wrappers.md)      |
+| Recording an architecture decision (ADR template + worked example)           | [`references/adr-template.md`](references/adr-template.md)            |
 
 ______________________________________________________________________
 
@@ -29,50 +40,7 @@ ______________________________________________________________________
 
 Every async-invocable Lambda (SQS, SNS, EventBridge, S3) **must be idempotent**. AWS re-invokes on failure. Idempotency keys → DynamoDB conditional writes, or the AWS Lambda Powertools idempotency utility.
 
-Concrete Powertools recipe (DynamoDB-backed persistence store):
-
-```python
-from aws_lambda_powertools.utilities.idempotency import (
-    DynamoDBPersistenceLayer,
-    idempotent,
-    IdempotencyConfig,
-)
-
-persistence_layer = DynamoDBPersistenceLayer(
-    table_name="idempotency-store",
-)
-
-config = IdempotencyConfig(
-    event_key_jmespath="ticket_key",  # uniquely identifies the request
-    expires_after_seconds=3600,  # 1h dedup window (also DDB TTL)
-    raise_on_no_idempotency_key=True,  # fail loud on missing key
-)
-
-
-@idempotent(config=config, persistence_store=persistence_layer)
-def handler(event, context):
-    # business logic — guaranteed once-per-key within the TTL window
-    ...
-```
-
-The idempotency table should have:
-
-- PK `id` (string), `expiration` attribute as DynamoDB TTL → free auto-cleanup.
-- On-demand billing (writes are spiky, one per invocation).
-
-**JMESPath decision matrix** — which key uniquely identifies the request:
-
-| Event shape                                          | JMESPath                                                 | Why                                                                 |
-| ---------------------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------- |
-| API Gateway sync request with idempotency-key header | `headers."Idempotency-Key"`                              | Client-supplied, RFC-standard idempotency                           |
-| SQS message with explicit business key               | `Records[0].body.<field>`                                | Use the business identifier (order_id, ticket_key)                  |
-| EventBridge event                                    | `detail.<unique_field>`                                  | The domain event ID, not `id` (which is the bus event ID, fine too) |
-| S3 ObjectCreated                                     | `Records[0].s3.object.key` + `Records[0].s3.object.eTag` | Key alone repeats on overwrite — pair with ETag                     |
-| No natural key, full-event hash acceptable           | omit `event_key_jmespath`, set `use_local_cache=False`   | Powertools hashes the entire event                                  |
-| Multiple fields jointly unique                       | `[customer_id, order_id]`                                | JMESPath returns a list; Powertools hashes it                       |
-
-If `raise_on_no_idempotency_key=True` and the JMESPath returns `None`, the
-Lambda fails — preferable to silently dedup nothing.
+Concrete Powertools recipe (DynamoDB-backed persistence store) + the JMESPath decision matrix for picking the idempotency key per event shape → [`references/idempotency.md`](references/idempotency.md).
 
 ### Error handling per invocation type
 
@@ -105,7 +73,7 @@ ______________________________________________________________________
 | ---------- | ------------------------------------- | ------------------------------------------------------- |
 | Order      | Best-effort                           | Strict, per `MessageGroupId`                            |
 | Delivery   | At-least-once                         | Exactly-once (with dedup ID, 5-min window)              |
-| Throughput | ~unlimited                            | 300 msg/s (3000/s with high-throughput mode, per-group) |
+| Throughput | ~unlimited                            | 300 msg/s per queue without batching (3,000/s with batching); high-throughput mode raises the per-queue cap much higher (tens of thousands/s, region-dependent) — check current quotas |
 | Use when   | High throughput, order doesn't matter | Ordered events per customer / aggregate                 |
 
 ### Visibility timeout
@@ -219,60 +187,8 @@ Don't single-table-design just because you read about it. **Three-or-fewer table
 
 ### RDS vs DynamoDB — decide per table, by access pattern
 
-This is a *per-table* decision, not a whole-app one — most real systems use **both** (polyglot
-persistence): DynamoDB for the connectionless/ephemeral tables, RDS/Aurora for the relational core.
-
-**Use DynamoDB for the table when ANY of these hold:**
-
-- **High Lambda (or other serverless) fan-out without RDS Proxy.** Each concurrent Lambda holds an
-  RDS connection; without RDS Proxy you hit `max_connections` fast. DynamoDB is connectionless
-  (HTTPS, IAM-auth) — no pool to exhaust. (With RDS Proxy you *can* fan out to RDS — so this point is
-  conditional on not having/ wanting the proxy.)
-- **Insert-only / append-only** — event logs, audit trails, time-series keyed by entity. No updates,
-  no joins.
-- **Needs TTL auto-expiry** — sessions, ephemeral state, caches. DynamoDB TTL deletes expired items
-  for free (~48h async window); doing this in RDS means a reaper job.
-- **Idempotency keys / distributed locks** — single-item atomic conditional writes
-  (`attribute_not_exists`) are exactly DynamoDB's strength; pair with TTL to expire keys.
-- **Access is by a known key** — get/put by partition key (± sort key), no ad-hoc `WHERE`.
-- **Extreme or spiky write throughput, single-digit-ms point latency, or serverless scale-to-zero.**
-
-**Use RDS / Aurora for the table when ANY of these hold:**
-
-- **Joins** across entities.
-- **Multi-row / multi-table ACID transactions** (DynamoDB `TransactWriteItems` caps at 100 items and
-  has no cross-"table" relational semantics).
-- **Ad-hoc queries, reporting, aggregations, analytics** where the query shape isn't known up front.
-- **Rich relational integrity** — foreign keys, `CHECK`/uniqueness constraints, referential cascades.
-- **Querying on many attributes** (DynamoDB needs a key/GSI designed per access pattern; max 20 GSIs).
-
-Rule of thumb: if you can write down every access pattern up front and they're all key-based →
-DynamoDB. If queries are relational/variable/transactional → RDS. When unsure, **RDS is the safer
-default** (you can always add a DynamoDB table for the specific hot/ephemeral access pattern later).
-
-### Relational → DynamoDB migration: when it's worth it
-
-Moving an existing RDS/Postgres workload to DynamoDB is a big, often-irreversible bet. Decide on the
-*access patterns*, not the hype. Run this checklist BEFORE migrating:
-
-- **Enumerate every query first.** List all current SQL access patterns (point lookups, ranges,
-  joins, aggregations, ad-hoc reporting). DynamoDB serves only patterns you designed a key/GSI for —
-  there is no `JOIN`, no ad-hoc `WHERE`, no `GROUP BY`. If the app does multi-table joins or analysts
-  run arbitrary queries, DDB is the wrong store (or needs a separate analytics path: S3 export +
-  Athena).
-- **What actually drives the move?** Good reasons: extreme write throughput, predictable
-  single-digit-ms point lookups at scale, serverless scale-to-zero, or **RDS connection-limit /
-  RDS-Proxy pain** under high Lambda fan-out (each Lambda holds a connection; DDB is connectionless).
-  Bad reasons: "NoSQL is modern", "joins feel slow" (add an index first).
-- **Cost compare honestly.** DDB on-demand at high steady throughput can cost *more* than a
-  right-sized RDS instance. Model write/read units against real traffic; don't assume DDB is cheaper.
-- **Relational integrity moves to the app.** No foreign keys, no transactions across "tables" beyond
-  `TransactWriteItems` (100-item cap), no `CHECK` constraints. You own consistency now.
-- **Migration is expand-contract, not big-bang.** Dual-write to both stores, backfill DDB from a
-  Postgres snapshot, shadow-read and diff, then cut over. Keep Postgres as the rollback for a while.
-
-Default verdict: if you can't write down every access pattern up front and they're all key-based,
-**keep Postgres**. Migrate only when a specific scale/throughput/connection driver forces it.
+A *per-table* decision (most real systems use both). Full criteria (when DynamoDB / when RDS) + the relational → DynamoDB migration checklist → [`references/rds-vs-dynamodb.md`](references/rds-vs-dynamodb.md).
+Rule of thumb: every access pattern known up front and key-based → DynamoDB; relational / variable / transactional → RDS (the safer default when unsure).
 
 ### On-demand vs provisioned
 
@@ -396,46 +312,10 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## 10.5 AWS client wrappers — one owner per service (`core/aws/`)
+## 10.5 AWS client wrappers — one owner per service
 
-How you *organize the boto3 code* matters as much as the architecture. Contain every AWS SDK call
-behind a thin async wrapper, one file per service, in a settings-free `core/aws/` package:
-
-```
-core/aws/
-├── base.py        # shared AWSClient base + process-wide aiobotocore session reuse
-├── s3.py          # S3Client(AWSClient)
-├── sqs.py         # SQSClient(AWSClient)
-├── dynamodb.py    # DynamoDBClient(AWSClient)
-├── sns.py  ├ secrets.py  ├ sfn.py  ├ logs.py  └ …   # one file per service
-```
-
-Rules:
-
-- **One file per service.** `core/aws/s3.py` is THE only place `aiobotocore`'s S3 client is created.
-  Nothing else imports the SDK (enforce with ruff `banned-api` / TID251 — see the
-  `brunofaust-python-style` external-system-ownership reference).
-- **Share one session in `base.py`.** Lambda reuses the execution environment across invocations, so
-  a process-wide `aiobotocore` session + per-service client cache avoids re-creating clients on every
-  warm invoke (a real cold-vs-warm latency win):
-
-  ```python
-  # core/aws/base.py
-  _session: AioSession | None = None
-  clients: dict[str, Any] = {}          # service_name -> client, reused across invocations
-
-  def get_session() -> AioSession:
-      global _session
-      if _session is None:
-          _session = aio_get_session()
-      return _session
-  ```
-
-- **Settings-free.** Region / table names / bucket names are passed in (constructor args or
-  `Settings` injected by the caller), never imported inside `core/aws/`. That keeps the package
-  extractable as a shared library across services.
-- **`core/aws/` ≠ `aws_resources/`.** `core/aws/` holds the reusable *client wrappers*;
-  `aws_resources/` holds the *deployable units* (Lambda handlers, ECS tasks) that consume them.
+Contain every AWS SDK call behind a thin async wrapper, one file per service, in a settings-free `core/aws/` package.
+Layout, session-reuse pattern, and the ownership rules → [`references/client-wrappers.md`](references/client-wrappers.md).
 
 ______________________________________________________________________
 
@@ -468,105 +348,8 @@ ______________________________________________________________________
 
 ## 11. Architecture Decision Records (ADRs)
 
-Every non-trivial AWS design choice (DynamoDB vs RDS, SNS vs EventBridge,
-single-table vs multi-table, HTTP API vs REST API, Lambda vs ECS, sync vs
-async invocation, VPC vs no-VPC, ECR vs ZIP deployment) must produce an ADR
-checked into `docs/adr/` (or wherever the project keeps them).
-
-ADRs are short — one page, max. They exist to answer the question "why is it
-this way?" 6 months later when no one remembers the trade-off.
-
-### Template
-
-```markdown
-# ADR-NNN: <short imperative title>
-
-## Status
-
-Proposed | Accepted | Deprecated | Superseded by ADR-XXX
-
-## Context
-
-What forced this decision? One paragraph. Include the constraints: scale,
-latency targets, cost budget, team skill, existing infrastructure, compliance.
-
-## Decision
-
-The choice, stated as a sentence. "We will use X."
-
-## Consequences
-
-### Positive
-
-- ...
-- ...
-
-### Negative
-
-- ...
-- ...
-
-### Alternatives considered
-
-- **Option B**: why it was rejected (one line)
-- **Option C**: why it was rejected (one line)
-
-## Date
-
-YYYY-MM-DD
-```
-
-### Example — picking between SNS and EventBridge
-
-```markdown
-# ADR-007: Use EventBridge for cross-account domain events
-
-## Status
-Accepted
-
-## Context
-Datalake silver layer publishes "entity-updated" events that need to reach:
-3 internal consumers (Lambda), 1 external partner account (different AWS
-org), and a future replay/audit consumer. Throughput: ~500 events/sec peak.
-
-## Decision
-Use EventBridge custom bus with cross-account rules + S3 archive for replay.
-
-## Consequences
-
-### Positive
-- Filter rules per consumer (SNS would broadcast everything)
-- Cross-account fanout without IAM gymnastics on the publisher side
-- Built-in archive + replay (90-day window) — no separate S3 archive pipeline
-- Schema registry integration when we add CloudEvents
-
-### Negative
-- ~5x cost vs SNS at this volume ($1/M vs $0.50/M, plus archive storage)
-- 256 KB event size limit (we're at 8 KB avg, fine for now)
-- Slightly higher latency (~150 ms p99 vs SNS ~50 ms p99) — acceptable for
-  async domain events
-
-### Alternatives considered
-- **SNS fanout**: cheaper, lower latency, but no filtering = consumer Lambda
-  cold-start cost on every event regardless of relevance
-- **Kinesis Data Streams**: overkill for 500 evt/s, shard management overhead
-- **SQS direct per consumer**: publisher would need to know every consumer
-  (tight coupling)
-
-## Date
-2026-04-15
-```
-
-### When NOT to write an ADR
-
-- Naming choices (use the project naming convention)
-- Library version bumps that don't change architecture
-- Choices that are obviously determined by an existing constraint ("we use
-    DynamoDB because we already use DynamoDB everywhere")
-- Choices reversible in < 1 day
-
-ADRs are for **load-bearing** decisions that someone in 6 months will want to
-understand and might second-guess.
+Every non-trivial AWS design choice (DynamoDB vs RDS, SNS vs EventBridge, Lambda vs ECS, sync vs async, VPC vs no-VPC, …) must produce a one-page ADR checked into `docs/adr/`.
+Template + worked example + the when-NOT-to-write list → [`references/adr-template.md`](references/adr-template.md).
 
 ______________________________________________________________________
 

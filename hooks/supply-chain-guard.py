@@ -28,8 +28,11 @@ within days). Date sources, cheapest first:
   lookup — no cache (installs are rare), under a time budget with a short
   per-request timeout, and it FAILS OPEN (an unreachable registry never blocks).
 
-Covers npm/pnpm/yarn/bun and pip/pipx/uv/poetry. Env:
-  CC_SUPPLY_CHAIN_OK=1            silence the whole hook
+Covers npm/pnpm/yarn/bun and pip/pipx/uv/poetry.
+
+Bypass: prefix the command with `CC_SUPPLY_CHAIN_OK=1 ` (inline marker in the
+command string — the primary escape hatch). Env vars:
+  CC_SUPPLY_CHAIN_OK=1            silence the whole hook (hook's own env)
   CC_SUPPLY_CHAIN_NO_NETWORK=1   skip live lookups (uv.lock dates still checked)
   CC_SUPPLY_CHAIN_COOLDOWN_DAYS  cooldown window in days (default 7)
 """
@@ -407,6 +410,12 @@ def main() -> int:
     if not command:
         return 0
 
+    # Inline marker bypass: `CC_SUPPLY_CHAIN_OK=1 npm install x` sets the var in the
+    # COMMAND's env, not the hook's — accept it as an explicit, auditable override.
+    # Anchored to a LEADING env assignment: a mere mention must not bypass.
+    if re.match(r"\s*(?:\w+=\S*\s+)*CC_SUPPLY_CHAIN_OK=1\b", command):
+        return 0
+
     cwd = Path(data.get("cwd") or os.getcwd())
     eco, mode, named, req = classify(command)
     cooldown: list[str] = []
@@ -422,7 +431,8 @@ def main() -> int:
     return nudge(
         "[supply-chain-guard] This command installs packages. Supply-chain checks:\n"
         f"{body}\n"
-        "Proceed only if the change is intended. Set CC_SUPPLY_CHAIN_OK=1 to silence this reminder."
+        "Proceed only if the change is intended. Prefix the command with `CC_SUPPLY_CHAIN_OK=1 ` "
+        "to silence this reminder."
     )
 
 

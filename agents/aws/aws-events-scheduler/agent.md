@@ -102,10 +102,10 @@ For schedules (Scheduler service):
 - state:      ENABLED
 - schedule:   none
 **Pattern (parsed):**
-  source:       ["jira"]
+  source:       ["myapp.orders"]
   detail-type:  ["IssueCreated", "IssueUpdated"]
   detail:
-    fields.status.new.name: ["AI Analysis", "AI Coding"]
+    fields.status.new.name: ["Pending", "Approved"]
 **Targets (2):**
   - Lambda  myapp-dev-dispatcher
     InputTransformer:

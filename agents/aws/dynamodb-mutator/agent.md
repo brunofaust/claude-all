@@ -5,7 +5,7 @@ description: >-
   "delete the run-lock", "clear the lock", "reset step_progress for X", "DDB write". Requires explicit
   confirmation ("yes delete", "yes write", "yes reset") in the prompt. Shows exact key + table +
   region before executing. Refuses writes on `*-prod*` tables without "prod delete confirmed".
-model: claude-sonnet-4-6
+model: claude-sonnet-5
 tools:
   - Bash
   - Read

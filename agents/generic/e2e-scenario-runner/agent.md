@@ -18,7 +18,7 @@ Use the MCP tools the scenario needs (Atlassian, Slack, etc.) plus `Bash` (AWS C
 
 The user provides a free-form description of the scenario. Parse it into discrete steps. Typical shape:
 
-> "Set ticket TICK-1 status to 'AI Analysis' via Atlassian. Delete its comments from the last 48 hours. Invoke the dispatcher Lambda. Wait up to 60s for the ticket to appear in DDB table myapp-dev-tickets. Check Postgres for the new step row. Scan CloudWatch logs of myapp-dev-dispatcher for errors. Tell me where it broke."
+> "Set ticket TICK-1 status to 'In Review' via Atlassian. Delete its comments from the last 48 hours. Invoke the dispatcher Lambda. Wait up to 60s for the ticket to appear in DDB table myapp-dev-tickets. Check Postgres for the new step row. Scan CloudWatch logs of myapp-dev-dispatcher for errors. Tell me where it broke."
 
 Decompose into a step list:
 
@@ -62,7 +62,7 @@ Run all of these directly yourself — as a subagent you CANNOT dispatch other a
 1. **Production safety** — if env appears to be `prod`/`production` and any step mutates state (Atlassian transition, Lambda invoke with non-test payload, DB write), CONFIRM with the caller before running. Default scenarios should be `dev`/`staging`/`test`.
 1. **Mutation reversal** — by default, no cleanup. If the user said "leave the ticket back as it was" or "rollback after", capture original state before mutating, restore on completion.
 1. **Time budget** — total scenario timeout 5 min default. If user expects longer (e.g. 30-min ECS deploy + verify), say so.
-1. **Dev-environment mutations are allowed when explicitly declared in the scenario.** Patterns like "clear the dispatcher run-lock", "delete step_progress for TICK-3", "reset content_hash_processed for project 3", "transition TICK-1 back to AI Coding" are legitimate dev-iteration setup. The agent runs them when:
+1. **Dev-environment mutations are allowed when explicitly declared in the scenario.** Patterns like "clear the dispatcher run-lock", "delete step_progress for TICK-3", "reset processed_flag for project 3", "transition TICK-1 back to Approved" are legitimate dev-iteration setup. The agent runs them when:
     - env is `dev` / `staging` / `test` (NOT `prod`)
     - the mutation is in the scenario description (not improvised mid-execution)
     - the mutation precedes the trigger step, not after a failed verify
@@ -89,7 +89,7 @@ Run all of these directly yourself — as a subagent you CANNOT dispatch other a
 
 ## Steps
 
-### 1. ✓ Atlassian: TICK-1 → "AI Analysis" (320ms)
+### 1. ✓ Atlassian: TICK-1 → "In Review" (320ms)
 Transition ID 31, prior status "Backlog".
 
 ### 2. ✓ Atlassian: deleted 4 comments < 48h old (1.2s)
@@ -100,7 +100,7 @@ Payload: `{"ticket_key": "TICK-1", "test_mode": true}`
 Response: `{"statusCode": 200, "body": "OK"}`
 
 ### 4. ✗ 🔴 BLOCK — DDB table myapp-dev-tickets: ticket TICK-1 not arrived after 60s (10 attempts)
-Expected partition key `org_id=BDD#tenant-1`, sort key `ticket_key=TICK-1`.
+Expected partition key `org_id=ORG#tenant-1`, sort key `ticket_key=TICK-1`.
 Last attempt: empty result.
 
 ### 5. ⊙ skipped — Postgres verify (depends on DDB step)
@@ -133,7 +133,7 @@ org = event['org_id']
 ```python
 # 1. Discover transition ID (run once per project unless cached)
 mcp__atlassian__getTransitionsForJiraIssue(issueIdOrKey="TICK-1")
-# Returns list with names — find "AI Analysis" → its `id`
+# Returns list with names — find "In Review" → its `id`
 mcp__atlassian__transitionJiraIssue(issueIdOrKey="TICK-1", transition={"id": "31"})
 ```
 

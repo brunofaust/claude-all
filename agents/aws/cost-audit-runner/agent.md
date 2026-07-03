@@ -5,7 +5,7 @@ description: >-
   resources", "cost cleanup sweep", "what can I delete to save money". Fans out read-only describe/list
   calls across Lambda/EC2/CloudWatch/RDS/S3/DynamoDB/Secrets and returns prioritized findings with
   non-executed `fix_commands`. Strictly read-only — never executes the fixes it suggests.
-model: claude-sonnet-4-6
+model: claude-sonnet-5
 tools:
   - Bash
   - Read

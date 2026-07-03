@@ -5,7 +5,7 @@ description: >-
   codecongruence", "make prek pass". Clears mechanical tier with `ruff --fix`/`ruff format` first,
   then fixes judgment findings root-cause only, one category at a time. Max 2 attempts per category
   then surfaces verbatim. Never silences findings with `# noqa`/`# type: ignore`/`--no-verify`.
-model: claude-sonnet-4-6
+model: claude-sonnet-5
 tools:
   - Bash
   - Read

@@ -5,7 +5,7 @@ description: >-
   alert X", "what's wrong in prod/dev", "trace failure through pipeline", "got paged for". Orchestrates
   cloudwatch-inspector/sqs-monitor/dynamodb-inspector/step-functions-tracer and correlates into a
   unified VERBATIM-error timeline. Never makes destructive calls without explicit confirmation.
-model: claude-sonnet-4-6
+model: claude-sonnet-5
 tools:
   - Bash
   - Read
@@ -69,9 +69,9 @@ Before the timeline / per-step blocks, ALWAYS emit:
 
 ```
 **BLAST RADIUS** (impact before details)
-- Services touched: <list>  (e.g. dispatcher Lambda, embed SQS, RDS, Step Functions)
+- Services touched: <list>  (e.g. myapp-dev-dispatcher Lambda, myapp-dev-events SQS, RDS, Step Functions)
 - % traffic affected: <estimate or "unknown — no traffic data fetched">
-- Downstream consumers blocked: <list> (e.g. doc-loader, post-results)
+- Downstream consumers blocked: <list> (e.g. myapp-dev-worker, myapp-dev-notifier)
 - Time-since-first-error: <duration> (e.g. "14m since 22:14:09Z first ERROR")
 - Auto-recovery signal: yes / no / unclear
 - User-facing impact: yes / no (e.g. API errors visible, async ticket processing stalled)
@@ -137,14 +137,14 @@ Anti-pattern (NEVER):
 
 - ❌ `22:38Z  [SFN]  ECS task role missing ssm:GetParameter` ← paraphrase that sent the team chasing a false IAM lead
 - ❌ `22:38Z  [CW]   Permission denied on SSM` ← interpretation
-- ❌ `[ROOT CAUSE] IAM policy gap on invoke-service role` ← invented summary without quoting the actual error
+- ❌ `[ROOT CAUSE] IAM policy gap on worker role` ← invented summary without quoting the actual error
 
 Correct:
 
 ```
 22:38:09Z  [SFN / ProcessTicket]  EXACT FAILURE — cause (verbatim):
   An error occurred (AccessDeniedException) when calling the GetParameter
-  operation: User: arn:aws:sts::123456789012:assumed-role/myapp-dev-invoke-service/...
+  operation: User: arn:aws:sts::123456789012:assumed-role/myapp-dev-worker/...
   is not authorized to perform: ssm:GetParameter on resource:
   arn:aws:ssm:us-east-1:123456789012:parameter/myapp/dev/secret
   because no identity-based policy allows the ssm:GetParameter action

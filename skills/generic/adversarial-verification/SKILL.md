@@ -1,7 +1,7 @@
 ---
 name: adversarial-verification
 description: >-
-  Evidence-first verification discipline. Use BEFORE claiming work complete, before opening a PR, after applying a fix, before saying "tests pass" / "it works" / "the bug is fixed". The rule: no success word without a fresh command run quoted verbatim. Tries to BREAK the change instead of confirming it. Pairs with `test-runner` (executor) and `e2e-scenario-runner` (multi- service probe). Synthesized from obra/superpowers `verification-before- completion`, alirezarezvani/claude-skills `adversarial-reviewer`, robertoecf/adversarial-review.
+  Evidence-first verification discipline. Use BEFORE claiming work complete, before opening a PR, after applying a fix, before saying "tests pass" / "it works" / "the bug is fixed". The rule: no success word without a fresh command run quoted verbatim. Tries to BREAK the change instead of confirming it. Pairs with `test-runner` (executor) and `e2e-scenario-runner` (multi-service probe). Synthesized from obra/superpowers `verification-before-completion`, alirezarezvani/claude-skills `adversarial-reviewer`, robertoecf/adversarial-review.
 disable-model-invocation: false
 user-invocable: true
 ---
@@ -105,23 +105,18 @@ Quote what you ran + what you observed. If you can't think of a failure case, th
 
 After step 5:
 
-```
+````
 **STATUS:** PASS | FAIL | PARTIAL
 
 **Claim:** <single sentence, observable, no hedging>
 
 **Evidence (verbatim):**
 ```
-
 $ pytest tests/test_auth.py::test_token_expiry -x --tb=short
-
-=== =========================== test session ==============================
-
+============================= test session =============================
 collected 1 item
 tests/test_auth.py::test_token_expiry PASSED [100%]
-
-=== ===================== 1 passed in 0.42s =======================
-
+============================ 1 passed in 0.42s ==========================
 ```
 
 **Tried-to-break with:**
@@ -132,7 +127,7 @@ tests/test_auth.py::test_token_expiry PASSED [100%]
 **Regression check:**
 - `git stash && pytest tests/test_auth.py::test_token_expiry` → FAILED (test correctly exercises the bug)
 - `git stash pop && pytest ...` → PASSED (fix restored)
-```
+````
 
 For `PARTIAL`: list what passed + what's untested + what would need to change to upgrade to PASS.
 

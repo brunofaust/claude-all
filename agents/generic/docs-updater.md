@@ -5,7 +5,7 @@ description: >-
   the README", "document this change", "the auth flow changed, update docs". Detects which docs exist
   (CLAUDE.md, ARCHITECTURE.md, README.md, CHANGELOG.md), analyzes recent code changes, proposes and
   applies specific diffs after confirmation.
-model: claude-sonnet-4-6
+model: claude-sonnet-5
 tools:
   - Bash
   - Read

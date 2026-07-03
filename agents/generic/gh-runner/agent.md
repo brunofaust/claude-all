@@ -181,7 +181,7 @@ Cross-repo search:
 **Search:** "admin invite" • prs • is:open  •  matches: 4
 
 - octocat/foo#23   feat: bulk admin invite           5d ago
-- myapp/main#287  feat(admin): bulk invite UI     2d ago
+- myorg/myapp#287  feat(admin): bulk invite UI     2d ago
 - ...
 ```
 
@@ -189,7 +189,7 @@ Cross-repo search:
 
 ```
 **Repo:** brunofaust/myapp  •  default branch: main  •  stars: 12  •  forks: 0
-**Description:** Near-real-time CDC datalake for Acme Inc.
+**Description:** Example service for Acme Inc.
 **Topics:** aws, python, cdc, parquet, delta-lake
 **Visibility:** private  •  License: none
 ```

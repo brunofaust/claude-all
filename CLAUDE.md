@@ -170,6 +170,10 @@ allowed in `prek.toml` because that file is functional config, not documentation
 But their names must not appear in skill documentation examples — use
 `myorg/myhook` as the placeholder in SKILL.md files.
 
+The naming-conventions rule above is enforced mechanically by the
+`banned-project-names` prek check: it pygreps `agents/`, `skills/`, and
+`instructions/` for known real names/artifacts (vendored dirs excluded).
+
 ## Vendored (third-party) resources
 
 Some skills/agents are copied from upstream repos (e.g. Vercel `agent-skills`, `humanink`). They are

@@ -3,9 +3,10 @@ name: cloudformation-reviewer
 description: >-
   Review CloudFormation templates and change sets (Sonnet). Triggers: "review this CloudFormation",
   "audit CFN template", "is this stack safe to deploy", "check IAM in template", "review the change
-  set". Returns severity-graded assessment (BLOCK/WARN/INFO) covering security, cost, IAM scope,
-  deprecated types, operational hazards. Read-only — use before `cloudformation-deployer`.
-model: claude-sonnet-4-6
+  set". Returns severity-graded assessment (CRITICAL/HIGH/MEDIUM/LOW/INFO; verdict BLOCK/WARNING/APPROVE)
+  covering security, cost, IAM scope, deprecated types, operational hazards. Read-only — use before
+  `cloudformation-deployer`.
+model: claude-sonnet-5
 tools:
   - Bash
   - Read
@@ -66,7 +67,7 @@ Can review:
 
 ## Failure-mode-first review skeleton
 
-Reviews MUST lead with the 5 failure modes below (the WHAT), then summarize by severity (the SEVERITY). Failure-mode and severity are orthogonal axes — every finding gets bucketed into one failure mode AND tagged with a severity (BLOCK / HIGH / MEDIUM / INFO).
+Reviews MUST lead with the 5 failure modes below (the WHAT), then summarize by severity (the SEVERITY). Failure-mode and severity are orthogonal axes — every finding gets bucketed into one failure mode AND tagged with a severity (CRITICAL / HIGH / MEDIUM / LOW / INFO).
 
 The 5 failure modes (CFN-flavored):
 
@@ -76,66 +77,39 @@ The 5 failure modes (CFN-flavored):
 1. **Drift signals** — `aws cloudformation detect-stack-drift` finding count, when drift was last detected, resources marked `MODIFIED` / `DELETED` outside CFN.
 1. **Compliance** — CFN Guard rules / Config rules the template would violate (encryption at rest, logging, audit trails), SOC2 / ISO27001 / HIPAA encryption + logging gaps.
 
-### Failure-mode-first output template
+### Output template (canonical)
 
 ```
-**CloudFormation review — <template/stack/change-set>**
+**CloudFormation review — <template/stack/change-set>** (<Template | Change Set | Both>, N resources)
 
 ## 🆔 Identity churn
 - New `AWS::IAM::Role` `MyTaskRole` requires `CAPABILITY_NAMED_IAM`; trust policy allows whole account `123456789012`. Severity: HIGH.
 
 ## 🔑 Secret exposure
-- Parameter `DbPassword` has `NoEcho: false` — value will appear in stack events. Severity: BLOCK.
+- Parameter `DbPassword` has `NoEcho: false` — value will appear in stack events. Severity: CRITICAL.
 
 ## 💥 Blast radius
-- `AWS::RDS::DBInstance ProdDb` has `DeletionPolicy: Delete` and no `UpdateReplacePolicy`. Severity: BLOCK.
+- `AWS::RDS::DBInstance ProdDb` has `DeletionPolicy: Delete` and no `UpdateReplacePolicy`. Severity: CRITICAL.
+- Change set: 2 replacements (⚠️ data loss potential), 1 stateful removal (🚨 backup required). (if reviewing a change set)
 
 ## 📉 Drift signals
-- Last `detect-stack-drift` 18d ago; 2 resources currently `MODIFIED`. Run drift detection before update.
+- Last `detect-stack-drift` 18d ago; 2 resources currently `MODIFIED`. Run drift detection before update. Severity: MEDIUM.
 
 ## 📋 Compliance
 - `AWS::S3::Bucket Logs` missing `BucketEncryption` (SOC2 CC6.1). Severity: MEDIUM.
 
-## Severity summary (back-compat)
-- BLOCK: 2, HIGH: 1, MEDIUM: 1, INFO: 0
+## Cost impact
+- Estimated monthly delta: $<amount> (range OK; "depends on usage" when unknowable)
+- Top contributors: <resource> — $<amount>/mo
+
+## Severity summary + verdict
+- CRITICAL: 2, HIGH: 1, MEDIUM: 2, LOW: 0, INFO: 0
+- **Verdict: BLOCK** — <1-2 sentence rationale>
 ```
 
-Each bullet: `<finding>. Severity: <BLOCK|HIGH|MEDIUM|INFO>.` Cite logical ID + line. If a bucket is empty, say `(none found)` — do not omit the heading.
+Each bullet: `<finding>. Severity: <CRITICAL|HIGH|MEDIUM|LOW|INFO>.` Cite logical ID + line (if YAML) and include a concrete fix for CRITICAL/HIGH findings. If a bucket is empty, say `(none found)` — do not omit the heading.
 
-## Output format (legacy severity-only — kept for back-compat)
-
-```
-[REVIEW] <template-path or change-set-name>
-[TYPE] <Template | Change Set | Both>
-[RESOURCES] N total
-
-[CRITICAL]
-🚨 <resource-logical-id> (<type>) — <issue>
-   Line: <line> (if YAML)
-   Why: <explanation>
-   Fix: <concrete suggestion>
-
-[HIGH]
-⚠️ <resource> — <issue>
-
-[MEDIUM]
-ℹ️ <resource> — <issue>
-
-[LOW]
-· <resource> — <issue>
-
-[COST IMPACT]
-Estimated monthly delta: $<amount>
-Top contributors:
-- <resource> — $<amount>/mo
-
-[CHANGE SET RISKS] (if applicable)
-- Replacements: <count>  ⚠️ data loss potential
-- Stateful removals: <count>  🚨 backup required
-
-[SUMMARY]
-<2-3 sentence verdict>
-```
+Verdict rule (mechanical, per `code-review-discipline`): any CRITICAL or HIGH → **BLOCK**; only MEDIUM → **WARNING**; only LOW/INFO → **APPROVE**.
 
 ## Rules
 

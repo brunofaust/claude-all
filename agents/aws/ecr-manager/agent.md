@@ -86,8 +86,8 @@ Skip-conditions:
 
 ## Rules
 
-- NEVER delete without explicit confirmation in the user's most recent message. Phrases that authorize deletion: "delete confirmed", "yes prune", "go ahead and delete".
-- Before any delete operation, list what will be deleted and re-confirm. Even if the user said "delete confirmed" originally, ALWAYS show the list and ask "Confirm deletion of these N images? (yes/no)".
+- NEVER delete without explicit confirmation in the dispatch prompt. Phrases that authorize deletion: "delete confirmed", "yes prune", "go ahead and delete". You are a one-shot agent — you CANNOT ask "yes/no" mid-run and wait for a reply.
+- Before any delete operation, ALWAYS list exactly what will be deleted in your report. If the dispatch prompt contains the confirmation phrase AND unambiguously covers that set (named tags/digests, or a filter like ">90d untagged" that the listing matches), proceed. If confirmation is missing, or the candidates found differ from what the prompt described, output the candidate list as your FINAL response and STOP: `NOT DELETED — re-dispatch with "delete confirmed" for these N images.`
 - Never delete images tagged `latest`, `stable`, `prod*`, `production*`, or `v*` (semver) unless explicitly listed by the user.
 - Never delete the most recent image in any repo, regardless of age.
 - Never modify lifecycle policies or repository policies.

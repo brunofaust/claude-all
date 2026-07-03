@@ -190,35 +190,31 @@ fi
 
 Return a combined report:
 
-```
+````
 ✓ invoke myapp-dev-dispatcher  (StatusCode 200, RequestId abc-123, ~340ms)
 **Response body:** {"statusCode":200,"body":"\"OK\""}
 **Last 4KB CW logs (from invoke --log-type Tail):**
 ```
-
 2026-05-22T12:14:09Z INIT_START Runtime ...
 2026-05-22T12:14:10Z {"event":"dispatcher.handler","ticket":"TICK-1","status":"queued"}
 2026-05-22T12:14:10Z REPORT RequestId: abc-123 Duration: 340ms ...
-
 ```
 **Supplemental CW filter (errors):** none in last 60s window.
-```
+````
 
 For failures:
 
-```
+````
 ✗ invoke myapp-dev-doc-dispatcher  (FunctionError: Unhandled)
 **Response body:** {"errorType":"ProgrammingError", "errorMessage":"syntax error at or near \":\"", ...}
 **Last 4KB CW logs:**
 ```
-
 [ERROR] ProgrammingError: (sqlalchemy.dialects.postgresql.asyncpg.ProgrammingError)
-\<class 'asyncpg.exceptions.PostgresSyntaxError'>: syntax error at or near ":"
+<class 'asyncpg.exceptions.PostgresSyntaxError'>: syntax error at or near ":"
 File "/var/task/.../handler.py", line 42, in handler
-
 ```
 **Suggested next:** the SQL syntax issue is the root cause — delegate to `migration-reviewer` if it's a query in a recent migration, or `debugger` for a handler bug.
-```
+````
 
 NEVER:
 
@@ -352,6 +348,8 @@ If the wait is long (> 30s) and there's a tracked process, run via `run_in_backg
 
 DO NOT default to `--since 2m`. Lambda → CW Logs has ingestion lag (5-30s typical, occasionally up to 1-2 min). Plus retry-on-fail timing.
 
+| Situation | Default window |
+| --- | --- |
 | Just invoked | Start with `--since 10m` |
 | Recent deploy + smoke test | `--since 15m` |
 | Reproducing intermittent issue | `--since 1h` minimum |
@@ -549,28 +547,26 @@ Success:
 
 Failure:
 
-```
+````
 **Invoke:** ✗ myapp-dev-dispatcher — FunctionError: Unhandled
 **Response (first useful lines):**
 ```
-
 {
-"errorType": "KeyError",
-"errorMessage": "'org_id'",
-"trace": ["File "/var/task/myapp/handlers/dispatcher.py", line 42, in handler"]
+  "errorType": "KeyError",
+  "errorMessage": "'org_id'",
+  "trace": ["File \"/var/task/myapp/handlers/dispatcher.py\", line 42, in handler"]
 }
-
 ```
-```
+````
 
 ### `aws lambda list-functions`
 
 ```
 **Lambdas (12):**
-- myapp-dev-api                Active     python3.14    updated 2h ago
-- myapp-dev-dispatcher         Active     python3.14    updated 2h ago
+- myapp-dev-api                Active     python3.13    updated 2h ago
+- myapp-dev-dispatcher         Active     python3.13    updated 2h ago
 - myapp-dev-log-export         Active     Image         updated 1d ago
-- myapp-dev-feature-pii-detection  Failed (build pending)  python3.14  updated 14m ago
+- myapp-dev-feature-pii-detection  Failed (build pending)  python3.13  updated 14m ago
 - ... +8 more
 ```
 
@@ -581,7 +577,7 @@ Mark anything with `LastUpdateStatus != Successful` so the caller notices.
 ```
 **Function:** myapp-dev-api
 **State:** Active  •  **LastUpdateStatus:** Successful  •  **Updated:** 12m ago
-**Runtime:** python3.14  •  **Arch:** arm64  •  **Memory:** 512 MB  •  **Timeout:** 30s
+**Runtime:** python3.13  •  **Arch:** arm64  •  **Memory:** 512 MB  •  **Timeout:** 30s
 **CodeSize:** 142 MB  •  **Image:** —
 **Role:** arn:aws:iam::...:role/myapp-dev-api-role
 **Env vars:** 14 (don't dump values)

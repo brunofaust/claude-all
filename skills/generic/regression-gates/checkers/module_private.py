@@ -16,8 +16,9 @@ mechanism, not private leakage.
 
 CONTRACT
 --------
-Prints one ``path:line: message`` finding per offending top-level def/class/assign
-to stdout; exits 0 on success so it composes with ``baseline_gate.py``.
+Prints one ``path: message`` finding per offending top-level def/class/assign to
+stdout — keyed by the kind + name, NOT by line number, so it composes with
+``baseline_gate.py``'s stable-key contract. Exits 0 on success.
 
 PARSER NOTE
 -----------
@@ -67,7 +68,7 @@ def find_violations(path: Path) -> list[str]:
         for name, kind in top_level_names(node):
             if is_private(name):
                 findings.append(
-                    f"{path}:{node.lineno}: module-level private {kind} {name!r} — keep it public "
+                    f"{path}: module-level private {kind} {name!r} — keep it public "
                     "and list the surface in __all__, or nest it / move it behind a class"
                 )
     return findings

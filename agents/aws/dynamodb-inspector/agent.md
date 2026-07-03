@@ -79,7 +79,7 @@ Layout:
 - msg: |
     <verbatim error message>
 - request_id: ABCDE-12345-...
-- key: {"org_id": "BDD#tenant-1", "ticket_key": "TICK-7"}
+- key: {"org_id": "TENANT#tenant-1", "ticket_key": "TICK-7"}
 ```
 
 Anti-pattern (NEVER): "looks like a permission issue" / "probably wrong key shape".

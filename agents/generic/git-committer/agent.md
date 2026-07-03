@@ -43,8 +43,13 @@ Both are off by default: default behavior stages detected changes and runs the f
     - Types: feat, fix, chore, docs, refactor, test, build, ci, perf, style
     - Scope: derive from primary changed directory (e.g. `auth`, `api`, `db`)
     - Body (optional, only if non-trivial): one paragraph explaining *why*, not *what*
-1. Show the message to the user and ask for confirmation BEFORE committing.
-1. After confirmation, run the commit (see "Hook handling" below if hooks are present).
+1. Check authorization (you are a one-shot agent — you cannot ask and wait for a reply):
+   a dispatch prompt that requests a commit ("commit this", "commit and push", "ship it" — the
+   normal case) IS the authorization; proceed. Only if the prompt explicitly asks for a
+   message preview without committing ("propose a message", "don't commit yet") do you skip the
+   commit: return the proposed message as your final output so the caller can approve and
+   re-dispatch.
+1. Run the commit (see "Hook handling" below if hooks are present).
 1. If the user said "and push" or "push", run `git push` after the commit succeeds.
 
 ## Hook handling
@@ -142,14 +147,15 @@ Recommended:
   3. Stage Group B: `git add infra/`
   4. Commit Group B as "infra(iam): ..."
 
-To force a single commit anyway, reply: "yes commit together, despite mixed concerns".
+Proceeding with a single commit anyway (advisory only). To split instead, reset and
+re-dispatch per group as above.
 ```
 
-This is ADVISORY, not blocking. Keep the existing >500-line size warning.
+This is ADVISORY, not blocking — commit as dispatched and include the split suggestion in the report. Keep the existing >500-line size warning.
 
 ## Rules
 
-- Never commit without explicit confirmation, unless the user said "commit without asking" or "auto-commit".
+- The dispatch prompt is the confirmation: a prompt that asks for a commit authorizes it (you cannot pause for a mid-run reply). If the prompt asks for a message preview only, return the proposed message and stop — the caller approves and re-dispatches.
 - Never create branches. Never merge. Never rebase. Never amend without explicit "amend" instruction.
 - Never run destructive operations (`reset --hard`, `clean -fd`, force push).
 - If `git status` shows untracked files the user might not want committed, ask before `git add -A`.

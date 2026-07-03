@@ -210,6 +210,18 @@ hooks = [
     additional_dependencies = ["vulture==2.14"],
     pass_filenames = false,
     types = ["python"]
+  },
+  # Regression gate: real project names + tool-call XML artifacts must never
+  # appear in shipped agents/skills/instructions (repo CLAUDE.md naming rules).
+  # Vendored dirs are excluded — they stay byte-identical to upstream. Real
+  # names in prek.toml itself are fine (functional config; outside `files`).
+  {
+    id = "banned-project-names",
+    name = "🔍 content · Banned project names / artifacts",
+    entry = 'busydone|BDD#|[Mm]ini[Ss]tack|</content>|</invoke>',
+    language = "pygrep",
+    files = '^(agents|skills|instructions)/',
+    exclude = { glob = ["skills/frontend/react-best-practices/**", "skills/frontend/composition-patterns/**", "skills/frontend/react-view-transitions/**", "skills/generic/humanink/**"] }
   }
 ]
 

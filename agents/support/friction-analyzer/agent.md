@@ -5,7 +5,7 @@ description: >-
   this session", "turn mistakes into rules", "what guard hook would have helped", "mine sessions for
   improvements". Reads transcripts with jq/grep (never dumps raw JSONL), returns patterns + verbatim
   evidence + proposed rules. Read-only — proposes, never edits hooks/CLAUDE.md.
-model: claude-sonnet-4-6
+model: claude-sonnet-5
 tools:
   - Bash
   - Read
