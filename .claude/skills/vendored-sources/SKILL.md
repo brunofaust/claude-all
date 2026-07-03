@@ -26,13 +26,14 @@ One entry per imported resource. The sync script and all provenance derive from 
 | `id` | unique key (used by `--id`) |
 | `kind` | `skill` / `agent` |
 | `path` | local path in this repo |
-| `vendor_mode` | `dir` (copy whole upstream subpath) · `files` (explicit list) · `reference` (live-fetched at runtime — nothing copied, never synced) |
+| `vendor_mode` | `dir` (copy whole upstream subpath) · `files` (explicit list) · `reference` (live-fetched at runtime — nothing copied, never synced) · `watch` (DERIVED resource — nothing copied; sync only reports upstream movement) |
 | `source` | `{ repo, ref, path }` — upstream repo, branch/tag, and subpath (`.` = repo root) |
 | `license`, `author` | for attribution |
 | `files` | (files mode) the explicit list to copy |
 | `local_only` | files that live **only** here (sidecars) — the sync never overwrites or deletes them |
 | `frontmatter_inject` | key/values re-applied to the entry's `SKILL.md` after each sync (e.g. claude-all's `user-invocable`) |
-| `last_synced` | `{ date, commit }` — stamped by the sync script |
+| `last_synced` | `{ date, commit }` — stamped by the sync script (copy modes) |
+| `last_reviewed` | `{ date, commit }` — (watch mode) last upstream commit a human reviewed; advanced only by `--ack <id>` |
 
 ## Updating — "update the imported skills"
 
@@ -46,6 +47,23 @@ For each entry the script shallow-clones `source.repo` at `source.ref`, refreshe
 **preserves `local_only`**, re-applies `frontmatter_inject` to `SKILL.md`, and records the upstream
 commit. It needs `git` + network. **Always review the diff and commit** — the script never commits.
 `reference` entries are reported and skipped (they're already always-latest).
+
+## Derived resources — `watch` mode
+
+Some local resources were **synthesized from** upstream repos (rewritten, not byte-copied) — e.g.
+`adversarial-verification` and `self-rationalization-guard` from obra/superpowers and others. The
+sync must never overwrite them (that would destroy the adaptation), but upstream improvements should
+still surface. A `watch` entry solves this: the script clones with history and reports **how many
+upstream commits touched `source.path` since `last_reviewed`**, with a GitHub compare URL — and
+never writes a local file. Watch reports are informational only: they never flip the `--check` exit
+code. Porting is a deliberate human step; after reviewing (and porting what's worth porting), run
+
+```bash
+python scripts/vendor_sync.py --ack <id>       # stamp last_reviewed at upstream HEAD
+```
+
+One watch entry per (local resource, upstream source) pair — a skill synthesized from two repos gets
+two entries (`<skill>@<source>` ids).
 
 ## Core discipline — keep vendored files pristine
 

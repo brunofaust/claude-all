@@ -11,8 +11,15 @@ Usage::
     python scripts/vendor_sync.py                 # sync every entry, update registry
     python scripts/vendor_sync.py --id humanink   # sync one entry
     python scripts/vendor_sync.py --check         # dry-run: report drift, write nothing
+    python scripts/vendor_sync.py --ack <id>      # mark a watch entry as reviewed
 
 `reference` entries (live-fetched at runtime) are reported and skipped.
+`watch` entries track upstreams our resources were DERIVED from (synthesized,
+not byte-copied): the script never writes their local files — it reports how
+many upstream commits touched the watched path since ``last_reviewed`` (with a
+compare URL) so the port/review stays a deliberate human step. Watch reports
+are informational only and never affect the ``--check`` exit code; after
+reviewing, run ``--ack <id>`` to advance ``last_reviewed`` to upstream HEAD.
 Requires ``git`` and network access. Review the diff and commit the result.
 """
 
@@ -43,6 +50,73 @@ def clone_upstream(repo: str, ref: str, dest: Path) -> str:
     """Shallow-clone ``repo`` at ``ref`` into ``dest``; return the HEAD commit."""
     run_git(["clone", "--depth", "1", "--branch", ref, repo, str(dest)])
     return run_git(["rev-parse", "HEAD"], cwd=dest)
+
+
+def clone_with_history(repo: str, ref: str, dest: Path) -> str:
+    """Blobless single-branch clone (full history, no file contents); return HEAD.
+
+    Watch entries need history to count commits since ``last_reviewed``; a
+    ``--filter=blob:none`` clone keeps that cheap.
+    """
+    run_git(["clone", "--filter=blob:none", "--single-branch", "--branch", ref, repo, str(dest)])
+    return run_git(["rev-parse", "HEAD"], cwd=dest)
+
+
+def compare_url(repo: str, old: str, new: str) -> str:
+    """GitHub compare URL for two commits of ``repo``."""
+    return f"{repo.removesuffix('.git')}/compare/{old[:12]}...{new[:12]}"
+
+
+def process_watch(entry: dict[str, Any], *, ack: bool) -> tuple[bool, bool]:
+    """Report upstream movement for a derived (watch) entry; never writes local files.
+
+    Returns ``(changed, errored)`` where ``changed`` is always False — watch
+    reports are informational and must not flip the ``--check`` exit code.
+    With ``ack=True``, advances ``last_reviewed`` to upstream HEAD instead.
+    """
+    name, src = entry["id"], entry["source"]
+    with tempfile.TemporaryDirectory() as tmp:
+        try:
+            head = clone_with_history(src["repo"], src["ref"], Path(tmp) / "up")
+        except subprocess.CalledProcessError as e:
+            print(f"  ! {name}: clone failed — {e.stderr.strip()}", file=sys.stderr)
+            return False, True
+
+        if ack:
+            entry["last_reviewed"] = {
+                "date": datetime.now(UTC).date().isoformat(),
+                "commit": head,
+            }
+            print(f"  ✓ {name}: last_reviewed → {head[:8]}")
+            return True, False
+
+        last = entry.get("last_reviewed", {}).get("commit")
+        if not last:
+            print(f"  ? {name}: watch — no last_reviewed recorded (upstream at {head[:8]})")
+            print(f"      run --ack {name} after an initial review")
+            return False, False
+        path_args = [] if src["path"] == "." else ["--", src["path"]]
+        try:
+            count = int(
+                run_git(["rev-list", "--count", f"{last}..HEAD", *path_args], cwd=Path(tmp) / "up")
+            )
+        except (subprocess.CalledProcessError, ValueError):
+            print(
+                f"  ! {name}: last_reviewed commit {last[:8]} not found upstream "
+                "(history rewritten?) — re-review and --ack",
+                file=sys.stderr,
+            )
+            return False, True
+
+    if count == 0:
+        print(f"  = {name}: watch — no upstream changes since last review ({last[:8]})")
+    else:
+        print(
+            f"  ~ {name}: watch — {count} upstream commit(s) touching {src['path']!r} "
+            f"since {last[:8]}"
+        )
+        print(f"      review: {compare_url(src['repo'], last, head)}   then: --ack {name}")
+    return False, False
 
 
 def list_files(root: Path) -> set[Path]:
@@ -156,6 +230,8 @@ def process(entry: dict[str, Any], *, write: bool) -> tuple[bool, bool]:
     if mode == "reference":
         print(f"  ~ {name}: reference (live-fetched, nothing to sync)")
         return False, False
+    if mode == "watch":
+        return process_watch(entry, ack=False)
 
     src = entry["source"]
     with tempfile.TemporaryDirectory() as tmp:
@@ -184,10 +260,27 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Sync vendored skills from upstream.")
     parser.add_argument("--id", help="sync only this registry id")
     parser.add_argument("--check", action="store_true", help="dry-run; write nothing")
+    parser.add_argument(
+        "--ack", metavar="ID", help="mark a watch entry as reviewed at upstream HEAD"
+    )
     args = parser.parse_args()
 
     registry = json.loads(REGISTRY.read_text(encoding="utf-8"))
     entries = registry["vendored"]
+
+    if args.ack:
+        matches = [e for e in entries if e["id"] == args.ack]
+        if not matches or matches[0]["vendor_mode"] != "watch":
+            print(f"No watch entry with id {args.ack!r}", file=sys.stderr)
+            return 1
+        changed, errored = process_watch(matches[0], ack=True)
+        if changed:
+            REGISTRY.write_text(
+                json.dumps(registry, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+            )
+            print("Updated vendored.json. Review the diff and commit.")
+        return 1 if errored else 0
+
     if args.id:
         entries = [e for e in entries if e["id"] == args.id]
         if not entries:
