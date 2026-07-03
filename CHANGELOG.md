@@ -24,3 +24,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `load_baseline`, `compare`, `calls_with_scope`, `literal`, `parse_file`, and `nudge`.
 - Merged PR #66: ported upstream findings into the `adversarial-verification` and
   `self-rationalization-guard` skills.
+- Fixed: `release.yml` had `python-semantic-release` push the version-bump commit
+  straight to `main`, which GitHub's branch protection rejects (`main` requires PRs).
+  Split into `prepare` (bumps the version on the `release/**` branch itself, which
+  lands on `main` through the normal PR merge) and `publish` (tags the already-bumped
+  `main` and creates the GitHub release) — mirrors the same fix already shipped in
+  `brunofaust/codecongruence`.
