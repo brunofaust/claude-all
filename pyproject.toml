@@ -22,10 +22,27 @@ dependencies = []
 urls.Homepage = "https://github.com/brunofaust/claude-all"
 urls.Issues = "https://github.com/brunofaust/claude-all/issues"
 urls.Repository = "https://github.com/brunofaust/claude-all"
+scripts.claude-all = "claude_all.cli:run"
 
 [dependency-groups]
 dev = [
   "prek>=0.4.1",
+]
+
+[build-system]
+build-backend = "hatchling.build"
+requires = [ "hatchling>=1.25" ]
+
+[tool.hatch.build.targets.wheel]
+packages = [ "src/claude_all" ]
+include = [
+  "src/claude_all/agents",
+  "src/claude_all/skills",
+  "src/claude_all/hooks",
+  "src/claude_all/instructions",
+  "src/claude_all/mcps",
+  "src/claude_all/plugins",
+  "src/claude_all/tools",
 ]
 
 [tool.ruff]
@@ -48,7 +65,7 @@ lint.select = [
 lint.ignore = [
   "RUF001", # ambiguous unicode — skill content intentionally uses special chars
 ]
-lint.isort.known-first-party = [ "claude-all" ]
+lint.isort.known-first-party = [ "claude_all" ]
 # vulture_whitelist.py is a list of bare identifier names (vulture's whitelist
 # format), not executable code — exempt it from "useless expression" / "undefined
 # name" lints.
@@ -56,7 +73,7 @@ lint.per-file-ignores."vulture_whitelist.py" = [ "B018", "F821" ]
 
 [tool.vulture]
 min_confidence = 60
-paths = [ "claude-all.py", "hooks", "skills", "vulture_whitelist.py" ]
+paths = [ "src/claude_all/cli.py", "src/claude_all/hooks", "src/claude_all/skills", "vulture_whitelist.py" ]
 exclude = [ ".venv/", ".worktrees/", ".claude/" ]
 
 [tool.typos]
@@ -71,3 +88,31 @@ files = [ "**/*.md" ]
 MD013 = false
 MD040 = false
 MD025 = false
+
+[tool.semantic_release]
+version_toml = [ "pyproject.toml:project.version" ]
+branch = "main"
+tag_format = "v{version}"
+major_on_zero = false
+commit_message = "chore(release): v{version} [skip ci]"
+changelog_file = "CHANGELOG.md"
+exclude_commit_patterns = [
+  "^chore",
+  "^docs",
+  "^test",
+  "^build",
+  "^ci",
+  "^refactor",
+  "^style",
+  "^Merge (pull request|branch)",
+]
+upload_to_pypi = false
+build_command = ""
+remote.type = "github"
+
+[tool.commitizen]
+name = "cz_conventional_commits"
+version_provider = "pep621"
+tag_format = "v$version"
+major_version_zero = true
+update_changelog_on_bump = false

@@ -4,7 +4,7 @@
     {
       "id": "humanink",
       "kind": "skill",
-      "path": "skills/generic/humanink",
+      "path": "src/claude_all/skills/generic/humanink",
       "vendor_mode": "files",
       "source": {
         "repo": "https://github.com/sirambrosio/humanink",
@@ -35,7 +35,7 @@
     {
       "id": "vercel-react-best-practices",
       "kind": "skill",
-      "path": "skills/frontend/react-best-practices",
+      "path": "src/claude_all/skills/frontend/react-best-practices",
       "vendor_mode": "dir",
       "source": {
         "repo": "https://github.com/vercel-labs/agent-skills",
@@ -59,7 +59,7 @@
     {
       "id": "vercel-composition-patterns",
       "kind": "skill",
-      "path": "skills/frontend/composition-patterns",
+      "path": "src/claude_all/skills/frontend/composition-patterns",
       "vendor_mode": "dir",
       "source": {
         "repo": "https://github.com/vercel-labs/agent-skills",
@@ -83,7 +83,7 @@
     {
       "id": "vercel-react-view-transitions",
       "kind": "skill",
-      "path": "skills/frontend/react-view-transitions",
+      "path": "src/claude_all/skills/frontend/react-view-transitions",
       "vendor_mode": "dir",
       "source": {
         "repo": "https://github.com/vercel-labs/agent-skills",
@@ -107,7 +107,7 @@
     {
       "id": "web-design-guidelines",
       "kind": "skill",
-      "path": "skills/frontend/web-design-guidelines",
+      "path": "src/claude_all/skills/frontend/web-design-guidelines",
       "vendor_mode": "reference",
       "source": {
         "repo": "https://github.com/vercel-labs/web-interface-guidelines",
@@ -125,7 +125,7 @@
     {
       "id": "adversarial-verification@superpowers",
       "kind": "skill",
-      "path": "skills/generic/adversarial-verification",
+      "path": "src/claude_all/skills/generic/adversarial-verification",
       "vendor_mode": "watch",
       "source": {
         "repo": "https://github.com/obra/superpowers",
@@ -142,7 +142,7 @@
     {
       "id": "adversarial-verification@adversarial-review",
       "kind": "skill",
-      "path": "skills/generic/adversarial-verification",
+      "path": "src/claude_all/skills/generic/adversarial-verification",
       "vendor_mode": "watch",
       "source": {
         "repo": "https://github.com/robertoecf/adversarial-review",
@@ -159,7 +159,7 @@
     {
       "id": "self-rationalization-guard@superpowers",
       "kind": "skill",
-      "path": "skills/generic/self-rationalization-guard",
+      "path": "src/claude_all/skills/generic/self-rationalization-guard",
       "vendor_mode": "watch",
       "source": {
         "repo": "https://github.com/obra/superpowers",
@@ -176,7 +176,7 @@
     {
       "id": "self-rationalization-guard@kadaliao",
       "kind": "skill",
-      "path": "skills/generic/self-rationalization-guard",
+      "path": "src/claude_all/skills/generic/self-rationalization-guard",
       "vendor_mode": "watch",
       "source": {
         "repo": "https://github.com/kadaliao/claude-code-skills-collection",

@@ -4,48 +4,88 @@
 
 ```bash
 # Install an agent or skill into Claude Code (positional args are path filters)
-./claude-all --all --user <name>     # global (~/.claude)
-./claude-all --all --project <name>  # repo-local (./.claude)
+claude-all --all --user <name>     # global (~/.claude)
+claude-all --all --project <name>  # repo-local (./.claude)
 
-# Dev setup (installs prek)
+# Dev setup (editable install + installs prek)
 uv sync --dev
+# then run the dev build with: uv run claude-all
 
 # Lint (single entry point — runs ruff, mypy, typos)
 prek run --all-files
 ```
 
+## Commits and releases
+
+Commits must follow [Conventional Commits](https://www.conventionalcommits.org/):
+
+```
+<type>(<scope>): <short summary>
+
+[optional body]
+
+[optional footer(s)]
+```
+
+Common types and their version impact:
+
+| Type                                               | Impact     | When to use             |
+| --------------------------------------------------- | ---------- | ----------------------- |
+| `feat`                                             | minor bump | new user-facing feature |
+| `fix`                                              | patch bump | bug fix                 |
+| `perf`                                             | patch bump | performance improvement |
+| `feat!` / `BREAKING CHANGE`                        | major bump | breaking API change     |
+| `chore`, `docs`, `refactor`, `test`, `build`, `ci` | no bump    | maintenance             |
+
+The `commitizen` prek hook validates the format on every commit. If your
+commit message is rejected, rewrite it with `git commit --amend`.
+
+Releases are triggered by merging a `release/` branch into `main` (same setup as
+`brunofaust/codecongruence`):
+
+1. Merge feature PRs to `main` normally — no release is created.
+1. When ready to release, create a branch named `release/x.y.z` off `main`
+    (no content changes required) and open a PR to `main`.
+1. Merging that PR triggers `python-semantic-release`, which reads all
+    conventional commits since the last tag, bumps `pyproject.toml`,
+    writes `CHANGELOG.md`, and creates a GitHub release + git tag.
+
+**Do not bump the version or edit `CHANGELOG.md`'s version headers manually** — add your
+change under `## [Unreleased]` in a PR as usual; the release process turns that section
+into the next numbered version.
+
 ## Repo structure
 
-| Path                                           | Purpose                                                                                                                       |
-| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `claude-all` / `claude-all.py`                 | CLI installer — discovers and installs agents/skills/hooks                                                                    |
-| `agents/<category>/<name>.md`           | Flat agent definition (no companions) — dispatched by the router                                                              |
-| `agents/<category>/<name>/agent.md`     | Folder agent (ships companions) — `agent.md` + `claude_md.md` and/or `hook.py`/`hook.json` grouped in one dir                  |
-| `agents/<category>/<name>.claude_md.md` | Companion snippet injected into `~/.claude/CLAUDE.md` on install (folder agents put it at `<name>/claude_md.md`)               |
-| `skills/<category>/<name>/SKILL.md`     | Skill definitions (invoked via Skill tool)                                                                                    |
-| `instructions/<name>/claude_md.md`      | Standalone `~/.claude/CLAUDE.md` snippet (no agent/skill to install — e.g. dispatch rules for built-in agents like `Explore`) |
-| `hooks/`                                | Standalone hook scripts — installable kind, wired per the `hooks/hooks.json` manifest                                          |
-| `.claude/hooks/`                               | Active hooks for this repo's Claude sessions                                                                                  |
-| `.claude/agents/`                              | Sub-agent definitions scoped to this repo                                                                                     |
-| `.claude/skills/`                              | Skills scoped to this repo (used when working ON claude-all, NOT shipped via the installer) — e.g. `vendored-sources`. `.claude/` is tracked in this repo (not git-ignored). |
+| Path                                                     | Purpose                                                                                                                       |
+| --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `src/claude_all/cli.py`                                 | CLI installer — discovers and installs agents/skills/hooks; console script `claude-all`                                       |
+| `src/claude_all/agents/<category>/<name>.md`           | Flat agent definition (no companions) — dispatched by the router                                                              |
+| `src/claude_all/agents/<category>/<name>/agent.md`     | Folder agent (ships companions) — `agent.md` + `claude_md.md` and/or `hook.py`/`hook.json` grouped in one dir                  |
+| `src/claude_all/agents/<category>/<name>.claude_md.md` | Companion snippet injected into `~/.claude/CLAUDE.md` on install (folder agents put it at `<name>/claude_md.md`)               |
+| `src/claude_all/skills/<category>/<name>/SKILL.md`     | Skill definitions (invoked via Skill tool)                                                                                    |
+| `src/claude_all/instructions/<name>/claude_md.md`      | Standalone `~/.claude/CLAUDE.md` snippet (no agent/skill to install — e.g. dispatch rules for built-in agents like `Explore`) |
+| `src/claude_all/hooks/`                                 | Standalone hook scripts — installable kind, wired per the `hooks/hooks.json` manifest                                          |
+| `.claude/hooks/`                                         | Active hooks for this repo's Claude sessions                                                                                  |
+| `.claude/agents/`                                        | Sub-agent definitions scoped to this repo                                                                                     |
+| `.claude/skills/`                                        | Skills scoped to this repo (used when working ON claude-all, NOT shipped via the installer) — e.g. `vendored-sources`. `.claude/` is tracked in this repo (not git-ignored). |
 
 ## Adding a new agent or skill
 
 **Agent:**
 
-1. Bare agent → flat file `agents/<category>/<name>.md`. Agent that ships
-   companions → folder `agents/<category>/<name>/agent.md` (keep `agent.md` +
+1. Bare agent → flat file `src/claude_all/agents/<category>/<name>.md`. Agent that ships
+   companions → folder `src/claude_all/agents/<category>/<name>/agent.md` (keep `agent.md` +
    its `claude_md.md` / `hook.*` together)
 1. Optionally add a `claude_md.md` snippet — flat: `<name>.claude_md.md` beside the
    `.md`; folder: `<name>/claude_md.md` beside `agent.md`
-1. Run `./claude-all --all --user <name>` to activate
+1. Run `claude-all --all --user <name>` to activate
 1. **Update `README.md`** — add a row to the relevant agent table (§ 1.x)
 
 **Skill:**
 
-1. Create `skills/<category>/<name>/SKILL.md`
+1. Create `src/claude_all/skills/<category>/<name>/SKILL.md`
 1. Optionally add a companion `hook.py` + `hook.json` (see § *Authoring companion hooks*) and/or a `claude_md.md` snippet beside `SKILL.md`
-1. Run `./claude-all --all --user <name>` to activate
+1. Run `claude-all --all --user <name>` to activate
 1. **Update `README.md`** — add a row to the relevant skill table (§ 2.x)
 
 ## Authoring companion hooks (reminder vs guard)
@@ -171,8 +211,9 @@ But their names must not appear in skill documentation examples — use
 `myorg/myhook` as the placeholder in SKILL.md files.
 
 The naming-conventions rule above is enforced mechanically by the
-`banned-project-names` prek check: it pygreps `agents/`, `skills/`, and
-`instructions/` for known real names/artifacts (vendored dirs excluded).
+`banned-project-names` prek check: it pygreps `src/claude_all/agents/`,
+`src/claude_all/skills/`, and `src/claude_all/instructions/` for known real
+names/artifacts (vendored dirs excluded).
 
 ## Vendored (third-party) resources
 
@@ -236,16 +277,16 @@ the `claude-all` installer via tagged snippet injection. **Do not edit it direct
 
 ### How dispatch instructions reach `~/.claude/CLAUDE.md`
 
-When `./claude-all --all --user <agent>` runs, it looks for a
+When `claude-all --all --user <agent>` runs, it looks for a
 `<agent>.claude_md.md` file next to the agent's `.md` file and injects its
 content as a tagged block. Reinstalling is idempotent — the block is replaced.
 
-Agent `claude_md.md` naming: flat `agents/<category>/<name>.claude_md.md`, or folder `agents/<category>/<name>/claude_md.md` (beside `agent.md`)
+Agent `claude_md.md` naming: flat `src/claude_all/agents/<category>/<name>.claude_md.md`, or folder `src/claude_all/agents/<category>/<name>/claude_md.md` (beside `agent.md`)
 Skill/tool `claude_md.md` naming: inside the resource's directory.
-Standalone snippet naming: `instructions/<name>/claude_md.md` — a resource
+Standalone snippet naming: `src/claude_all/instructions/<name>/claude_md.md` — a resource
 whose ONLY effect is injecting that block (no agent/skill/hook to install). Use it
 for main-session dispatch rules that target built-in agents (e.g. routing broad
-searches to `Explore`). Install with `./claude-all --all --user <name>`.
+searches to `Explore`). Install with `claude-all --all --user <name>`.
 
 ### Rules
 

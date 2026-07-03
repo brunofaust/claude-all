@@ -53,6 +53,9 @@ def load_baseline(path: Path) -> set[str]:
     (e.g. ``# TICK-1: remove after the auth refactor``). A missing file is an
     empty baseline — a brand-new gate with zero findings then passes, and any
     finding shows up as NEW.
+
+    Args:
+        path: Path to the baseline file.
     """
     if not path.exists():
         return set()
@@ -83,7 +86,12 @@ def run_checker(command: list[str]) -> set[str]:
 
 
 def compare(seen: set[str], baseline: set[str]) -> tuple[set[str], set[str]]:
-    """Return ``(new, stale)`` findings relative to the baseline."""
+    """Return ``(new, stale)`` findings relative to the baseline.
+
+    Args:
+        seen: Finding keys reported by the checker on this run.
+        baseline: Finding keys already accepted in the baseline file.
+    """
     return seen - baseline, baseline - seen
 
 

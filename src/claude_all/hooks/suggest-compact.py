@@ -55,7 +55,11 @@ def write_int(path: str, value: int) -> None:
 
 
 def context_tokens(transcript_path: str) -> int | None:
-    """Estimate current context occupancy from the last usage in the transcript tail."""
+    """Estimate current context occupancy from the last usage in the transcript tail.
+
+    Args:
+        transcript_path: Path to the session's JSONL transcript file.
+    """
     try:
         with open(transcript_path, "rb") as f:
             f.seek(0, os.SEEK_END)
