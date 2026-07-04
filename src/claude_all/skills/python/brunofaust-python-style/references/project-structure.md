@@ -154,6 +154,68 @@ standalone PyPI package shared across services without changing a line.
 - **Infrastructure:** `db/`, `aws_resources/` (deployable units) — project-coupled, cross-cutting
 - **Settings-free building blocks:** `core/` — reusable, project-agnostic, extractable as a library
 
+## Organize by domain concept — never per business requirement
+
+The single rule that prevents file-explosion: **a file (or folder) maps to a _domain concept_ — an
+external system, a domain area, or a pluggable variant — never to a business _requirement_ (a feature,
+ticket, or behaviour).** A new behaviour joins its existing domain home; it does **not** get a new
+top-level file.
+
+The failure mode this prevents: a namespace root (e.g. `core/<app>/`) that accretes 20+ loose modules
+because every change dropped a new file next to the last one (`working_hours.py`, `re_engage.py`,
+`branch_naming.py`, `plan_gate.py`, …). The raw file *count* is rarely the real problem — a broad
+product legitimately has many files — the problem is **scatter**: no grouping principle, plus
+incomplete refactors (a 900-line monolith sitting next to a package that re-imports it) and
+name-collisions (`email/` next to `emails/`). Group by concept and the sprawl resolves.
+
+### One file per domain — a package only when forced
+
+- **Default: one file per domain concept.** `core/<app>/<domain>.py` is the single home for everything
+  about that domain. "One home" means **one import path**, whether that home is a file or a package.
+- **Promote a domain to a _package_** (a directory with a single public `__init__.py` entrypoint)
+  **only when it is genuinely large AND has real internal variant seams** — e.g. pluggable
+  collectors/providers (`abuse/collectors/{jira,github}.py`, `ai/llm/{openai,anthropic}.py`). Decide on
+  the **real, post-deduplication size**, not on today's bloated count and not preemptively. This is
+  *containment over layering* (see the `architecture-decision-guard` skill). Never a speculative
+  `base.py` with a single implementer.
+- **Cross-cutting single-owner modules** (`secrets.py`, `config.py`) may live at the namespace root —
+  they are not "domains", they are shared utilities with exactly one owner.
+- The one question before creating any file: *"Is this a new **domain / external system**, or new
+  **behaviour on an existing one**?"* → new domain → new home in the right place; new behaviour → into
+  the existing home.
+
+## Mechanism vs policy — domain code is glue
+
+`core/<app>/<domain>/` holds business **policy** (the *what / when* — which secret, which ticket, what
+rule), expressed as **glue** that composes generic `core/` **mechanisms** (the *how* — talk to SSM,
+read a file, call an API, run a thread). This mirrors the outer layering: entry-point handlers are thin
+glue over the domain, which is thin glue over generic `core/` primitives.
+
+- **Mechanism → a generic single-owner:** `core/aws/<service>`, `core/<integration_family>/`,
+  `core/thread_pool`, `core/subprocess`. Domain-agnostic, extractable (see
+  `external-system-ownership.md`).
+- **Policy → `core/<app>/<domain>`:** composes those mechanisms into a business flow.
+- **Promote a mechanism to a generic owner on the _third_ copy** (the rule of three — see
+  `architecture.md`), never preemptively. A "generic" module with one or two consumers is a speculative
+  boundary — the exact smell to avoid. Note some things are *already* generic (async file I/O via
+  `anyio.Path`; the thread-offload seam) — use the existing primitive, don't wrap it for one caller.
+
+## Keep the namespace flat — enforce it, don't just document it
+
+A rule in prose gets violated; a rule encoded as a checker holds. Enforce "one home per domain" with:
+
+- **A root-allowlist gate** on the busy namespace (e.g. `core/<app>/` top level): seed it with today's
+  legitimate modules; a *new* top-level file fails CI unless added to the allowlist with a one-line
+  justification. This mechanically stops "every change → new root file".
+- **Single-owner `banned-api` contracts** (mechanism containment) + the `import-linter` layer contracts
+  below.
+- **A semantic-duplication gate kept at a HIGH similarity threshold (~0.92).** Counter-intuitive but
+  measured: *lowering* a semantic-duplication gate to "surface more reuse" is counterproductive — the
+  low-similarity band is dominated by noise (matching control-flow ≠ shared intent), and real reuse
+  candidates cluster at the *high* end. In one real codebase a `core/`-scoped scan returned ~133 pairs
+  at 0.92, ~68k at 0.70, and ~420k at 0.50 (~82% pure noise). The lever for reducing files is
+  domain-grouping + finishing refactors, **not** turning the duplication knob down.
+
 ## Entry points are thin
 
 No business logic. Lambda handlers max 20 statements.
