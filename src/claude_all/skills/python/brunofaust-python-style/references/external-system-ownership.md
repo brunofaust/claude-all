@@ -63,6 +63,7 @@ ticket = await jira.get_issue("PROJ-123")
 "httpx".msg = "Use the owning connector class. Allowed only in src/*/integrations/**"
 "boto3".msg = "Use the core/aws/<service>.py wrapper. Allowed only in src/*/core/aws/**"
 "aiobotocore".msg = "Use the core/aws/<service>.py wrapper. Allowed only in src/*/core/aws/**"
+"botocore".msg = "Use the core/aws wrapper + its semantic exceptions (core/aws/exceptions). Allowed only in src/*/core/aws/**"
 "atlassian".msg = "Use JiraClient or ConfluenceClient"
 "asyncio.to_thread".msg = "Use run_in_thread() — the single owner of the thread-offload seam"
 "subprocess".msg = "Use the owned run_exec()/run_shell() wrapper (argv list, never a shell string). Allowed only in scripts/**"
@@ -72,10 +73,18 @@ ticket = await jira.get_issue("PROJ-123")
 "src/*/core/aws/**" = ["TID251"]      # the boto3/aiobotocore owners live here
 ```
 
+## Semantic exceptions — own the SDK's error type too
+
+Owning the SDK isn't only about the *client*; own its *exceptions*. A `core/aws` wrapper catches the
+raw `botocore.ClientError` and re-raises a typed error it owns (`dynamodb.ConditionalCheckFailed`,
+`s3.ObjectNotFound`, …) via a small `translating(code_map, default)` helper — so consumers catch typed
+errors and never import `botocore` (that's why `botocore` is in the ban above). Full pattern +
+`translating()` helper: see `error-handling.md` → "AWS errors: owner-translated semantic exceptions".
+
 ## Audit recipe
 
 ```bash
-rg -n "import httpx|from httpx|boto3\.client|from atlassian|^import github|aiobotocore" \
+rg -n "import httpx|from httpx|boto3\.client|from atlassian|^import github|aiobotocore|from botocore|import botocore" \
   src --type py | rg -v "src/[^/]+/integrations/|src/[^/]+/core/aws/"
 ```
 

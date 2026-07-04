@@ -161,6 +161,93 @@ def upload_file(path: str) -> str:
         raise ServiceError(f"Upload failed: something happened") from e
 ```
 
+#### AWS errors: owner-translated semantic exceptions (consumers never touch botocore)
+
+Pattern 3 above (`except ClientError` + an `Error.Code` string check) is how the **owner**
+(`core/aws/<service>.py`) inspects an AWS error — but **consumers must not** import botocore or match
+raw code strings. Instead, the owner **translates** botocore `ClientError` into a typed exception
+hierarchy it owns, and callers catch that. This lets the `banned-api` ban cover `botocore` too (see
+`external-system-ownership.md`), so a raw `ClientError` never escapes `core/aws/`.
+
+Put the base + a translation helper in `core/aws/exceptions.py`:
+
+```python
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
+
+from botocore.exceptions import ClientError
+
+
+class AwsError(Exception):
+    """Base for every semantic error a core.aws owner raises."""
+
+    def __init__(self, message: str = "", *, code: str | None = None) -> None:
+        super().__init__(message)
+        self.code = code  # originating AWS Code, for the rare caller that must branch after catching
+
+
+@contextmanager
+def translating(code_map: Mapping[str, type[AwsError]], *, default: type[AwsError]) -> Iterator[None]:
+    """Convert a botocore ClientError into the mapped (or default) AwsError.
+
+    A *sync* context manager is correct around an ``await``: the wrapped coroutine's
+    exception surfaces through ``__exit__`` after the await resolves. Unmapped codes
+    fall back to ``default`` (the service base), so the owner NEVER leaks a raw ClientError.
+    """
+    try:
+        yield
+    except ClientError as e:
+        code = str(e.response.get("Error", {}).get("Code", ""))
+        raise code_map.get(code, default)(str(e), code=code) from e
+```
+
+Each service module owns its errors + a code map and wraps its client calls:
+
+```python
+# core/aws/dynamodb.py
+class DynamoDbError(AwsError): ...
+class ConditionalCheckFailed(DynamoDbError): ...
+
+# module-level (never a `_`-prefixed name — see visibility.md)
+DDB_ERROR_CODES: Mapping[str, type[DynamoDbError]] = {
+    "ConditionalCheckFailedException": ConditionalCheckFailed,
+}
+
+class AsyncDynamoDB(AWSClient):
+    async def put_item(self, table_name, item, condition_expression=None) -> None:
+        client = await self._get_client()
+        kwargs = {"TableName": table_name, "Item": to_dynamodb(item)}
+        if condition_expression:
+            kwargs["ConditionExpression"] = condition_expression
+        with translating(DDB_ERROR_CODES, default=DynamoDbError):
+            await client.put_item(**kwargs)
+```
+
+Consumers stay botocore-free — typed catch, no `Error.Code` string:
+
+```python
+from myapp.core.aws.dynamodb import AsyncDynamoDB, ConditionalCheckFailed
+
+try:
+    await AsyncDynamoDB().put_item(table, item, condition_expression="attribute_not_exists(pk)")
+    return True                       # first writer wins
+except ConditionalCheckFailed:        # NOT: except ClientError + code == "ConditionalCheckFailedException"
+    return False                      # idempotent claim already taken
+```
+
+Rules:
+
+- `translating()` **always** raises an `AwsError` subclass (mapped → specific; unmapped → service base
+  like `S3Error`). A "catch-any" caller then catches the service base or `AwsError` — never `ClientError`.
+- The ban keys are `boto3` / `aiobotocore` / `botocore` (owner folders exempt via `per-file-ignores`).
+  `botocore.exceptions` is covered; `botocore.exceptions.ClientError` may still be caught *inside* the
+  owner. A consumer importing `botocore` is a lint failure.
+- If a caller reaches a raw client (`_get_client()`) for an op the wrapper doesn't expose, **add the
+  owner method** (with `translating()` inside) rather than catching `ClientError` at the call site —
+  this is a common latent smell the migration flushes out.
+- Connectivity errors (`BotoCoreError`) are a *sibling* of `ClientError`, not caught by `translating()`.
+  If callers relied on catching them, have the owner absorb `BotoCoreError` into its service base too.
+
 #### Common Rationalizations Against `suppress()`
 
 | Excuse                                                | Reality                                                                                                                                             | Counter                                                                                                                                        |
