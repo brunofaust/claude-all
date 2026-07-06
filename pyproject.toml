@@ -91,7 +91,6 @@ MD025 = false
 
 [tool.semantic_release]
 version_toml = [ "pyproject.toml:project.version" ]
-branch = "main"
 tag_format = "v{version}"
 major_on_zero = false
 commit_message = "chore(release): v{version} [skip ci]"
@@ -109,6 +108,19 @@ exclude_commit_patterns = [
 upload_to_pypi = false
 build_command = ""
 remote.type = "github"
+
+# python-semantic-release>=9 ignores the legacy flat `branch = "main"` key —
+# it only recognizes nested branch groups. The `prepare` job in release.yml
+# runs `semantic-release version --print` on a `release/**` branch (before
+# it's merged to main), so that pattern must be an explicit release-eligible
+# group or PSR reports "isn't in any release groups" and computes nothing.
+[tool.semantic_release.branches.main]
+match = "main"
+prerelease = false
+
+[tool.semantic_release.branches.release]
+match = "release/.*"
+prerelease = false
 
 [tool.commitizen]
 name = "cz_conventional_commits"
