@@ -485,7 +485,7 @@ def install_mcp(item: Item, level: str) -> str:
 
 
 def install_tool(item: Item) -> str:
-    """Install a CLI tool. Dispatches on tool.json `type` (brew, etc.).
+    """Install a CLI tool. Dispatches on tool.json `type` (brew, uv_tool, etc.).
 
     Tools are GLOBAL (user-machine-wide) — `--user` vs `--project` doesn't apply.
     The optional `claude_md.md` snippet still gets injected at the level the
@@ -543,6 +543,37 @@ def install_tool(item: Item) -> str:
             print(f"  (i) {item.name}:\n{msg}")
 
         return f"installed tool {item.name} via brew ({package})"
+
+    if ttype == "uv_tool":
+        if shutil.which("uv") is None:
+            return (
+                f"skipped tool {item.name}: 'uv' not in PATH. "
+                "Install with: https://docs.astral.sh/uv/getting-started/installation/"
+            )
+        package = meta.get("package")
+        git_url = meta.get("git")
+        if not package or not git_url:
+            return f"skipped tool {item.name}: tool.json missing 'package' or 'git'"
+
+        extras = meta.get("extras") or []
+        pkg_spec = f"{package}[{','.join(extras)}]" if extras else package
+        spec = f"{pkg_spec} @ git+{git_url}"
+
+        cmd = ["uv", "tool", "install", "--force", spec]
+        print(f"  → {' '.join(cmd)}")
+        subprocess.run(cmd, check=True)
+
+        # Post-install hooks (typed steps; legacy argv lists still accepted)
+        for step in meta.get("post_install") or []:
+            run_post_install_step(item.name, package, step)
+
+        record_install(item.kind, item.name, None)
+
+        msg = meta.get("post_install_message")
+        if msg:
+            print(f"  (i) {item.name}:\n{msg}")
+
+        return f"installed tool {item.name} via uv tool install ({pkg_spec})"
 
     return f"skipped tool {item.name}: unknown type '{ttype}'"
 
