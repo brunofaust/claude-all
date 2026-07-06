@@ -9,12 +9,21 @@ name: release
 #   publish  — when that PR merges, main already carries the bump, so we only
 #              create + push the tag (tags are not branch-protected) and the
 #              GitHub release. Nothing is pushed to main.
+#
+# `workflow_dispatch` is a manual escape hatch for `publish`: a release/** PR
+# merge is a single `pull_request: closed` webhook delivery, and if GitHub
+# never fires it (observed once — merging the release/0.2.0 PR produced no
+# workflow run at all), main is left bumped but untagged with no automatic
+# retry. Re-running `gh workflow run release.yml --ref main` re-evaluates the
+# same idempotent "is main's version already tagged?" check `publish` always
+# runs, so it's safe to invoke any time.
 on:
   push:
     branches: ['release/**']
   pull_request:
     types: [closed]
     branches: [main]
+  workflow_dispatch: {}
 
 permissions:
   contents: write
@@ -68,9 +77,12 @@ jobs:
   publish:
     name: tag and publish release
     if: >-
-      github.event_name == 'pull_request'
-      && github.event.pull_request.merged == true
-      && startsWith(github.event.pull_request.head.ref, 'release/')
+      github.event_name == 'workflow_dispatch'
+      || (
+        github.event_name == 'pull_request'
+        && github.event.pull_request.merged == true
+        && startsWith(github.event.pull_request.head.ref, 'release/')
+      )
     runs-on: ubuntu-latest
     concurrency:
       group: release-publish
