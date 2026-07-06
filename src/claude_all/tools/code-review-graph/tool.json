@@ -1,0 +1,14 @@
+{
+  "name": "code-review-graph",
+  "github": "https://github.com/tirth8205/code-review-graph",
+  "type": "uv_tool",
+  "git": "https://github.com/tirth8205/code-review-graph",
+  "package": "code-review-graph",
+  "extras": ["communities", "enrichment"],
+  "command": "code-review-graph",
+  "post_install": [
+    {"type": "bash", "command": ["code-review-graph", "install"]}
+  ],
+  "post_install_message": "Please run 'code-review-graph build' inside each project where you want to use it.",
+  "description": "Persistent incremental knowledge graph for token-efficient, context-aware code reviews with Claude Code. Installed via 'uv tool install' from git (extras: communities → igraph for community detection, enrichment → jedi for static analysis)."
+}

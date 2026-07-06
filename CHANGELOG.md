@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- Converted the `code-review-graph` plugin (§4) into a tool (§6), installed via
+  `uv tool install "code-review-graph[communities,enrichment] @ git+https://github.com/tirth8205/code-review-graph"`
+  instead of `pipx`. Added `type: uv_tool` support to the tools installer
+  (`install_tool` in `src/claude_all/cli.py`), alongside the existing `brew` type.
 - Repackaged as a proper Python package: `agents/`, `skills/`, `hooks/`, `instructions/`,
   `mcps/`, `plugins/`, and `tools/` moved under `src/claude_all/`; `claude-all.py` renamed to
   `src/claude_all/cli.py`.

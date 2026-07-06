@@ -20,7 +20,7 @@ claude-all/
 │   ├── hooks/                 # Claude Code hook scripts (PreToolUse / PostToolUse / Stop)
 │   ├── plugins/                # Claude Code plugins
 │   ├── mcps/                   # MCP server configurations
-│   ├── tools/                  # OS-level CLI tools (brew)
+│   ├── tools/                  # OS-level CLI tools (brew, uv_tool)
 │   └── instructions/           # Standalone ~/.claude/CLAUDE.md snippets (no resource to install)
 └── README.md
 ```
@@ -418,15 +418,11 @@ Optional fields:
   - `{"type": "bash", "command": ["foo", "install"]}` — run a command (optional: `"pwd": "sub/dir"`).
   - A bare argv list (e.g. `["foo", "install"]`) is still accepted as a legacy `bash` step.
 
-    Example: `[{"type": "pip", "package": "igraph"}, {"type": "bash", "command": ["code-review-graph", "install"]}]`
+    Example: `[{"type": "bash", "command": ["foo", "install"]}]`
 
 - `post_install_message` — string printed after install, e.g. instructions the user must follow per-project.
 
-Installed plugins:
-
-| Plugin              | Type                  | Source                                                                        | Description                                                                                                                                                                     |
-| ------------------- | --------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `code-review-graph` | pip (`[communities]`) | [tirth8205/code-review-graph](https://github.com/tirth8205/code-review-graph) | Persistent incremental knowledge graph for token-efficient, context-aware code reviews. `igraph` is pip-installed into the plugin's pipx venv via `pipx inject` during install. |
+No plugins currently installed — `code-review-graph` moved to § 6 Tools (installed via `uv tool install` from git, not pipx).
 
 ### 5. MCPs
 
@@ -476,9 +472,9 @@ Installed MCPs:
 
 ### 6. Tools
 
-CLI tools installed at the OS level (not into `~/.claude/`). Each tool lives at `src/claude_all/tools/<name>/tool.json`. Currently only `type: brew` (Homebrew) is supported.
+CLI tools installed at the OS level (not into `~/.claude/`). Each tool lives at `src/claude_all/tools/<name>/tool.json`. Two types are supported: `brew` (Homebrew) and `uv_tool` (`uv tool install` from a git URL).
 
-Schema:
+Schema (`brew`):
 
 ```json
 {
@@ -494,6 +490,23 @@ Schema:
 }
 ```
 
+Schema (`uv_tool`):
+
+```json
+{
+  "name": "mytool",
+  "github": "https://github.com/org/mytool",
+  "type": "uv_tool",
+  "git": "https://github.com/org/mytool",
+  "package": "mytool",
+  "extras": ["extra-a", "extra-b"],
+  "post_install": [
+    {"type": "bash", "command": ["mytool", "install"]}
+  ],
+  "post_install_message": "Run 'mytool build' inside each project where you want to use it."
+}
+```
+
 A tool may also ship a `config_append.toml` companion — a TOML fragment appended to the tool's own config file during install. Reference it from a `post_install` bash step:
 
 ```json
@@ -502,17 +515,16 @@ A tool may also ship a `config_append.toml` companion — a TOML fragment append
 
 Installer:
 
-- Checks `brew` on PATH (errors with `https://brew.sh/` link if missing)
-- `brew tap <tap>` (only if not already tapped)
-- `brew install <package>` (skipped if already installed)
-- Runs each `post_install` step in order
-- Injects optional `claude_md.md` into `~/.claude/CLAUDE.md` or `./CLAUDE.md` (per `--user` / `--project`)
+- `brew`: checks `brew` on PATH (errors with `https://brew.sh/` link if missing) → `brew tap <tap>` (only if not already tapped) → `brew install <package>` (skipped if already installed)
+- `uv_tool`: checks `uv` on PATH (errors with the astral.sh install link if missing) → builds `<package>[<extras>] @ git+<git>` → `uv tool install --force <spec>` (re-run is idempotent and picks up upstream changes)
+- Either type then runs each `post_install` step in order, and injects the optional `claude_md.md` into `~/.claude/CLAUDE.md` or `./CLAUDE.md` (per `--user` / `--project`)
 
 Installed tools:
 
-| Tool       | Source                                                    | Install                                                       | Purpose                                                                                                                                                                                                                                                                          |
-| ---------- | --------------------------------------------------------- | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `rtk`      | [rtk-ai/rtk](https://github.com/rtk-ai/rtk)               | `brew install rtk` + `rtk init -g`                            | Rust Token Killer — explicit prefix model (`rtk git log`, `rtk aws …`). Wraps `git`, `grep`, `cat`, `find`, `ls`, `aws`, `make`, `terraform`, `pytest`, `gh`, `npm`, `eslint`, `playwright`, `psql`, `wc` to cut output token cost 60-90%.                                      |
+| Tool                | Type      | Source                                                                        | Install                                                                                    | Purpose                                                                                                                                                                                                                                    |
+| ------------------- | --------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `rtk`               | `brew`    | [rtk-ai/rtk](https://github.com/rtk-ai/rtk)                                   | `brew install rtk` + `rtk init -g`                                                          | Rust Token Killer — explicit prefix model (`rtk git log`, `rtk aws …`). Wraps `git`, `grep`, `cat`, `find`, `ls`, `aws`, `make`, `terraform`, `pytest`, `gh`, `npm`, `eslint`, `playwright`, `psql`, `wc` to cut output token cost 60-90%. |
+| `code-review-graph` | `uv_tool` | [tirth8205/code-review-graph](https://github.com/tirth8205/code-review-graph) | `uv tool install "code-review-graph[communities,enrichment] @ git+..."` + `... install`     | Persistent incremental knowledge graph for token-efficient, context-aware code reviews. `communities` pulls in `igraph`, `enrichment` pulls in `jedi`.                                                                                   |
 
 ### 7. Instructions (standalone CLAUDE.md snippets)
 
