@@ -89,8 +89,7 @@ def _credential_file_reason(path: str) -> str | None:
 
     # .env and .env.<x>, but allow the shareable templates.
     if low == ".env" or (
-        low.startswith(".env.")
-        and not low.endswith((".example", ".sample", ".template", ".dist"))
+        low.startswith(".env.") and not low.endswith((".example", ".sample", ".template", ".dist"))
     ):
         return f"stages `{base}` (a real .env — commit only `.env.example`)"
 
@@ -116,9 +115,8 @@ def _looks_like_secret(value: str) -> bool:
     low = value.lower()
     if any(bit in low for bit in _PLACEHOLDER_BITS):
         return False
-    if len(set(value)) <= 2:  # e.g. "xxxxxxxxxxxx", "------------"
-        return False
-    return True
+    # too few distinct chars to be a real secret — e.g. "xxxxxxxxxxxx", "------------"
+    return len(set(value)) > 2
 
 
 def _sensitive_env() -> list[tuple[str, str]]:
@@ -222,7 +220,9 @@ def main() -> int:
     repo = _repo_dir(command, data)
     if repo is not None:
         # (1b) Credential files in the staged set (covers `git add .` + commit).
-        name_only = _git(repo, "diff", "--cached", "--name-only") if (has_commit or has_add) else None
+        name_only = (
+            _git(repo, "diff", "--cached", "--name-only") if (has_commit or has_add) else None
+        )
         if name_only:
             for p in name_only.splitlines():
                 reason = _credential_file_reason(p)
