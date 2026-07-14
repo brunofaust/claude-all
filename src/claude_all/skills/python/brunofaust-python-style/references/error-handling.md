@@ -326,6 +326,8 @@ Use Python's built-in exception types appropriately.
 
 **Rule:** No silent exceptions. No `log.debug` inside `except`. Every caught exception must either be re-raised with context or logged at `warning`/`error` with structured context.
 
+> **Complemented by the process-global DEBUG safety net** (see [below](#process-global-handled-exception-logger--the-debug-safety-net)): one `sys.monitoring` hook records *every* handled exception at DEBUG, centrally. With it installed, a **benign, expected** swallow may be left **clean** (the hook covers it) — reserve an explicit `warning`/`error` in the `except` body for a **genuinely notable** failure. The "no `log.debug` inside `except`" rule still holds: the debug logging is central, never scattered across handlers.
+
 ### Anti-patterns
 
 ```python
@@ -389,3 +391,76 @@ except AnthropicAPIError as e:
 
 - Ruff: `BLE001`, `TRY002`, `TRY003`, `TRY004`, `TRY200`, `TRY201`, `B904`.
 - `skill_enforcer.py` rule `no_debug_in_except` — bans `log.debug` inside `except` blocks. See `references/enforcement.md`.
+
+### Process-global handled-exception logger — the DEBUG safety net
+
+The `no_debug_in_except` rule bans `log.debug` *inside* a handler. To still surface the
+benign/swallowed-exception class — every `except` that quietly handles something — register **one
+process-global** [`sys.monitoring`](https://docs.python.org/3/library/sys.monitoring.html) (PEP 669,
+3.12+) `EXCEPTION_HANDLED` callback that DEBUG-logs *every* handled exception centrally. Nothing is
+ever fully silent, and you touch zero `except` blocks. This is the clean alternative to sprinkling
+`log.debug` everywhere.
+
+Non-negotiable design points:
+
+- **Feature-flag it, default off.** When off, **never claim a `sys.monitoring` tool id** → literally
+  zero overhead. Gate at the very top of `install()`.
+- **Filter control-flow "exceptions".** `StopIteration`, `StopAsyncIteration`, `GeneratorExit`,
+  `KeyboardInterrupt`, `SystemExit`, `asyncio.CancelledError` are normal signalling, not errors —
+  never log them.
+- **Per-thread reentrancy guard.** The DEBUG emit can itself handle an exception inside the logging
+  stack → the callback re-enters and recurses forever. Guard with `threading.local()` (callbacks run
+  in the raising thread).
+- **Idempotent install + `uninstall()`.** Guard the claimed tool id so repeated installs (warm Lambda
+  cold-starts, multiple entry points) are no-ops. Provide `uninstall()` that frees the tool id — tests
+  MUST free it or it leaks across cases (breaks under `pytest-xdist`).
+- **Install once per process entry point** (each handler's logging init; the ASGI/module-load path
+  for an API that bypasses the standard wrapper; the ECS `__main__`).
+
+```python
+# myapp/core/exception_logging.py  (sketch — genericised)
+import sys
+import threading
+from asyncio import CancelledError
+from types import CodeType
+
+_CONTROL_FLOW: tuple[type[BaseException], ...] = (
+    StopIteration, StopAsyncIteration, GeneratorExit, KeyboardInterrupt, SystemExit, CancelledError,
+)
+_installed_tool_id: int | None = None
+_reentry = threading.local()  # per-thread: sys.monitoring callbacks run in the raising thread
+
+
+def install_handled_exception_logger() -> None:
+    global _installed_tool_id
+    if _installed_tool_id is not None:
+        return  # idempotent
+    if not get_settings().app.LOG_HANDLED_EXCEPTIONS:
+        return  # feature off → never claim a tool id (zero overhead)
+    mon = sys.monitoring
+    tool_id = next((i for i in range(6) if mon.get_tool(i) is None), None)  # PEP 669: ids 0..5
+    if tool_id is None:
+        return
+
+    def on_handled(code: CodeType, _offset: int, exc: BaseException) -> None:
+        if isinstance(exc, _CONTROL_FLOW) or getattr(_reentry, "active", False):
+            return
+        _reentry.active = True
+        try:
+            log.debug(
+                "exception_handled",
+                error_type=type(exc).__name__,
+                error=str(exc),
+                where=f"{code.co_filename}:{code.co_firstlineno}",
+            )
+        finally:
+            _reentry.active = False
+
+    mon.use_tool_id(tool_id, "myapp.handled_exceptions")
+    mon.register_callback(tool_id, mon.events.EXCEPTION_HANDLED, on_handled)
+    mon.set_events(tool_id, mon.events.EXCEPTION_HANDLED)
+    _installed_tool_id = tool_id
+```
+
+**Caveat:** `EXCEPTION_HANDLED` fires on *every* caught exception process-wide — keep it at DEBUG and
+off by default; enable it only when hunting a swallowed-error bug, or route it to a sampled sink.
