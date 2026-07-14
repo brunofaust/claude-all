@@ -3,7 +3,7 @@
 
 Fires PreToolUse on Bash. If the command is a ``git commit`` or ``git push``,
 emit a one-time, non-blocking reminder per Claude Code session to route the
-change through the ``/ship-pr`` workflow (gates -> review -> docs -> draft PR)
+change through the ``/ship-pr`` workflow (gates -> review -> docs -> PR)
 instead of an ad-hoc commit + PR.
 
 A hook cannot invoke a skill, so this only reminds Claude; Claude decides
@@ -57,8 +57,9 @@ def main() -> int:
                     "Reminder (ship-pr, first git commit/push this session): if this change is "
                     "going out for review, route it through the /ship-pr skill instead of an "
                     "ad-hoc commit + PR — it runs simplify -> lint -> tests -> verification -> "
-                    "code-review (gate) -> docs/CLAUDE.md refresh, then opens a DRAFT PR after "
-                    "confirmation. For a quick local commit with no review/PR, /ship is lighter. "
+                    "code-review (gate) -> docs/CLAUDE.md refresh, then opens a PR (ready for "
+                    "review) after confirmation. For a quick local commit with no review/PR, /ship "
+                    "is lighter. "
                     "If you are ALREADY inside /ship-pr (or the user asked for a plain commit), "
                     "ignore this and proceed."
                 ),
