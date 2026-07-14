@@ -201,6 +201,41 @@ grep -niE 'error|exception|traceback|fail|denied|ValidationError|timeout|throttl
 `warn|warning` is a wider, noisier pass — add it when hunting a silent-degradation
 bug, but expect benign hits to triage out.
 
+### Automated sweep — `scripts/log_sweep.py` (stdlib, zero installs)
+
+The grep pipeline above dumps raw text into your context. For a **token-cheap**
+sweep, run the bundled script instead: it loads **every** event into a stdlib
+`sqlite3` DB and prints only a deduplicated error table — group, a short snippet,
+and the sqlite `rowid` — so you pay tokens for real errors only. A clean sweep is
+one line.
+
+```bash
+# ships alongside this skill (installed under ~/.claude/skills/aws-debug-loop/)
+python3 scripts/log_sweep.py --profile myapp-dev --name-filter myapp-dev- --since 3h
+```
+
+- **Fetch** tries `boto3` → the `aws` CLI → `awslogs`, in that order; if none work
+    it warns and exits. Required args: `--profile`, `--name-filter` (log-group name
+    substring). Key optional: `--since`/`--until` (window), `--region`, `--db`,
+    `--level WARNING` (also flag JSON logs at/above a level), `--keywords`,
+    `--max-events`, `--exclude`.
+- **Keywords** (case-insensitive, `4xx`/`5xx` always added):
+    `error · exception · traceback · timeout · fail · denied · throttl ·
+    validationerror · conflict`.
+- **Structlog JSON** lines get `level`/`event` parsed out and the full object kept
+    in a `fields` column (query with sqlite's built-in `json_extract`); non-JSON
+    lines keep their raw `message`. No column explosion.
+- **Drill into any error by its rowid** — rows are ordered chronologically within a
+    stream, so `id ± N` is real context:
+
+    ```bash
+    sqlite3 sweep.sqlite "SELECT ts_iso, level, message FROM logs
+      WHERE log_stream = '<stream>' AND id BETWEEN <id>-5 AND <id>+5 ORDER BY id"
+    ```
+
+    The script prints this query pre-filled for the top signature. The `sweep.sqlite`
+    is yours to query however you like afterward.
+
 **Then loop the sweep** (this is the "analyse in loop" part):
 
 ```
