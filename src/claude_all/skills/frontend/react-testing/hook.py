@@ -18,6 +18,7 @@ import json
 import os
 import sys
 import tempfile
+import time
 
 _TEST_EXTS = (".tsx", ".ts", ".jsx", ".js", ".mjs")
 
@@ -48,8 +49,11 @@ def main() -> int:
 
     session_id = data.get("session_id") or "no-session"
     flag = os.path.join(tempfile.gettempdir(), f"claude-all-react-testing-{session_id}.flag")
-    if os.path.exists(flag):
-        return 0  # already reminded this session
+    # re-fire at most once per hour (flag mtime = last-fired time), so a long
+    # session keeps the conventions fresh instead of being reminded only once.
+    with contextlib.suppress(OSError):
+        if os.path.exists(flag) and (time.time() - os.path.getmtime(flag)) < 3600:
+            return 0  # reminded within the last hour
     # best-effort flag write: if the FS is unwritable, skip the once-per-session dedup
     with contextlib.suppress(OSError), open(flag, "w", encoding="utf-8") as f:
         f.write(file_path)

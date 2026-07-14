@@ -8,6 +8,7 @@ import json
 import os
 import sys
 import tempfile
+import time
 
 # File types where SEO-meaningful edits live
 WEB_EXTS = (
@@ -77,8 +78,11 @@ def main() -> int:
 
     session_id = data.get("session_id") or "no-session"
     flag = os.path.join(tempfile.gettempdir(), f"claude-all-seo-{session_id}.flag")
-    if os.path.exists(flag):
-        return 0
+    # re-fire at most once per hour (flag mtime = last-fired time), so a long
+    # session keeps the conventions fresh instead of being reminded only once.
+    with contextlib.suppress(OSError):
+        if os.path.exists(flag) and (time.time() - os.path.getmtime(flag)) < 3600:
+            return 0  # reminded within the last hour
     # best-effort flag write: if the FS is unwritable, skip the once-per-session dedup
     with contextlib.suppress(OSError), open(flag, "w", encoding="utf-8") as f:
         f.write(file_path)
