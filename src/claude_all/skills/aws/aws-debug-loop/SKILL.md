@@ -1,7 +1,7 @@
 ---
 name: aws-debug-loop
 description: >-
-  Structured debug loop for AWS dev environments. Covers e2e and integration test failures: how to split a full test into isolated pieces, hotfix the dev environment directly (env vars, timeouts, image versions) before deploying, validate each fix in isolation, run independent pieces in parallel, and know when to declare a piece fixed vs when to redeploy. Stop condition: the full test passes clean — never stop earlier. Use when: debugging e2e or integration test failures against AWS dev environments, working with Lambda / Step Functions / SQS / DynamoDB / ECS, investigating multi-step pipeline failures, or deciding whether to hotfix dev vs deploy.
+  Structured debug loop for AWS dev environments. Covers e2e and integration test failures: how to split a full test into isolated pieces, hotfix the dev environment directly (env vars, timeouts, image versions) before deploying, validate each fix in isolation, run independent pieces in parallel, sweep ALL log groups with `awslogs` for scattered/async root causes, and know when to declare a piece fixed vs when to redeploy. Stop condition: the full test passes clean — never stop earlier. Use when: debugging e2e or integration test failures against AWS dev environments, working with Lambda / Step Functions / SQS / DynamoDB / ECS, investigating multi-step pipeline failures, sweeping CloudWatch logs across every log group for a symptom with no obvious owner, or deciding whether to hotfix dev vs deploy.
 user-invocable: true
 ---
 
@@ -31,6 +31,9 @@ Run the complete e2e or integration test **once**.
 - Capture every failure — do not stop at the first one.
 - Map each failure to its owner resource (Lambda fn, SF state, SQS consumer, DynamoDB access pattern, …).
 - Group failures by resource — one resource may produce multiple symptoms.
+- Run the [all-groups log sweep](#all-groups-log-sweep-awslogs--the-highest-yield-failure-finder)
+    now too — the test output names only its own failures; the sweep surfaces
+    scattered/async root causes it never mentions.
 
 > Do not re-run the full test again until Phase 2 is complete for all pieces.
 
@@ -161,6 +164,68 @@ isolated test.
 
 ______________________________________________________________________
 
+## All-groups log sweep (`awslogs`) — the highest-yield failure finder
+
+When a symptom has **no obvious owner** (a step "did nothing", a downstream
+record never appeared, a vague "could not process"), do **not** grep only the
+one suspect log group. Pull **every** log group for the env over the failure
+window and grep a fixed error-signature set. Root causes scatter across
+services, and a crash in a **scheduled / background / async** resource (a cron
+Lambda, a sweeper, a queue consumer, a retry worker) is invisible to *both* the
+happy-path e2e **and** a single-resource cold-start probe — the all-groups sweep
+is the only thing that catches it. In practice this is repeatedly the single
+highest-yield move of a debug session.
+
+Use [`awslogs`](https://github.com/jorgebastida/awslogs)
+(`brew install awslogs` or `pipx install awslogs`): its `get <group> ALL` pulls
+**all streams** of a group in one call — what `aws logs tail` on a single stream
+won't give you in a sweep.
+
+**The sweep** — delegate the fan-out to the `cloudwatch-inspector` /
+`incident-responder` agents (large output; don't hand-run it inline in the main
+session):
+
+```bash
+export AWS_PROFILE=myapp-dev
+mkdir -p logs
+# 1. Enumerate EVERY group for the env — not just the suspect one:
+awslogs groups | grep 'myapp-dev-'
+# 2. Pull ALL streams of each group over the failure window, to files:
+for g in $(awslogs groups | grep 'myapp-dev-'); do
+  awslogs get "$g" ALL --start='3h ago' --no-color > "logs/${g##*/}.txt"
+done
+# 3. Grep one fixed signature set across every file:
+grep -niE 'error|exception|traceback|fail|denied|ValidationError|timeout|throttl|conflict|[45][0-9][0-9]' logs/*.txt
+```
+
+`warn|warning` is a wider, noisier pass — add it when hunting a silent-degradation
+bug, but expect benign hits to triage out.
+
+**Then loop the sweep** (this is the "analyse in loop" part):
+
+```
+1. Dedupe hits into a table:  group | signature | count | first-seen
+2. Triage each row to an owner resource — feed real bugs into Phase 2.
+3. Fix the smallest piece.
+4. RE-SWEEP the same window.
+   - Signature gone AND no new signature  → that fix is confirmed.
+   - Signature still present              → not fixed. Re-hypothesise.
+   - New signature appeared               → the fix caused a regression. Triage it.
+```
+
+Report the table **even when empty** ("swept N groups, 0 signatures") so a clean
+sweep is on record — a silent skip reads as "nothing was wrong" when nothing was
+looked at.
+
+Where it plugs into the loop:
+
+- **Phase 1** — run it alongside mapping the test's own failures; it surfaces the
+    scattered/async root causes the test output never names.
+- **Phase 3** — run it as a mandatory regression gate; it catches new crashes in
+    **unrelated scheduled resources** that the happy-path verification can't see.
+
+______________________________________________________________________
+
 ## Rules
 
 1. **Full test runs at most twice per outer iteration** — once to gather
@@ -173,3 +238,6 @@ ______________________________________________________________________
     "same vs different" error comparison.
 1. **One hypothesis per iteration** — changing two things at once makes it
     impossible to know which fix worked.
+1. **Sweep ALL log groups, not the suspect one** — the all-groups `awslogs` sweep
+    is the only thing that catches crashes in scheduled/async resources the
+    happy-path test and cold-start probe both miss; re-sweep to confirm each fix.
