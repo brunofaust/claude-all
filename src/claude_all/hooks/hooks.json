@@ -3,6 +3,7 @@
   "config-protection": {"event": "PreToolUse", "matcher": "Edit|Write|MultiEdit", "timeout": 2000},
   "worktree-isolation-guard": {"event": "PreToolUse", "matcher": "Edit|Write|MultiEdit", "timeout": 2000},
   "mock-spec-guard": {"event": "PreToolUse", "matcher": "Edit|Write|MultiEdit", "timeout": 2000},
+  "test-data-isolation-guard": {"event": "PreToolUse", "matcher": "Edit|Write|MultiEdit", "timeout": 2000},
   "destructive-command-guard": {"event": "PreToolUse", "matcher": "Bash", "timeout": 5000},
   "secret-leak-guard": {"event": "PreToolUse", "matcher": "Bash", "timeout": 5000},
   "supply-chain-guard": {"event": "PreToolUse", "matcher": "Bash", "timeout": 15000},
