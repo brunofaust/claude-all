@@ -2,17 +2,17 @@
 name: ship-pr
 description: >-
   Heavyweight pre-PR pipeline — the full /ship gate sequence PLUS optional simplification, code
-  review, a docs/CLAUDE.md refresh, and a draft PR. Sequence: (simplify, optional) → lint-fixer →
+  review, a docs/CLAUDE.md refresh, and a PR. Sequence: (simplify, optional) → lint-fixer →
   test-runner → verification-loop → /code-review (gate) → (security-review if the change touches a
   security surface) → docs-updater (revise CLAUDE.md + docs from the diff) → (confirm) → git-committer
-  → open a DRAFT PR. Use when: "open a PR for this", "review and ship", finishing a substantive change
+  → open a PR. Use when: "open a PR for this", "review and ship", finishing a substantive change
   that warrants review before it goes out. For the quick lint+test+commit loop with no review/PR, use
   the lighter `/ship`. Orchestrator only: it sequences existing agents and skills and gates on results.
 disable-model-invocation: false
 user-invocable: true
 ---
 
-# /ship-pr — simplify → gates → review → docs → commit → draft PR
+# /ship-pr — simplify → gates → review → docs → commit → PR
 
 The heavier sibling of `/ship`: it adds the review gate and PR creation for changes that are going out
 for others to see. Review runs **once here**, on the assembled diff — deliberately NOT on every commit
@@ -45,9 +45,9 @@ first hard failure**.
 6. **Commit — `git-committer` agent (after confirm).** When review is clean and docs are in sync, show
    the diff summary + proposed Conventional Commits message, get a one-word confirm, commit to the
    current branch.
-7. **Draft PR — (after confirm).** Push the branch and open a **draft** PR (title + body summarizing
-   the change and the gate results). Opening a PR is outward-facing — confirm before doing it, and
-   default to draft. Do not enable auto-merge.
+7. **PR — (after confirm).** Push the branch and open a PR (title + body summarizing the change and
+   the gate results), ready for review — **not** a draft. Opening a PR is outward-facing — confirm
+   before doing it. Do not enable auto-merge.
 
 ## Optional tail — review an already-open PR
 
@@ -64,8 +64,8 @@ number (someone else's, or a re-review after pushes), use the existing **`review
 - **No feature without its tests.** The test-coverage gate runs before the other gates: a new/changed
   feature must ship unit tests for its code AND e2e/integration tests validating its business
   requirements (where such a suite exists). A missing-coverage gap is a hard stop, not a warning.
-- **Confirm the two outward steps** (commit, then PR) separately; default the PR to draft; never push
-  force / enable auto-merge from here.
+- **Confirm the two outward steps** (commit, then PR) separately; open the PR ready for review (not a
+  draft); never push force / enable auto-merge from here.
 - **Simplify before the gates, docs after review.** Code-mutating steps (simplify, lint-fixer) run
   before tests so their edits are validated; the docs/CLAUDE.md refresh runs after the code is final
   so docs reflect exactly what ships.
@@ -76,5 +76,5 @@ number (someone else's, or a re-review after pushes), use the existing **`review
 ## Output
 
 ```
-ship-pr: simplify ✓ · coverage ✓ (unit + e2e) · lint ✓ · tests ✓ · verify READY · review ✓ (0 block, 2 warn) · sec n/a · docs ✓ · commit <sha> · PR #NN (draft)
+ship-pr: simplify ✓ · coverage ✓ (unit + e2e) · lint ✓ · tests ✓ · verify READY · review ✓ (0 block, 2 warn) · sec n/a · docs ✓ · commit <sha> · PR #NN
 ```
