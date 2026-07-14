@@ -120,11 +120,7 @@ def _iso(ts: int | None) -> str | None:
 
 def _select_groups(names: list[str], args: argparse.Namespace) -> list[str]:
     excludes = [x for x in args.exclude.split(",") if x]
-    chosen = [
-        n
-        for n in names
-        if args.name_filter in n and not any(x in n for x in excludes)
-    ]
+    chosen = [n for n in names if args.name_filter in n and not any(x in n for x in excludes)]
     return sorted(set(chosen))
 
 
@@ -267,9 +263,7 @@ def fetch_all(args: argparse.Namespace, since_ms: int, until_ms: int) -> tuple[s
             return backend, fns[backend](args, since_ms, until_ms)
         except Exception as exc:  # any backend runtime failure -> record and try the next
             problems.append(f"{backend}: {type(exc).__name__}: {exc}")
-    raise SystemExit(
-        "warning: could not fetch logs from any backend:\n  " + "\n  ".join(problems)
-    )
+    raise SystemExit("warning: could not fetch logs from any backend:\n  " + "\n  ".join(problems))
 
 
 # ---------------------- parsing + classification ----------------------
@@ -367,7 +361,17 @@ def ingest(
             "INSERT INTO logs"
             " (log_group, log_stream, ts, ts_iso, level, event, message, is_json, fields)"
             " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (e.log_group, e.log_stream, e.ts, _iso(e.ts), level, event, e.message, int(is_json), fields),
+            (
+                e.log_group,
+                e.log_stream,
+                e.ts,
+                _iso(e.ts),
+                level,
+                event,
+                e.message,
+                int(is_json),
+                fields,
+            ),
         )
         matched = classify(pattern, e.message, is_json, level, level_floor)
         if matched:
@@ -397,18 +401,20 @@ def _dedupe(hits: list[dict]) -> list[dict]:
         agg["count"] += 1
         # Keep the earliest occurrence as the representative example.
         if h["ts"] is not None and (agg["ts"] is None or h["ts"] < agg["ts"]):
-            agg.update(id=h["id"], group=h["group"], stream=h["stream"], snippet=h["snippet"], ts=h["ts"])
+            agg.update(
+                id=h["id"], group=h["group"], stream=h["stream"], snippet=h["snippet"], ts=h["ts"]
+            )
     return sorted(by_sig.values(), key=lambda r: r["count"], reverse=True)
 
 
-def report(used_backend: str, n_groups: int, n_events: int, hits: list[dict], args: argparse.Namespace) -> None:
+def report(
+    used_backend: str, n_groups: int, n_events: int, hits: list[dict], args: argparse.Namespace
+) -> None:
     print(
         f"sweep -> {args.db} | backend={used_backend} | "
         f"groups={n_groups} events={n_events} | window={args.since}..{args.until}"
     )
-    print(
-        "schema: id, log_group, log_stream, ts, ts_iso, level, event, message, is_json, fields"
-    )
+    print("schema: id, log_group, log_stream, ts, ts_iso, level, event, message, is_json, fields")
     if not hits:
         print("CLEAN -- 0 error signatures.")
         return
@@ -420,7 +426,7 @@ def report(used_backend: str, n_groups: int, n_events: int, hits: list[dict], ar
     example = rows[0]
     print(f"\nContext (+/-{args.context} lines in the same stream), e.g. the top signature:")
     print(
-        f"  sqlite3 {args.db} \"SELECT ts_iso, level, message FROM logs"
+        f'  sqlite3 {args.db} "SELECT ts_iso, level, message FROM logs'
         f" WHERE log_stream = '{example['stream']}'"
         f" AND id BETWEEN {example['id']} - {args.context} AND {example['id']} + {args.context}"
         ' ORDER BY id"'
@@ -442,18 +448,26 @@ def build_parser() -> argparse.ArgumentParser:
         help="only sweep log groups whose name contains this substring (e.g. myapp-dev-)",
     )
     p.add_argument("--region", default=os.environ.get("AWS_DEFAULT_REGION", "us-east-1"))
-    p.add_argument("--since", default="3h", help="window start: 3h/30m/2d/90s or ISO-8601 (default 3h)")
+    p.add_argument(
+        "--since", default="3h", help="window start: 3h/30m/2d/90s or ISO-8601 (default 3h)"
+    )
     p.add_argument("--until", default="now", help="window end: 'now' or ISO-8601 (default now)")
-    p.add_argument("--db", default="./sweep.sqlite", help="output sqlite path (default ./sweep.sqlite)")
+    p.add_argument(
+        "--db", default="./sweep.sqlite", help="output sqlite path (default ./sweep.sqlite)"
+    )
     p.add_argument("--backend", choices=("auto", *_BACKENDS), default="auto")
     p.add_argument(
         "--keywords",
         default=",".join(DEFAULT_KEYWORDS),
         help="comma-separated error keywords, case-insensitive (4xx/5xx always added)",
     )
-    p.add_argument("--level", default=None, help="also flag JSON logs at/above this level (e.g. WARNING)")
+    p.add_argument(
+        "--level", default=None, help="also flag JSON logs at/above this level (e.g. WARNING)"
+    )
     p.add_argument("--max-events", type=int, default=0, help="per-group event cap (0 = no cap)")
-    p.add_argument("--snippet-chars", type=int, default=120, help="chars of context around each match")
+    p.add_argument(
+        "--snippet-chars", type=int, default=120, help="chars of context around each match"
+    )
     p.add_argument("--stream-filter", default="", help="only keep streams whose name contains this")
     p.add_argument("--exclude", default="", help="comma-separated group-name substrings to skip")
     p.add_argument("--context", type=int, default=5, help="+/- lines for the context query hint")
