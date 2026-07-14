@@ -5,9 +5,18 @@ Fires PreToolUse on Edit|Write. If target file is Python, emit a one-time
 non-blocking reminder per Claude Code session so Sonnet remembers the skill's
 conventions WITHOUT flooding the transcript with the same message on every edit.
 
+This is the HIGH-SIGNAL trigger: it fires at the moment Python is actually being
+written, which is when the skill most needs loading. It dedups on its OWN flag
+(`claude-all-brunofaust-py-edit-<session_id>`), independent of the SessionStart
+loader (`python-style-skill-loader.py`) — so the reminder still lands on the
+first real `.py` edit even when the session-start nudge already fired (that early
+nudge is easy to forget dozens of turns before any Python work). At most one
+session-start reminder + one first-edit reminder per session; they never pile
+onto the same edit.
+
 Session detection: Claude Code passes `session_id` in the hook input JSON.
-We flag `/tmp/claude-all-brunofaust-py-<session_id>` after the first emit; later
-edits in the same session see the flag and exit silently.
+We flag `<tmpdir>/claude-all-brunofaust-py-edit-<session_id>` after the first
+emit; later edits in the same session see the flag and exit silently.
 """
 
 from __future__ import annotations
@@ -31,7 +40,7 @@ def main() -> int:
 
     # One reminder per session
     session_id = data.get("session_id") or "no-session"
-    flag = os.path.join(tempfile.gettempdir(), f"claude-all-brunofaust-py-{session_id}.flag")
+    flag = os.path.join(tempfile.gettempdir(), f"claude-all-brunofaust-py-edit-{session_id}.flag")
     if os.path.exists(flag):
         return 0  # already reminded this session
     # best-effort flag write: if the FS is unwritable, skip the once-per-session dedup
