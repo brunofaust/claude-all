@@ -5,6 +5,21 @@
 
 ### Fixed
 
+- **brunofaust-python-style** / **prek**: both `claude_md.md` snippets (injected into
+  the always-loaded `~/.claude/CLAUDE.md`) contradicted the rules they front.
+  - python-style listed `TypedDict` as a *recommended* strict-typing tool while the
+    skill now bans it, and said only "Pydantic at trust boundaries" — too weak. It now
+    carries a **fix vs fake-fix table**: every gate has one real fix and one tempting
+    fake fix that makes the message vanish while the bug survives (relax to
+    `extra="ignore"`, add a "safe-looking" default, widen to `Any`, `cast()` into a
+    TypedDict, re-add a `SyntaxError` fail-open, `--select`/`SKIP=`/`--no-verify`).
+    Agents follow incentives literally — an undocumented escape hatch one keystroke
+    away is the gate's real failure mode.
+  - prek asserted "`prek run --all-files` is the single gate". It is not: that is one
+    stage over tracked files only, and a hook that silently skips still exits 0. Now
+    states `git add` first, run the pre-push stage too, watch for
+    `(no files to check) Skipped`, and pin per-hook `language_version`.
+
 - **prek**: names the **vacuous PASS** — a hook that silently skips its input and
   still exits 0. The skill only documented `default_language_version`, which does
   NOT reach a hook's isolated env, so any hook parsing Python with the interpreter's
