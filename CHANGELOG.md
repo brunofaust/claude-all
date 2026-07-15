@@ -5,6 +5,18 @@
 
 ### Fixed
 
+- **brunofaust-python-style**: `pydantic_contract.py` no longer fails OPEN on a file
+  it cannot parse. It parses with the `ast` of the interpreter it runs on, so an env
+  older than the project silently fails on new syntax (PEP 695 `type X = int`, PEP 758
+  `except A, B:`) — the same blind spot that had bandit skip 25 files and vulture skip
+  35, both while exiting success. An unparsable file now exits **2** (a tool error,
+  distinct from 1 = findings) even under `--exit-zero`, and points at the fix: pin
+  `language_version` on the hook. A file the checker could not read is a file it did
+  not check.
+- **brunofaust-python-style**: `enforcement.md`'s wiring recipe passes `--exit-zero`
+  when composing behind `baseline_gate.py` — without it the gate reads exit-1-on-
+  findings as a crash and fails closed on every run — and pins `language_version`.
+
 - **brunofaust-python-style**: `pydantic_contract.py`'s `opaque-annotation` rule
   only recursed into mapping containers, so `Sequence[Any]`, `list[dict[str, Any]]`
   and `Mapping[str, Any] | None` all silently PASSED — each is the untyped dict one

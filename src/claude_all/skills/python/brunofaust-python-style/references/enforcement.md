@@ -196,9 +196,19 @@ Both ship with the skills — copy them next to this project's other gates, into
 
 ```bash
 python scripts/baseline_gate.py --baseline pydantic_baseline.txt --update -- \
-    python scripts/pydantic_contract.py src/
+    python scripts/pydantic_contract.py --exit-zero src/
 git add pydantic_baseline.txt   # an uncommitted baseline = no gate
 ```
+
+Wiring it WITHOUT the ratchet is simpler and needs neither script — the checker
+exits 1 on any finding all by itself, so prek prints them and fails the commit:
+
+```bash
+python scripts/pydantic_contract.py src/          # exits 1 if anything is found
+```
+
+Use the bare form on a greenfield (or once the baseline reaches zero); use the
+ratchet when adopting the gate on a codebase that already has findings.
 
 Roll out **regression-only**: today's debt is grandfathered, tomorrow's is
 blocked. Then ratchet to zero — burn one notch per PR, deleting the fixed line
@@ -222,13 +232,28 @@ repo = "local"
 hooks = [{
   id = "pydantic-contract",
   name = "🐍 skill · Pydantic data contract (regression baseline)",
-  entry = "python scripts/baseline_gate.py --baseline pydantic_baseline.txt -- python scripts/pydantic_contract.py src/",
+  # `--exit-zero` is REQUIRED here and nowhere else: baseline_gate reads a non-zero
+  # exit as "the checker crashed" and fails closed. Without the flag, every run with
+  # findings would look like a tool error. (Wiring the checker WITHOUT the ratchet?
+  # Drop both baseline_gate and --exit-zero — it exits 1 on findings by itself.)
+  entry = "python scripts/baseline_gate.py --baseline pydantic_baseline.txt -- python scripts/pydantic_contract.py --exit-zero src/",
   language = "system",
+  # Pin the interpreter. This checker parses with the `ast` of the Python it RUNS
+  # ON, so an env older than the project silently fails to parse new syntax (PEP
+  # 695 `type X = int`, PEP 758 `except A, B:`) — see the interpreter-pin rule in
+  # the `prek` skill. A repo-level `default_language_version` does NOT reach a
+  # hook's isolated env. The checker exits 2 rather than skipping, so a wrong pin
+  # fails loudly instead of silently reporting clean.
+  language_version = "3.14",  # or your project's Python
   pass_filenames = false,
   always_run = true,
   files = "\\.py$"
 }]
 ```
+
+`pass_filenames = false` + `always_run = true` are load-bearing: `baseline_gate`
+diffs the FULL finding set against the baseline, so feeding it only the staged
+files would make every un-fed baseline entry look STALE and fail the gate.
 
 `.pre-commit-config.yaml` is the same hook, one level nested:
 

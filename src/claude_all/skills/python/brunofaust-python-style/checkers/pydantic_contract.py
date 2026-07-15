@@ -65,10 +65,23 @@ USAGE
     baseline_gate.py --baseline pydantic_baseline.txt -- \\
         python checkers/pydantic_contract.py --exit-zero src/
 
-PARSER NOTE
------------
-Uses the running interpreter's ``ast``; a file that will not parse is skipped
-(fail-open) rather than crashing the gate — a sibling syntax gate owns those.
+PARSER NOTE — pin this hook's interpreter
+-----------------------------------------
+This checker parses with the ``ast`` of the interpreter it RUNS ON, so an
+interpreter older than the project's silently fails to parse new syntax (PEP 695
+``type X = int``, ``async def run[**P, T]``, PEP 758 ``except A, B:``). Any
+Python-AST-based gate shares this: unpinned, bandit's env resolved to 3.12 and
+logged "syntax error while parsing AST" for 25 files, SKIPPED them, and **still
+exited success** — a security gate silently not scanning. Vulture's resolved to
+3.11 and dropped 35 files from dead-code analysis the same way.
+
+So this checker does NOT fail open. An unparsable file exits **2** (a tool error,
+distinct from 1 = findings) even under ``--exit-zero``, because a file it could
+not read is a file it did not check.
+
+Pin ``language_version`` on THIS hook — a repo-level ``default_language_version``
+does NOT reach a hook's isolated env. Gates with their own non-Python parser
+(ruff, jscpd, tree-sitter-based tools) are immune and need no pin.
 """
 
 from __future__ import annotations
@@ -573,7 +586,7 @@ def check_tree(tree: ast.AST, path: str, select: frozenset[str]) -> list[Finding
 
 
 def find_violations(path: Path, select: frozenset[str]) -> list[Finding]:
-    """Parse *path* and return its findings (fail-open on unparsable files).
+    """Parse *path* and return its findings.
 
     Args:
         path: The Python file to scan.
@@ -581,11 +594,16 @@ def find_violations(path: Path, select: frozenset[str]) -> list[Finding]:
 
     Returns:
         One finding per violation, in source order.
+
+    Raises:
+        SyntaxError: When the RUNNING interpreter cannot parse *path*. This is
+            deliberately NOT swallowed — see the PARSER NOTE in the module
+            docstring. A file the checker could not read is a file it did not
+            check; returning ``[]`` would report it clean.
+        ValueError: On a null byte or similar unreadable source.
+        UnicodeDecodeError: When the file is not valid UTF-8.
     """
-    try:
-        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-    except (SyntaxError, ValueError, UnicodeDecodeError):
-        return []
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     return check_tree(tree, path.as_posix(), select)
 
 
@@ -637,10 +655,33 @@ def main(argv: list[str] | None = None) -> int:
         parser.error(f"unknown rule(s): {', '.join(sorted(unknown))}")
 
     count = 0
+    unparsable: list[str] = []
     for file in iter_py_files(args.roots):
-        for finding in find_violations(file, select):
+        try:
+            findings = find_violations(file, select)
+        except (SyntaxError, ValueError, UnicodeDecodeError) as exc:
+            unparsable.append(f"{file}: {exc}")
+            continue
+        for finding in findings:
             print(finding)
             count += 1
+
+    # Fail CLOSED on an unparsable file, and do it even under --exit-zero: this is
+    # a TOOL error, not a finding, and baseline_gate.py must see it as one.
+    if unparsable:
+        version = f"{sys.version_info.major}.{sys.version_info.minor}"
+        print(
+            f"\nERROR: {len(unparsable)} file(s) could not be parsed by the running "
+            f"interpreter (python {version}). A file this checker could not read is a "
+            "file it did NOT check — skipping it silently would report it clean.\n"
+            "If the syntax is valid on the project's Python, this hook's interpreter is "
+            "too old: pin `language_version` on THIS hook. A repo-level "
+            "`default_language_version` does NOT reach a hook's isolated env.",
+            file=sys.stderr,
+        )
+        for item in unparsable:
+            print(f"  {item}", file=sys.stderr)
+        return 2
 
     if count and not args.exit_zero:
         print(
