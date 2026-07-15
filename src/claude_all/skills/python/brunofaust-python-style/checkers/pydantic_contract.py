@@ -84,6 +84,11 @@ does NOT reach a hook's isolated env. Gates with their own non-Python parser
 (ruff, jscpd, tree-sitter-based tools) are immune and need no pin.
 """
 
+# NOTE: this import looks like it violates the very standard this file enforces —
+# the skill's baseline is 3.14, where PEP 649 makes annotations lazy and the import
+# is dead weight. It stays because this is TOOLING, not an example: it lives in the
+# claude-all repo, which is deliberately `requires-python = ">=3.11"` so the
+# installer runs anywhere. Delete it only if claude-all's own floor moves to 3.14.
 from __future__ import annotations
 
 import argparse

@@ -3,6 +3,31 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **brunofaust-python-style**: baseline reverts to **Python 3.14+**. It was 3.14 in the
+  skill's private origin and got downgraded to 3.11 during the port to this public repo;
+  this restores it. Not a find-and-replace — a 3.14 floor *inverts* rules:
+  - `from __future__ import annotations` flips from **mandated** to **anti-pattern** —
+    PEP 649 makes annotations lazy by default, so the import is dead weight (and unlike
+    PEP 563 they still resolve to real objects for `get_type_hints()` / Pydantic).
+  - **PEP 695 is now the baseline**, not the upgrade: `type EntityId = str`,
+    `def first[T](...)`, `class Stack[T]`, `async def run[**P, T]`. `TypeVar` /
+    `ParamSpec` / `Generic[...]` demote to a read-it-don't-write-it legacy note. Alias
+    naming moves `snake_case` → `PascalCase`, forced by `type` (an alias must not read
+    as a variable).
+  - **PEP 758** paren-less `except ValueError, TypeError:` is available — but ONLY
+    without an `as` clause; `except A, B as e:` is a SyntaxError, so the parenthesised
+    form stays required when binding. Verified against CPython 3.14.6.
+  - **PEP 734** `InterpreterPoolExecutor` is available on the baseline; the
+    when-to-use-it-vs-`run_in_thread()` judgement is unchanged.
+  - A 3.14 floor makes the prek `language_version` pin **mandatory, not advisory**: PEP
+    695 and PEP 758 are precisely the syntax an older hook interpreter cannot parse, and
+    such hooks skip the file silently and still exit 0.
+  claude-all itself deliberately stays `requires-python = ">=3.11"` — it is the
+  installer, not a project following this skill. The shipped checker keeps its
+  `from __future__ import annotations` for that reason, now with a comment saying so.
+
 ### Fixed
 
 - **brunofaust-python-style** / **prek**: both `claude_md.md` snippets (injected into

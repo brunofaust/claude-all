@@ -67,9 +67,15 @@ def main() -> int:
                     "(Skill tool) and read the matching references/<topic>.md "
                     "(type-hints, error-handling, async-patterns, class-design, config, testing) "
                     "before editing — don't rely on this summary alone. "
-                    "Quick rules: Python 3.11+ syntax (pipe unions, match, asyncio.TaskGroup, "
-                    "exception.add_note); "
-                    "strict type hints (TypedDict, Literal, @overload); "
+                    "Quick rules: Python 3.14+ syntax (pipe unions, match, asyncio.TaskGroup, "
+                    "exception.add_note, PEP 695 generics/aliases); "
+                    "strict type hints (Literal, @overload) — TypedDict and typing.cast "
+                    "are BANNED: a TypedDict validates nothing at runtime, so "
+                    "cast(row_dtype, dict(row)) is a no-op that only pretends to type. "
+                    "Every payload crossing a boundary is a Pydantic model with "
+                    'extra="forbid" — and when a gate fires, fix the contract, never '
+                    'widen the gate (never relax to extra="ignore", never add a '
+                    '"safe-looking" default); '
                     "structured logging via structlog; "
                     "settings singleton (Pydantic) — don't sprinkle os.getenv across code; "
                     "NEVER block the event loop in async — use run_in_thread()."

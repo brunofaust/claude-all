@@ -3,7 +3,7 @@
 
 Rule: editing `.py` → load this skill first. Skipping straight to the edit on the strength of the inline summary is the anti-pattern this prevents.
 
-Quick rules (full set lives in the skill): Python 3.11+ syntax (pipe unions, `asyncio.TaskGroup`, `match`); strict type hints (`Literal`, `@overload`); `structlog` not `logging`; async-first; **`contextlib.suppress(Exception)` PROHIBITED** — use narrow `except SpecificError` with explicit logging; `domain/features/integrations/aws_resources` layout.
+Quick rules (full set lives in the skill): Python 3.14+ syntax (pipe unions, `asyncio.TaskGroup`, `match`, PEP 695 generics/aliases, PEP 649 lazy annotations — no `from __future__ import annotations`); strict type hints (`Literal`, `@overload`); `structlog` not `logging`; async-first; **`contextlib.suppress(Exception)` PROHIBITED** — use narrow `except SpecificError` with explicit logging; `domain/features/integrations/aws_resources` layout.
 
 **A `dict` never carries a contract.** `TypedDict` and `typing.cast` are **BANNED**: a TypedDict validates nothing at runtime, so `cast(row_dtype, dict(row))` is a no-op that only pretends to type while mypy stays green. Every payload crossing a boundary is a Pydantic model with `extra="forbid"`. The bug class is **not** the `.get(k, default)` spelling — that is a symptom. It is **a default on a field that is required**. → `references/data-modeling.md`
 

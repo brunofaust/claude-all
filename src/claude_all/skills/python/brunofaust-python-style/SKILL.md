@@ -1,7 +1,7 @@
 ---
 name: brunofaust-python-style
 description: >-
-  Modern Python 3.11+ coding standards for async-first, type-safe production code. Use when: writing async Python code, building CDC pipelines, implementing data transformations, adding type hints, setting up pytest fixtures, designing dataclasses, reviewing code for Python best practices, optimizing async patterns, or creating data engineering features. Enforce for all Python coding tasks: new features, refactoring, bug fixes, type safety reviews, async/await patterns, structured logging, datalake silver/gold layer transformations.
+  Modern Python 3.14+ coding standards for async-first, type-safe production code. Use when: writing async Python code, building CDC pipelines, implementing data transformations, adding type hints, setting up pytest fixtures, designing dataclasses, reviewing code for Python best practices, optimizing async patterns, or creating data engineering features. Enforce for all Python coding tasks: new features, refactoring, bug fixes, type safety reviews, async/await patterns, structured logging, datalake silver/gold layer transformations.
 disable-model-invocation: false
 user-invocable: true
 ---
@@ -14,7 +14,7 @@ Production-grade async Python. Async-first, strict types, immutable parameter ty
 
 ## Core principles
 
-1. **Python 3.11+** — pipe unions (`str | None`), `match` statements, `asyncio.TaskGroup`, `exception.add_note()`, `ExceptionGroup` / `except*`.
+1. **Python 3.14+** — pipe unions (`str | None`), `match` statements, `asyncio.TaskGroup`, `exception.add_note()`, `ExceptionGroup` / `except*`, **PEP 695** generics + type aliases (`type EntityId = str`, `def first[T](...)`, `class Stack[T]`), **PEP 758** paren-less `except ValueError, TypeError:`, **PEP 649** lazy annotations (so no `from __future__ import annotations`). The baseline makes the prek `language_version` pin **mandatory, not advisory** — PEP 695 / 758 syntax an older hook interpreter can't parse makes hooks (bandit, vulture, interrogate, local AST checkers) skip the file silently and still exit 0. → [`prek` skill](../../generic/prek/SKILL.md)
 1. **Async everything** — custom functions are `async def`. Exceptions: `__init__`, `__iter__`, `__enter__`, other stdlib sync dunder methods.
 1. **Immutable parameter types** — `Mapping`/`Sequence` from `collections.abc`, not `dict`/`list`, for every non-mutated parameter (not just cached function inputs/outputs). Reserve mutable concrete types for params you actually mutate.
 1. **Type safety first** — full type hints, `Literal`, `@overload`, Pydantic models at boundaries. **No `TypedDict`** (static-only — validates nothing at runtime) and **no `typing.cast`** (asserts a type instead of proving one — use `Model.model_validate(...)`). Enforced via mypy (strict) + Ruff.
@@ -57,6 +57,8 @@ Read the matching file BEFORE deep work in that area. Each is a focused referenc
 | Element             | Convention                | Examples                            |
 | ------------------- | ------------------------- | ----------------------------------- |
 | Classes             | `PascalCase`              | `StorageClient`, `EventProcessor`   |
+| Type aliases (PEP 695) | `PascalCase`           | `type EntityId = str`, `type AsyncHandler = ...` |
+| Type parameters (PEP 695) | single capital        | `def first[T](...)`, `class Stack[T]` |
 | Functions / methods | `snake_case`              | `get_entity_info`, `prepare_output` |
 | Private methods     | leading underscore        | `_validate_keys`                    |
 | Constants           | `UPPER_SNAKE_CASE`        | `CACHE_1_HOURS`, `CONFIG_BUCKET`    |
@@ -84,11 +86,11 @@ import polars as pl
 from app import CACHE_1_HOURS
 ```
 
-Rules: parenthesised imports for large groups, `TYPE_CHECKING` for type-only imports, **never** wildcard imports, **use** `from __future__ import annotations` for deferred, zero-cost annotations (PEP 563) on the 3.11–3.13 baseline — it becomes redundant once the project is on 3.14+ (PEP 649 makes annotations lazy by default). **Never alias an import to a `_`-prefixed name** (e.g. `import orjson as _orjson`) — module-level names never start with `_` (that's what `__all__` is for, see Visibility rule), and an alias must *mean something* (disambiguation, convention like `import polars as pl`), not act as a visibility hack. If you're aliasing to hide a name, you want `__all__` instead.
+Rules: parenthesised imports for large groups, `TYPE_CHECKING` for type-only imports, **never** wildcard imports, **never** `from __future__ import annotations` on the 3.14+ baseline — PEP 649 already makes annotations lazy by default, so the import is dead weight. **Never alias an import to a `_`-prefixed name** (e.g. `import orjson as _orjson`) — module-level names never start with `_` (that's what `__all__` is for, see Visibility rule), and an alias must *mean something* (disambiguation, convention like `import polars as pl`), not act as a visibility hack. If you're aliasing to hide a name, you want `__all__` instead.
 
 Full TYPE_CHECKING semantics + Protocol typing + generics → `references/type-hints.md`.
 
-## Modern Python idioms (3.11+)
+## Modern Python idioms (3.14+)
 
 ```python
 # Dict merging
@@ -108,7 +110,7 @@ logging.info(f"Loaded df: {round(df.estimated_size('mb'), 2)} MB")
 lf = df.lazy().filter(pl.col("active").eq(True)).select(["id", "name"])
 ```
 
-Multiple exceptions in one except: `except (ValueError, TypeError):` (parenthesised tuple). PEP 758's paren-less form (`except ValueError, TypeError:`) is 3.14+ only. See `references/error-handling.md`.
+Multiple exceptions in one except: PEP 758's paren-less form `except ValueError, TypeError:` is available on the 3.14 baseline; the parenthesised tuple `except (ValueError, TypeError):` stays valid. See `references/error-handling.md`.
 
 ## Preferred libraries
 
@@ -203,7 +205,7 @@ Section headers for long files:
 - ❌ Business logic inside `lambda_handler` — sync handler is one line: `return uvloop.run(main(event))`, all logic in `async def main()`.
 - ❌ Wildcard imports.
 - ❌ Global mutable state → pass context objects.
-- ❌ Dropping `from __future__ import annotations` on the 3.11–3.13 baseline — keep it for deferred annotations (PEP 563); it's only redundant on 3.14+ (PEP 649).
+- ❌ **Using `from __future__ import annotations`** — PEP 649 makes annotations lazy by default on the 3.14+ baseline; the import is redundant dead weight.
 - ❌ Committing secrets / API keys.
 
 ### Architecture

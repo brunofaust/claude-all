@@ -54,8 +54,6 @@ name — `class`, `from`, `id`, `type` are the usual suspects. The attribute nam
 what `model_dump()` emits **by default**, which is not the wire key.
 
 ```python
-from __future__ import annotations
-
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -157,8 +155,6 @@ captured payload, never generated from the model itself (a dump compared against
 dump proves nothing).
 
 ```python
-from __future__ import annotations
-
 import orjson
 import pytest
 
