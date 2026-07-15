@@ -105,6 +105,22 @@
 
 ### Added
 
+- **brunofaust-python-style**: `checkers/lambda_event_validation.py` — every Lambda
+  entry point parses its `event` into a Pydantic model at the boundary, before any
+  logic. The skill has mandated this in prose since it was written and nothing checked
+  it; this is the seam (an untrusted AWS envelope) where a renamed field ships
+  silently. Rules: `missing-validation`, `stale-allowlist`. Accepts BOTH sanctioned
+  shapes — `Model.model_validate(event)` and `Model(field=event.get(...))` — and
+  documents why the second is often preferable for an AWS envelope (`model_validate`
+  on AWS's raw dict forces `extra="ignore"`; extracting your own fields lets the model
+  stay `extra="forbid"`).
+- **brunofaust-python-style**: **positively-verified allowlists** — an exemption never
+  just skips. `--allow api=Mangum` means "exempt **because** it calls `Mangum(...)`",
+  and the checker re-proves that predicate every run; when the reason evaporates the
+  gate re-arms itself with a distinct `stale-allowlist` finding rather than leaving a
+  permanent hole. A name-set allowlist rots silently and never tells you it outlived
+  its reason. Documented in `enforcement.md` as a shape to apply to every allowlist.
+
 - **brunofaust-python-style**: `pydantic_contract.py` gains a `dict-return` rule —
   a function returning a raw dict leaks a payload across a boundary, including a
   CONCRETE `dict[str, str]` and an unannotated `return {...}` (which dodges every

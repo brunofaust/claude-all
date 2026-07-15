@@ -44,6 +44,33 @@ Every rule in this skill has an enforcement mechanism. If a rule has no enforcem
 | No `**model.model_dump()` splat       | `pydantic_contract.py` rule `splat` (regression baseline)          | none — name the fields. Logging receivers (`log.bind(**ctx)`) are already exempt in the checker |
 | No `SELECT *`                         | `pydantic_contract.py` rule `select-star` (regression baseline)    | none — name the columns; this is what `extra-forbid` relies on |
 | Credential/PII fields are `repr=False`| `pydantic_contract.py` rule `secret-repr` (regression baseline)    | none — add `Field(repr=False)`; verify with `repr(Model(...))` |
+| Lambda event parsed at the boundary   | `lambda_event_validation.py` rule `missing-validation`             | `--allow DIR=CALLABLE`, which is re-verified every run (below) |
+| An allowlist entry still earns it     | `lambda_event_validation.py` rule `stale-allowlist`                | none — the exemption proves its own reason or becomes a finding |
+
+### Positively-verified allowlists
+
+An exemption must never just `continue`. `--allow api=Mangum` does not mean "skip
+`api/`" — it means "`api/` is exempt **because** it calls `Mangum(...)`", and the
+checker re-proves that on every run. Refactor the proxy into a plain handler and
+the predicate stops holding, so the gate **re-arms itself** and reports a distinct
+`stale-allowlist` finding instead of leaving a permanent hole:
+
+```text
+handlers/api: [stale-allowlist] allowlisted because it calls Mangum(...), but no
+Mangum(...) call found — allowlist stale?
+```
+
+Generalise the shape to every allowlist you add: an entry is
+`{target: (reason, machine-checkable predicate)}`, and a failing predicate is its
+own violation class. A name-set allowlist cannot do this — it rots silently, and
+nothing tells you the exemption outlived its reason.
+
+**Two sanctioned shapes, and why.** The gate accepts `Model.model_validate(event)`
+*or* `Model(field=event.get(...))`. The second is often preferable for an AWS
+envelope: `model_validate` on AWS's raw dict forces `extra="ignore"` (AWS adds
+fields you do not control), whereas extracting your own fields lets the model stay
+`extra="forbid"`. A gate that permits every correct shape and documents the
+trade-off gets adopted; a one-true-way gate gets `SKIP=`'d.
 
 **Single enforcement tool:** `scripts/skill_enforcer.py` — AST-based, config-driven via `skill_rules.toml`. One hook in `prek.toml`, all rules toggleable.
 
