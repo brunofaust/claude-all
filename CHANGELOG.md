@@ -1,6 +1,158 @@
 # CHANGELOG
 
 
+## v0.3.0 (2026-07-15)
+
+### Bug Fixes
+
+- **ship-pr**: Open PR ready for review instead of draft
+  ([`5e8074c`](https://github.com/brunofaust/claude-all/commit/5e8074cceea06419253b578a319970943ca6113c))
+
+The draft default forced an undraft step on every PR. /ship-pr now opens the PR ready for review
+  (still confirmed, still no auto-merge). Updated SKILL.md, the claude_md.md snippet, the nudge
+  hook, and the README row.
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+
+Claude-Session: https://claude.ai/code/session_0193MfC1zoeDxQfjiLoknH1w
+
+### Chores
+
+- **aws-debug-loop**: Apply ruff-format line wrapping to log_sweep.py
+  ([`a4d605d`](https://github.com/brunofaust/claude-all/commit/a4d605d0eed8541d5fb4c44ec7ab8ae3fbd61c9f))
+
+Wrap the long argparse add_argument calls, the sqlite INSERT tuple, and the report() signature so
+  every line is <=100 chars. Formatting only, no behavior change (smoke test still green: 3 hits,
+  per-stream rowid ordering intact).
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+
+Claude-Session: https://claude.ai/code/session_0193MfC1zoeDxQfjiLoknH1w
+
+### Documentation
+
+- **brunofaust-python-style**: Document the process-global handled-exception logger
+  ([`9456183`](https://github.com/brunofaust/claude-all/commit/9456183d6f6dfc70e70c836a63190119903d2596))
+
+Adds a "Process-global handled-exception logger — the DEBUG safety net" section to
+  error-handling.md: register ONE sys.monitoring (PEP 669, 3.12+) EXCEPTION_HANDLED callback that
+  DEBUG-logs every handled exception centrally, instead of scattering log.debug across handlers
+  (which no_debug_in_except bans). Documents the non-negotiable design points (feature-flag
+  default-off so no tool id is claimed = zero overhead; filter control-flow exceptions; per-thread
+  reentrancy guard; idempotent install + uninstall for xdist tests; install per entry point) with a
+  genericised code sketch. Reconciles the existing "no silent swallow / no log.debug in except" rule
+  via a forward-pointer: with the global safety net installed, a benign expected swallow may be left
+  clean; reserve an explicit warning/error in the except body for a genuinely notable failure.
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+
+Claude-Session: https://claude.ai/code/session_0193MfC1zoeDxQfjiLoknH1w
+
+### Features
+
+- **aws-debug-loop**: Add all-groups awslogs log sweep
+  ([`8ff093b`](https://github.com/brunofaust/claude-all/commit/8ff093bde3e315121bfc66c8dfcfd520591e8c57))
+
+The highest-yield move when a symptom has no obvious owner: pull EVERY log group for the env with
+  `awslogs`, grep a fixed error-signature set, dedupe into a table, and loop (re-sweep to confirm
+  each fix). Catches crashes in scheduled/async resources that the happy-path e2e and a
+  single-resource probe both miss. Wired into Phase 1 (gather) and Phase 3 (regression gate), plus a
+  new rule and README row.
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+
+Claude-Session: https://claude.ai/code/session_0193MfC1zoeDxQfjiLoknH1w
+
+- **aws-debug-loop**: Add stdlib log_sweep.py (awslogs -> sqlite, errors only)
+  ([`2b95393`](https://github.com/brunofaust/claude-all/commit/2b95393f5dd408fe5906d907def22afd0a250c32))
+
+Token-cheap automated sweep: loads every CloudWatch event into a stdlib sqlite3 DB and prints only a
+  deduplicated error table (group, snippet, rowid), so the caller spends tokens on real failures — a
+  clean sweep is one line. Fetch degrades boto3 -> aws CLI -> awslogs; if all fail it warns.
+  Structlog JSON gets level/event parsed and the object kept in a `fields` column (json_extract);
+  rows are ordered per stream so `id +/- N` gives real context. No new deps (installer stays
+  stdlib-only). Wired into the skill's sweep section + README row.
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+
+Claude-Session: https://claude.ai/code/session_0193MfC1zoeDxQfjiLoknH1w
+
+- **hooks**: Add mock-spec-guard to kill mock drift at edit time
+  ([`0c9a506`](https://github.com/brunofaust/claude-all/commit/0c9a5065a5f6901ffa4369c0fae92ac38bdb9181))
+
+Non-blocking PreToolUse reminder that fires when a Python test file gains a bare
+  MagicMock()/AsyncMock() (no spec=/autospec=/wraps=). Mock drift is the #1 silent-failure class — a
+  bare mock accepts any signature, so a change to the real function won't fail the test; it steers
+  generation toward autospec=True / spec=RealClass / create_autospec. Silent unless the pattern is
+  present, test files only; opt out with CLAUDE_ALL_MOCK_SPEC_OK=1. hooks.json + README section 3
+  updated.
+
+Also fixes two ruff findings that landed on main in secret-leak-guard.py (SIM103, E501) so the gate
+  is green.
+
+- **hooks**: Edit-time skill enforcement — test-data guard + fix python-style auto-load
+  ([`4f82433`](https://github.com/brunofaust/claude-all/commit/4f82433c1cf1d49c04231ba33b7f86f56581b534))
+
+From the session-harvest of the project's Claude Code history.
+
+New test-data-isolation-guard: a non-blocking PreToolUse Edit/Write/MultiEdit reminder that fires
+  when a test file hard-codes a tenant/scope id literal (org_id/tenant_id/project_key =
+  <int|string>). Shared/hard-coded ids make tests fight over rows (flaky under xdist) and let an FK
+  cross a tenant boundary. The style guide already documents the rule; prose alone kept getting
+  violated, so this is the checker. Silent unless the smell is present; deduped per (session, file);
+  a fixture/variable value (org_id=org.id) never matches.
+
+Fix python-style reminder auto-load: the SessionStart loader and the edit-time
+  brunofaust-python-style hook shared ONE dedup flag, so the session-start nudge suppressed the
+  high-signal reminder at the first real .py edit — the skill often never loaded when editing
+  Python. Give each its own flag so the first .py edit always reminds (at most one session-start +
+  one first-edit reminder per session).
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+
+Claude-Session: https://claude.ai/code/session_0193MfC1zoeDxQfjiLoknH1w
+
+- **hooks**: Re-fire the python-style reminder hourly, not once per session
+  ([`48a9a68`](https://github.com/brunofaust/claude-all/commit/48a9a68be220b0f147cc3038ac87e5abe6b2deff))
+
+The edit-time brunofaust-python-style reminder deduped once per session, so on a long session it
+  reminded only once, hours before later Python edits. Now the flag mtime is the last-fired time and
+  the reminder re-fires at most once per hour, so the conventions stay fresh across a long session.
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+
+Claude-Session: https://claude.ai/code/session_0193MfC1zoeDxQfjiLoknH1w
+
+- **hooks**: Re-fire the skill reminder hooks hourly, not once per session
+  ([`306bb93`](https://github.com/brunofaust/claude-all/commit/306bb9310d217f967c0fbb435948f32a1fe2fd42))
+
+Applies the same hourly-TTL pattern already added to brunofaust-python-style to the other 10
+  self-contained skill reminder hooks (react-*, web-design-guidelines, seo, alembic-migration,
+  ship-pr, merge-main, aws-architecture). Each stays fully self-contained (only stdlib `time` added,
+  no shared import): the per-session flag mtime is the last-fired time and the reminder re-fires at
+  most once per hour, so a long session keeps each skill's conventions fresh instead of being
+  reminded once, hours earlier. Behaviour-only; message text unchanged.
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+
+Claude-Session: https://claude.ai/code/session_0193MfC1zoeDxQfjiLoknH1w
+
+
+## v0.2.1 (2026-07-07)
+
+### Features
+
+- **hooks**: Add worktree-isolation + secret-leak guards and 4 CLAUDE.md snippets
+  ([`b3e0cd5`](https://github.com/brunofaust/claude-all/commit/b3e0cd5b4973110a40cf70a809fcc3866f4c0d67))
+
+worktree-isolation-guard pauses an Edit/Write on the primary checkout of a protected branch
+  (main/master) — the parallel-session corruption case; opt out via CLAUDE_ALL_ALLOW_MAIN_EDITS.
+  secret-leak-guard hard-blocks a git add/commit/push that stages a credential file or embeds a live
+  sensitive env-var value in the outgoing diff (the value-in-content gap gitleaks misses), reporting
+  only the file/var name. Adds response-style, worktree-isolation, secrets-in-shell and
+  commit-cadence instruction snippets. README §3/§7 and hooks.json updated.
+
+
 ## v0.2.0 (2026-07-06)
 
 ### Bug Fixes
@@ -14,6 +166,27 @@ python-semantic-release>=9 ignores the legacy flat `branch = "main"` key — it 
   before it's merged to main) reported "isn't in any release groups" and computed no version,
   silently no-opping. Verified locally with `uvx --from "python-semantic-release>=9,<10"
   semantic-release version --print`, which now correctly resolves to 0.2.0.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+
+### Chores
+
+- **ci**: Add workflow_dispatch escape hatch to the release publish job
+  ([`965e132`](https://github.com/brunofaust/claude-all/commit/965e1327421e041fe6065ddbc29b56faa0cfef29))
+
+Merging the release/0.2.0 PR (#75) produced no `release` workflow run at all — the `pull_request:
+  closed` webhook was never delivered/fired, so main was left bumped to 0.2.0 with no git tag or
+  GitHub release. Verified via the Actions API: no run record exists for that merge event, unlike
+  prior release-branch merges which fired normally.
+
+Adds `workflow_dispatch` as a trigger and allows the `publish` job to run from it, so a missed
+  webhook delivery can be manually recovered with `gh workflow run release.yml --ref main` instead
+  of hand-running the tag + release steps. Safe to re-run any time — `publish` already skips
+  tagging/releasing when the version is already published.
+
+Also excludes CHANGELOG.md from the typos hook: it's machine-generated by python-semantic-release
+  and its commit-hash links occasionally collide with real words (e.g. a hex substring flagged as a
+  misspelling).
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 
