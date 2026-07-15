@@ -30,6 +30,8 @@ because the conflict is *semantic*, not textual:
   calls at the old shape — no textual overlap, so no conflict marker, but the code is now inconsistent.
 - main **removed** a symbol / export / config key / env var this branch still references (a dangling
   reference) — or this branch removed one main now depends on.
+- this branch **changed a type's shape** (e.g. `dict` → a Pydantic model) while main added **new code
+  that still accesses it the old way** — merges clean, crashes at runtime.
 - both sides added the **same feature in different places** — a duplicate, not a conflict.
 
 **Calling the skill is the decision to merge.** It does not stop at a gate to ask "should I merge?" —
@@ -86,6 +88,19 @@ git rev-parse HEAD                        # record pre-merge HEAD so the merge c
      route the merged tree would still reference (`git grep` it in `$TREE_OID`), or the reverse.
    - **Contradicting logic** — both sides changed related behavior in different files (changed
      signature vs. unchanged call site; changed schema/interface vs. code built on the old shape).
+   - **Shape migration (`dict` → model)** — if either side converted a type from a plain `dict` to a
+     Pydantic model/dataclass, grep the **merged tree** for dict-style access on it — main's new code
+     was written against the old shape and git merges it clean:
+     ```bash
+     git grep -nE '\.get\(|\["|\*\*|\bin \b|\bdel \b' "$TREE_OID" -- <paths that load/consume the type>
+     ```
+     Grepping by *type name* finds nothing: consumers rarely import the type — they just do
+     `row["field"]` on whatever a loader returned. Search the **loader's call sites and the modules
+     main touched**, not the type. Typical hits: a new helper on main calling `.get()` on what is now
+     a model (`AttributeError` on every request through that path), a route module doing
+     `.get("some_key")`, incoming tests doing `row["some_id"]`.
+     **Freezing** a model is the same class of change: a frozen model breaks `**` unpacking, `del`,
+     in-place mutation, and `.get()` — post-hoc hydration must become `model_copy(update=...)`.
    - **Duplicate implementation** — both sides added the same capability in different places.
 
 3. **Merge (no-commit).** Perform the real merge, leaving it un-finalized so resolution happens before

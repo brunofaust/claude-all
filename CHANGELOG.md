@@ -3,8 +3,36 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **brunofaust-python-style**: corrected two rules that were actively harmful.
+  `data-modeling.md` said *"TypedDict only for static test data"* — backwards: a
+  test fixture that matched neither the database nor the TypedDict was the worst
+  offender in a real incident, and mypy stayed green throughout, because
+  TypedDict validates nothing at runtime. It also claimed Pydantic was
+  unnecessary for DB rows because *"the DB schema already enforces"* — a lie: one
+  migration breaks everything, and `cast(row_dtype, dict(row))` enforces nothing.
+  TypedDict and `cast` are now banned; `SKILL.md`'s `*_dtype` naming row (which
+  taught the very pattern that caused the incident) is gone.
+- **brunofaust-python-style**: `data-modeling.md` gains 11 rules — required-vs-
+  optional is the contract (the bug is a default on a required field, not the
+  `.get(k, d)` spelling), empty string is not a value, no opaque model fields, no
+  `**` splatting, model our side of a boundary not the vendor's wire,
+  `extra="forbid"` always, model where the shape is fixed, codec-or-nothing
+  exemptions, blast radius, frozen-model gotchas, `Field(repr=False)`.
+- **merge-main** / **mock-drift-sweep**: name `dict`→model as a semantic-conflict
+  class. New code on main doing dict-style access on a newly-modelled type merges
+  **clean** and crashes at runtime — a clean textual merge is not a clean merge.
+- **enforcement.md**: retires `no_dict_any_in_signatures` in favour of the new
+  checker (one gate per rule), and stops recommending `cast(...)` as the escape
+  hatch for `no-any-return` — `Model.model_validate(...)` proves the type instead.
+
 ### Added
 
+- **brunofaust-python-style**: `references/serialization.md` — crossing a
+  boundary with a model without changing the bytes on the wire:
+  `model_dump(mode="json")` + a round-trip proof, orjson can't serialize a model,
+  aliases, `exclude_none` absent-vs-null, lax mode won't coerce `int`→`str`.
 - **brunofaust-python-style**: `checkers/pydantic_contract.py` — an AST gate that
   enforces the Pydantic data contract, so an untyped `dict` can no longer carry one.
   Eight rules: `no-typeddict` (a TypedDict validates nothing at runtime),

@@ -6,7 +6,7 @@ Every rule in this skill has an enforcement mechanism. If a rule has no enforcem
 
 | Rule                                  | Enforced by                                                        | Bypass                                     |
 | ------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------ |
-| Pydantic on boundaries                | mypy strict + `skill_enforcer.py` rule `no_dict_any_in_signatures` | per-file allow list                        |
+| Pydantic on boundaries                | mypy strict + `pydantic_contract.py` (regression baseline) — the eight rules below. **Supersedes** `skill_enforcer.py` rule `no_dict_any_in_signatures`, which only saw *parameters*; the checker also covers **returns** and **model fields**. Retire the old rule rather than running both. | none — see the per-rule rows below |
 | Frozen dataclasses internally         | `skill_enforcer.py` rule `dataclass_must_be_frozen`                | `# skill-allow: mutable-dataclass` comment |
 | No raw boto3 outside core/aws/        | ruff `banned-api` (TID251)                                         | `[per-file-ignores]` in pyproject.toml     |
 | No raw httpx outside integrations/    | ruff `banned-api` (TID251)                                         | `[per-file-ignores]` in pyproject.toml     |
@@ -23,7 +23,7 @@ Every rule in this skill has an enforcement mechanism. If a rule has no enforcem
 | Docstring coverage ≥ 90%              | interrogate                                                        | raise the floor                            |
 | No bare `# type: ignore`              | `python-check-blanket-type-ignore`                                 | use specific code                          |
 | No bare `# noqa`                      | ruff `RUF100`                                                      | use specific code                          |
-| No `Any` from a typed return          | mypy strict `no-any-return`                                        | `cast(...)` / explicit type at the seam    |
+| No `Any` from a typed return          | mypy strict `no-any-return`                                        | none — `Model.model_validate(...)` at the seam. **Not** `cast(...)`: that asserts a type instead of proving one and is itself banned by `pydantic_contract.py` rule `no-cast` |
 | `Final` attr not redeclared           | mypy `[misc]`                                                      | rethink the override                       |
 | No raw `asyncio.to_thread`            | ruff `banned-api` (TID251) → `run_in_thread()`                     | `[per-file-ignores]`                       |
 | No raw `subprocess`                   | ruff `banned-api` (TID251) → `run_exec()`/`run_shell()`            | `scripts/**` per-file-ignore               |
@@ -36,6 +36,14 @@ Every rule in this skill has an enforcement mechanism. If a rule has no enforcem
 | Single alembic head + id ≤ 32 chars   | `check_alembic_heads.py` (AST, no DB)                              | merge heads into one linear chain          |
 | CI-reserved env vars hard-set in tests| pygrep `no-ci-env-setdefault` (`GITHUB_*`/`RUNNER_*`/`CI`)         | assign directly, never `os.environ.setdefault` |
 | Test mirrors src structure            | `skill_enforcer.py` rule `test_mirrors_src`                        | none                                       |
+| No `TypedDict` carrying a contract    | `pydantic_contract.py` rule `no-typeddict` (regression baseline)   | none — it validates nothing at runtime; make it a `BaseModel` |
+| No `cast()`                           | `pydantic_contract.py` rule `no-cast` (regression baseline)        | none — `Model.model_validate(...)` proves the type instead of asserting it |
+| Every model forbids unknown fields    | `pydantic_contract.py` rule `extra-forbid` (regression baseline)   | none — no exceptions; a schema change must force a code change |
+| No masking default on a model field   | `pydantic_contract.py` rule `masking-default` (regression baseline)| none — optional ⇒ `T \| None = None`, required ⇒ no default |
+| No opaque annotation (`Any`, `dict[str, Any]`, bare `dict`/`Mapping`) in params, returns, model fields | `pydantic_contract.py` rule `opaque-annotation` (regression baseline) | prek `exclude` on a path holding a genuinely polymorphic vendor payload, documented inline — or baseline the entry with a `# TICK-1: …` note. `Mapping[str, str]` / `dict[VectorKey, SearchResult]` are already legal; the container was never the problem |
+| No `**model.model_dump()` splat       | `pydantic_contract.py` rule `splat` (regression baseline)          | none — name the fields. Logging receivers (`log.bind(**ctx)`) are already exempt in the checker |
+| No `SELECT *`                         | `pydantic_contract.py` rule `select-star` (regression baseline)    | none — name the columns; this is what `extra-forbid` relies on |
+| Credential/PII fields are `repr=False`| `pydantic_contract.py` rule `secret-repr` (regression baseline)    | none — add `Field(repr=False)`; verify with `repr(Model(...))` |
 
 **Single enforcement tool:** `scripts/skill_enforcer.py` — AST-based, config-driven via `skill_rules.toml`. One hook in `prek.toml`, all rules toggleable.
 
@@ -53,6 +61,8 @@ class SkillChecker(ast.NodeVisitor):
 
     def visit_FunctionDef(self, node):
         # Rule: no dict[str, Any] params outside integrations/
+        # RETIRED — `pydantic_contract.py` rule `opaque-annotation` owns this now
+        # (it also checks returns and model fields). Shown for historical shape only.
         if "integrations/" not in str(self.path):
             for arg in node.args.args:
                 if self._is_dict_any(arg.annotation):
@@ -108,10 +118,11 @@ def main():
 ## `skill_rules.toml` example
 
 ```toml
+# RETIRED — superseded by `pydantic_contract.py` rule `opaque-annotation`, which
+# also covers returns and model fields. Keep it `false`: two gates for one rule
+# means two baselines, two allow lists, and a disagreement about which is truth.
 [rules.no_dict_any_in_signatures]
-enabled = true
-allowed_paths = ["src/*/integrations/**", "src/*/api/schemas/**"]
-message = "Use Pydantic model or dataclass, not dict[str, Any]"
+enabled = false
 
 [rules.banned_imports]
 enabled = true
@@ -164,3 +175,98 @@ hooks = [{
   files = "\\.py$"
 }]
 ```
+
+## Wiring the pydantic contract gate
+
+`pydantic_contract.py` prints findings and always exits 0; the ratchet comes from
+wrapping it in `baseline_gate.py` (NEW findings fail, baselined ones pass, STALE
+ones also fail so the count only goes down).
+
+### 0. Copy the two scripts into the project
+
+Both ship with the skills — copy them next to this project's other gates, into
+`scripts/` (the convention the rest of this file uses):
+
+| Copy from                                                       | To                          |
+| --------------------------------------------------------------- | --------------------------- |
+| `brunofaust-python-style/checkers/pydantic_contract.py`         | `scripts/pydantic_contract.py` |
+| `regression-gates/baseline_gate.py`                             | `scripts/baseline_gate.py`  |
+
+### 1. Seed the baseline once, and commit it
+
+```bash
+python scripts/baseline_gate.py --baseline pydantic_baseline.txt --update -- \
+    python scripts/pydantic_contract.py src/
+git add pydantic_baseline.txt   # an uncommitted baseline = no gate
+```
+
+Roll out **regression-only**: today's debt is grandfathered, tomorrow's is
+blocked. Then ratchet to zero — burn one notch per PR, deleting the fixed line
+from `pydantic_baseline.txt` (a stale entry fails the gate, so the file cannot
+rot). Never `SKIP=pydantic-contract` and never `--no-verify`; if a finding is
+truly not fixable now, baseline it with a ticket comment:
+
+```text
+# TICK-1: myapp/integrations/acme/payload.py — polymorphic vendor body, model it in Q3
+src/myapp/integrations/acme/payload.py: [opaque-annotation] parse(body) — parameter is opaque (dict[..., Any]) …
+```
+
+### 2. Enforce in prek AND in CI — the same command in both places
+
+A gate that only runs pre-commit is bypassable with `--no-verify`, so the CI job
+runs the identical line:
+
+```toml
+[[repos]]
+repo = "local"
+hooks = [{
+  id = "pydantic-contract",
+  name = "🐍 skill · Pydantic data contract (regression baseline)",
+  entry = "python scripts/baseline_gate.py --baseline pydantic_baseline.txt -- python scripts/pydantic_contract.py src/",
+  language = "system",
+  pass_filenames = false,
+  always_run = true,
+  files = "\\.py$"
+}]
+```
+
+`.pre-commit-config.yaml` is the same hook, one level nested:
+
+```yaml
+- repo: local
+  hooks:
+      - id: pydantic-contract
+        name: 🐍 skill · Pydantic data contract (regression baseline)
+        entry: python scripts/baseline_gate.py --baseline pydantic_baseline.txt -- python scripts/pydantic_contract.py src/
+        language: system
+        pass_filenames: false
+        always_run: true
+```
+
+`pass_filenames = false` + `always_run = true` are load-bearing: the checker
+scans `src/` whole. Fed only the staged files it would report zero findings for
+untouched paths, and every baselined entry would look STALE.
+
+Adopt rules incrementally with `--select` (one gate per rule, one baseline each)
+when the full set is too big to land at once:
+
+```bash
+python scripts/pydantic_contract.py --select no-cast,extra-forbid src/
+```
+
+### 3. Gotcha — `prek run --all-files` can report a vacuous PASS
+
+`prek run --all-files` only inspects **git-tracked** files, and only runs the
+**pre-commit** stage. A brand-new checker or baseline that is still **untracked**
+is silently skipped and the run reports green. The tell:
+
+```text
+🐍 skill · Pydantic data contract..........................(no files to check) Skipped
+```
+
+`Skipped` on a hook you just added is a FAILING signal, not a passing one.
+
+- `git add` the checker, the baseline, and the config **before** trusting any run.
+- Run the other stage too: `prek run --all-files --hook-stage pre-push`.
+- Prove the gate bites before believing it: introduce one violation, confirm the
+  hook fails, revert, confirm it passes.

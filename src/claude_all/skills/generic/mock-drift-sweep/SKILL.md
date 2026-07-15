@@ -26,6 +26,9 @@ Any of these is a mock-drift risk — sweep before you call the change done:
 
 - A function/method **signature** changed (new/removed/reordered/renamed param).
 - A **return shape** changed (new key, renamed field, tuple→object, sync→async).
+- A type migrated from an untyped **`dict` to a model** (Pydantic / dataclass), or a model was
+  **frozen**. A mock still returning a dict literal where production now returns a model is a GREEN
+  test over a broken seam — the mock accepts `["key"]` / `.get()` / `**` forever, production doesn't.
 - The **exception type** a call raises changed (especially real SDK/DB exceptions).
 - A module **moved or was renamed** (every `patch("old.path.thing")` now patches nothing).
 - You **migrated an SDK/client library** (the new client's methods, return objects, and exception
@@ -43,6 +46,10 @@ Any of these is a mock-drift risk — sweep before you call the change done:
    # the symbol's name, and the dotted patch-target of its module
    grep -rn "thing\|patch(.*old\.path" tests/
    ```
+   For a **`dict`→model** migration the seam is the *loader*, not the type — sweep three targets:
+   any mock whose `return_value` / `side_effect` is a **dict literal** (or a list of them), any
+   **fixture that hand-builds a dict** for that payload, and every **`patch()` target for the changed
+   loader**. Consumers rarely name the type, so grep the loader's call sites rather than the type.
 2. **Update each to the NEW shape in the same change.** Return the new fields, raise the new exception
    type, match the new signature. A mock that no longer mirrors reality is worse than no mock.
 3. **Prefer spec'd mocks over bare ones.** `autospec=True` / `create_autospec` / `spec=Cls` /

@@ -1279,6 +1279,50 @@ def _make_task(**overrides):
     return defaults
 ```
 
+### Fixtures are where TypedDict lies — pin every fixture to an EXTERNAL truth
+
+> The worst masking-default bug of a whole `dict`→model migration lived in a **test fixture**. It
+> hand-built a settings dict whose defaults matched **neither the database nor the TypedDict** that
+> annotated it — and mypy stayed green the entire time. That's not a mypy failure: `TypedDict` is a
+> **static annotation that validates NOTHING at runtime**. A plain dict satisfies it whatever's in it.
+> Tests then asserted against the fixture's invented defaults, so the suite agreed with itself and
+> never touched reality.
+
+**`TypedDict` is banned outright** — an AST checker enforces `no-typeddict`. (Earlier guidance in this
+skill said "TypedDict is fine for static test data". That was exactly backwards: static test data is
+precisely where it does the most damage, because a fixture is the *only* place nothing else
+cross-checks the shape.) Use the real Pydantic model — see [`data-modeling.md`](data-modeling.md).
+
+**The rule: a fixture must be pinned to an external truth, not to the code's own assumptions.**
+
+| The truth to pin to        | How                                                                             |
+| -------------------------- | ------------------------------------------------------------------------------- |
+| The real DB / schema       | Read defaults from the migration / seed the real table, don't retype the values  |
+| The real SDK               | Build from the SDK's own model, at the **production version**                    |
+| The real message contract  | Construct via the shared model both sides import                                 |
+
+Build fixtures **through the model** — `Model(...)` directly, or a `polyfactory` factory over it (see
+[§ Factory pattern](#factory-pattern)). Then a fixture that no longer matches the contract **fails at
+construction** (missing field, bad type, out-of-range) instead of silently agreeing with itself.
+
+```python
+# ❌ BAD — a hand-built dict + a TypedDict annotation. Validates nothing at runtime;
+#          drifts from the DB defaults and mypy stays green forever.
+class Limits(TypedDict):
+    poll_interval_seconds: int
+
+
+limits: Limits = {"poll_interval_seconds": 300}  # is 300 what the DB actually defaults to?
+
+
+# ✅ GOOD — built through the real model; a contract change fails HERE, loudly.
+limits = LimitsFactory.build(poll_interval_seconds=300)  # or Limits(poll_interval_seconds=300)
+```
+
+If a fixture value is a **default**, it must come from wherever the default really lives (the model's
+field default, the migration's `server_default`) — never a second copy typed into the test. Two copies
+of a default is one copy too many; the test copy is the one that goes stale.
+
 ### Anti-pattern — module-global mocks
 
 ```python

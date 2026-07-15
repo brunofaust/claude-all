@@ -17,7 +17,7 @@ Production-grade async Python. Async-first, strict types, immutable parameter ty
 1. **Python 3.11+** — pipe unions (`str | None`), `match` statements, `asyncio.TaskGroup`, `exception.add_note()`, `ExceptionGroup` / `except*`.
 1. **Async everything** — custom functions are `async def`. Exceptions: `__init__`, `__iter__`, `__enter__`, other stdlib sync dunder methods.
 1. **Immutable parameter types** — `Mapping`/`Sequence` from `collections.abc`, not `dict`/`list`, for every non-mutated parameter (not just cached function inputs/outputs). Reserve mutable concrete types for params you actually mutate.
-1. **Type safety first** — full type hints, `TypedDict`, `Literal`, `@overload`. Enforced via mypy (strict) + Ruff.
+1. **Type safety first** — full type hints, `Literal`, `@overload`, Pydantic models at boundaries. **No `TypedDict`** (static-only — validates nothing at runtime) and **no `typing.cast`** (asserts a type instead of proving one — use `Model.model_validate(...)`). Enforced via mypy (strict) + Ruff.
 1. **Docstring coverage ≥ 90%** (interrogate gate; aim for 100%) — Google-style with Args / Returns / Raises / Examples.
 1. **Test everything** — `MonkeyPatch.context()` for mocks. Unit + integration (LocalStack) + class structural tests. Data tests cover the full data lifecycle.
 
@@ -41,7 +41,8 @@ Read the matching file BEFORE deep work in that area. Each is a focused referenc
 | Configuration management — Pydantic Settings, env var coercion, nested configs, secrets from files                                                                                             | [`references/config.md`](references/config.md)                                                          |
 | Writing tests — pytest, fixtures, parametrize, mocks, LocalStack, time freezing, snapshot, **factory pattern (polyfactory/factory_boy), DI over module-global mocks, mirrored src/ structure** | [`references/testing.md`](references/testing.md)                                                        |
 | E2E / integration on shared infra (multi-tenant) — isolate data vs accept shared infra, one `create_tenant` factory, sequence randomization, concurrency-capable mocks, drain-to-own queues, fail-closed channels, settings-cache timing, separate serial pass for un-scopeable global tests, flaky-fix method | [`references/e2e-testing.md`](references/e2e-testing.md)                                                |
-| Choosing between Pydantic / dataclass / TypedDict — trust boundaries, internal contracts, test fixtures, **Lambda event + ECS env validation**                                                  | [`references/data-modeling.md`](references/data-modeling.md)                                            |
+| Choosing between Pydantic / dataclass — trust boundaries, internal contracts, **why TypedDict + `cast` are banned**, required-vs-optional, `extra="forbid"`, opaque fields, **Lambda event + ECS env validation**                                                  | [`references/data-modeling.md`](references/data-modeling.md)                                            |
+| Serialization across a boundary — `model_dump(mode="json")`, orjson, aliases, `exclude_none`, round-trip proof                                                                                 | [`references/serialization.md`](references/serialization.md)                                            |
 | Scoped global processes — run-for-one(/group) parameter on all-tenant jobs, DynamoDB idempotency that includes the scope, global-run-supersedes-customer-run rule                              | [`references/scoped-processes.md`](references/scoped-processes.md)                                      |
 | Database tenant isolation (optional) — Postgres RLS (enforcing) + non-blocking audit table, session-tenant via `SET LOCAL`, per-tenant-role vs GUC injection vectors, no-code-change e2e for real lambdas                                                                                                                       | [`references/tenant-isolation.md`](references/tenant-isolation.md)                                      |
 | Owner-class pattern for external systems (Jira, AWS, OpenAI…), ruff `banned-api` config, audit recipe                                                                                          | [`references/external-system-ownership.md`](references/external-system-ownership.md)                    |
@@ -62,7 +63,6 @@ Read the matching file BEFORE deep work in that area. Each is a focused referenc
 | Private attributes  | leading underscore        | `_client`, `_keys`                  |
 | Parameters          | `snake_case`              | `table_name`, `primary_key_name`    |
 | Worker functions    | `_name_do` suffix         | `_batch_delete_do`                  |
-| TypedDicts          | `snake_case_dtype` suffix | `entity_info_dtype`                 |
 | Cache variables     | `function_name_cache`     | `get_data_cache`                    |
 
 ## Import organization
@@ -180,7 +180,7 @@ Section headers for long files:
 
 ## Architectural rules (one-liners — depth in references)
 
-1. **Data modeling.** Pydantic at trust boundaries, frozen dataclasses internally, TypedDict only for static test data. Never pass `dict[str, Any]` between modules. **Every entry point validates its payload** — Lambda events (SQS/SNS/EventBridge/Step Functions/direct invoke) and ECS env vars (`pydantic-settings`) are parsed into a Pydantic model at the boundary, before any logic. → `references/data-modeling.md`
+1. **Data modeling.** Pydantic at trust boundaries, frozen dataclasses internally. **`TypedDict` is banned outright** (static-only — it validates nothing at runtime, including in test fixtures) and **`typing.cast` is banned** (`cast(row_dtype, dict(row))` proves nothing — use `Model.model_validate(...)`). **`extra="forbid"` on every model, no exceptions** (consumer-before-producer is a deployment-order problem to solve in the deploy process, never a reason to weaken the contract). No default on a required field; no `Any`/bare `dict` as a model field; never pass `dict[str, Any]` between modules. **Every entry point validates its payload** — Lambda events (SQS/SNS/EventBridge/Step Functions/direct invoke) and ECS env vars (`pydantic-settings`) are parsed into a Pydantic model at the boundary, before any logic. → `references/data-modeling.md`
 1. **External system ownership.** One owner class per external system (Jira, S3, OpenAI, …). All SDK / HTTP calls flow through it; ruff `banned-api` blocks raw imports outside owner folders. → `references/external-system-ownership.md`
 1. **Error handling discipline.** No silent except. No `log.debug` inside `except`. Catch narrowest class, log at `warning`/`error` with structured context, `raise ... from e` when converting. **`contextlib.suppress(Exception)` is strictly prohibited** — it silences all exceptions including bugs and OOM; `suppress(SpecificError)` requires explicit justification. → `references/error-handling.md`
 1. **Test patterns.** Use factories (polyfactory / factory_boy). Never `mod._client = mock` (race-prone under xdist) — inject the dependency. Tests mirror `src/` 1:1. **Test data is isolated**: dynamic DB ids (never hard-coded), each test owns its own rows (nothing shared), FKs never cross tenants, suite runs under `pytest-xdist` (concurrency *is* the isolation check). **No `@pytest.mark.xdist_group`** to prop up co-dependent tests — make each test self-contained; the marker is a rare, user-approved, documented exception only. → `references/testing.md`
@@ -212,7 +212,15 @@ Section headers for long files:
 - ❌ Retry at multiple layers (app + client lib) — pick ONE.
 - ❌ **Hardcoded config at module or class level** — any value that could differ between environments or change over time must live in `Settings`, env var, or be passed as a parameter. Covers: LLM model names, Jira/workflow statuses, S3/SQS/SNS resource names, API endpoints, timeouts, batch sizes, feature flags. Function/method *parameter defaults* are the one allowed exception. → `references/config.md`
 - ❌ `os.getenv()` scattered across modules — all env var access must go through the `Settings` singleton.
-- ❌ Internal types in public APIs — use TypedDicts / DTOs.
+- ❌ Internal types in public APIs — use Pydantic models / frozen-dataclass DTOs.
+- ❌ **`TypedDict` — banned outright.** Static-only; it validates nothing at runtime. Test fixtures are where it lies most (a fixture that matches neither the DB nor the annotation keeps mypy green). Use a Pydantic `BaseModel`. → `references/data-modeling.md`
+- ❌ **`typing.cast` — banned.** It asserts a type instead of proving one; `cast(row_dtype, dict(row))` is a no-op that only pretends to type. Use `Model.model_validate(...)`.
+- ❌ **`extra="ignore"` / `extra="allow"` — always `extra="forbid"`.** A schema change must be followed by a code change. The consumer-before-producer deployment order this forces is a deploy-process problem, not a reason to weaken the contract.
+- ❌ **A default on a field that is required** — that is the masking-default bug class (`.get(k, default)` is only its symptom). Model the payload; the required-vs-optional decision is then forced.
+- ❌ **`Any` / bare `dict` / bare `Mapping` / `dict[str, Any]` as a model field** — the opaque VALUE is banned, never the container (`Mapping[str, str]` stays legal, and CORE PRINCIPLE #3 still stands). Genuinely polymorphic fields get documented, not a fabricated schema.
+- ❌ **`f(**model.model_dump())` / `Model(**mapping)`** — name the fields. Logging (`log.bind(**ctx)`) is the ONLY exemption; SDK request-building is NOT.
+- ❌ **`SELECT *`** — name the columns so the row's shape is one the code built end-to-end.
+- ❌ **Credential / PII model fields without `Field(repr=False)`** — a model repr in a log line is a token leak. Verify empirically.
 - ❌ **Using a Lambda `event` dict or ECS env block raw** — parse it into a Pydantic model at the boundary first. → `references/data-modeling.md`
 - ❌ **Hard-coded test ids / shared test data / cross-tenant FK in seeds** — dynamic ids, per-test ownership, FKs stay within one tenant. → `references/testing.md`
 - ❌ **A global (all-tenant) job that can't run for a single customer** — add an optional scope param; make DDB idempotency scope-aware so a global run supersedes a customer run. → `references/scoped-processes.md`
@@ -242,6 +250,12 @@ Before finalising code:
 - [ ] No exposed internal types in APIs
 - [ ] Input validated at boundaries
 - [ ] Lambda events / ECS env vars parsed into a Pydantic model at the entry point
+- [ ] No `TypedDict` anywhere (including fixtures); no `typing.cast` — `model_validate()` instead
+- [ ] `extra="forbid"` on every model; queries name their columns (no `SELECT *`)
+- [ ] No default on a required field; blanks normalised to `None` (unless `""` is persisted/forwarded)
+- [ ] No `Any` / bare `dict` / opaque model fields; `Mapping[str, str]`-style typed values OK
+- [ ] No `**` splatting except logging (`log.bind(**ctx)`)
+- [ ] `Field(repr=False)` on credential / PII fields, verified with a real `repr()` assertion
 - [ ] Tests: dynamic DB ids, per-test data ownership, no cross-tenant FK, green under `-n auto`
 - [ ] Global jobs accept a scope param; DDB idempotency includes scope (global run supersedes customer run)
 - [ ] Thread-safe
