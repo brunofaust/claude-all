@@ -72,6 +72,17 @@ jobs:
           fi
           echo "Bumping $current -> $next on ${GITHUB_REF_NAME}."
           semantic-release version --no-tag --no-push --no-vcs-release
+          # PSR rewrites `pyproject.toml:project.version` and nothing else, so
+          # uv.lock's record of this package's OWN version is now stale. Nothing
+          # catches it here — no prek hook runs in CI — and the drift only shows up
+          # later when someone's `uv sync` silently rewrites the line and dirties an
+          # unrelated working tree. Refresh it into the same commit.
+          uv lock
+          if ! git diff --quiet -- uv.lock; then
+            echo "uv.lock self-version resynced to $next; folding into the bump commit."
+            git add uv.lock
+            git commit --amend --no-edit
+          fi
           git push origin "HEAD:${GITHUB_REF_NAME}"
 
   publish:

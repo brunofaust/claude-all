@@ -39,6 +39,15 @@
 
 ### Fixed
 
+- **release**: `uv.lock` no longer drifts every release. `version_toml` rewrites ONLY
+  `pyproject.toml:project.version`, so the lockfile's record of this package's OWN
+  version went stale on each bump — and the next `uv sync` silently rewrote that line
+  and dirtied an unrelated working tree. Fixed at the source: the `prepare` job now
+  runs `uv lock` after the bump and folds the result into the same commit (nothing
+  else catches it — no prek hook runs in CI). Adds the local half too: the
+  `astral-sh/uv-pre-commit` `uv-lock` hook, at **pre-push** rather than pre-commit
+  because it REWRITES `uv.lock`, and a hook that mutates a file fails the run it
+  mutates on.
 - **release**: drop `[skip ci]` from python-semantic-release's `commit_message`. It
   reads as harmless — "don't re-run CI for a bot's version bump" — but GitHub applies
   skip-ci to the HEAD commit of `push` AND `pull_request` events, and that commit

@@ -243,3 +243,25 @@ hooks = [
     name = "🧠 semantic · codecongruence"
   }
 ]
+
+# ── Lockfile ─────────────────────────────────────────────────────────────────
+# Keeps uv.lock in step with pyproject.toml. Without it the two drift silently:
+# python-semantic-release rewrites ONLY `pyproject.toml:project.version` on
+# release and never touches uv.lock, so the lockfile's record of this package's
+# OWN version goes stale every release — and the next `uv sync` rewrites that
+# line and dirties an unrelated working tree. (release.yml's prepare job now runs
+# `uv lock` itself, since no hook runs in CI; this hook is the local half.)
+#
+# pre-push, not pre-commit: it REWRITES uv.lock, and a hook that mutates a file
+# fails the run it mutates on — deferring to push keeps `git commit` from
+# bouncing on a lockfile refresh mid-work.
+[[repos]]
+repo = "https://github.com/astral-sh/uv-pre-commit"
+rev = "0.11.16"
+hooks = [
+  {
+    id = "uv-lock",
+    name = "📦 uv · Lock dependencies",
+    stages = ["pre-push"]
+  }
+]
