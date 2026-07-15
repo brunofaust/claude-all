@@ -1,6 +1,20 @@
 # CHANGELOG
 
 
+## [Unreleased]
+
+### Added
+
+- **brunofaust-python-style**: `checkers/pydantic_contract.py` — an AST gate that
+  enforces the Pydantic data contract, so an untyped `dict` can no longer carry one.
+  Eight rules: `no-typeddict` (a TypedDict validates nothing at runtime),
+  `no-cast` (`cast()` asserts a type instead of proving one), `extra-forbid`,
+  `masking-default` (optional ⇒ `| None = None`, required ⇒ no default),
+  `opaque-annotation` (bans the opaque *value*, `Any` — not the container),
+  `splat` (logging is the only exemption), `select-star`, and `secret-repr`.
+  Composes with the existing `regression-gates/baseline_gate.py` ratchet.
+
+
 ## v0.3.0 (2026-07-15)
 
 ### Bug Fixes
