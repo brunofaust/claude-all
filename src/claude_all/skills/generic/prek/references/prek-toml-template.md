@@ -4,6 +4,11 @@ Merge of multiple projects (e.g. myapp, my-service). Pick the sections relevant 
 
 ````toml
 # ── Global ───────────────────────────────────────────────────────────────────
+# ⚠️  A DEFAULT ONLY — it does NOT reach a hook's isolated env. Hooks that parse
+# Python with the interpreter's own `ast` (bandit, vulture, interrogate, local AST
+# checkers) MUST carry their own per-hook `language_version`, or they resolve an
+# older Python, hit SyntaxError on modern syntax, SKIP those files and still exit 0.
+# See "The vacuous PASS" in SKILL.md.
 default_language_version.python = "3.14"   # or "3.11" for older projects
 
 exclude = { glob = [
@@ -259,7 +264,12 @@ hooks = [
   {
     id = "bandit",
     name = "🔒 security · Detect common security issues",
-    args = ["-c", "pyproject.toml"]   # reads [tool.bandit] from pyproject.toml
+    args = ["-c", "pyproject.toml"],  # reads [tool.bandit] from pyproject.toml
+    # AST-PARSING HOOK — pin the interpreter. bandit parses with the ast of the
+    # interpreter it RUNS ON; an older resolved env logs "syntax error while
+    # parsing AST", SKIPS those files, and still exits 0 — a security gate
+    # silently not scanning. default_language_version does not reach this env.
+    language_version = "3.14"        # or your project's version
   }
 ]
 
@@ -309,6 +319,12 @@ hooks = [
 # names declared via `__all__`, and a valid `__all__` import contract. Keep prek
 # the single gate by adding these as local hooks rather than running a side script.
 # (Checker skeleton: see the brunofaust-python-style skill's `enforcement.md`.)
+#
+# AST-PARSING HOOK — pin `language_version` (or, for `language = "system"`, make the
+# entry resolve the project interpreter explicitly). Your checker parses with the ast
+# of whatever Python runs it: an older one raises SyntaxError on modern syntax, and a
+# checker that swallows that error skips the file and still exits 0. Make yours FAIL
+# LOUD on SyntaxError rather than skipping — a silent skip is a vacuous PASS.
 # [[repos]]
 # repo = "local"
 # hooks = [
@@ -317,6 +333,7 @@ hooks = [
 #     name = "🐍 python · Enforce single-ownership + visibility (AST)",
 #     entry = "python scripts/skill_enforcer.py",
 #     language = "system",
+#     language_version = "3.14",   # or your project's version
 #     files = "\\.py$"
 #   }
 # ]
@@ -374,10 +391,11 @@ hooks = [
   {
     id = "interrogate",
     name = "🐍 python · Check docstrings",
-    # GOTCHA: interrogate 1.7.0 resolves a Python 3.12 hook env by default, whose
-    # parser chokes on PEP 758 syntax (unparenthesized `except A, B:`) used by a
-    # 3.14 codebase. Pin the hook interpreter when you hit a SyntaxError here.
-    language_version = "3.14",
+    # AST-PARSING HOOK — pin the interpreter. interrogate 1.7.0 resolves a Python
+    # 3.12 hook env by default, whose parser chokes on PEP 758 syntax
+    # (unparenthesized `except A, B:`) used by a 3.14 codebase. Unpinned it skips
+    # what it cannot parse and still exits 0. See "The vacuous PASS" in SKILL.md.
+    language_version = "3.14",       # or your project's version
     pass_filenames = false
     # configure thresholds in [tool.interrogate] in pyproject.toml
   }
@@ -388,7 +406,17 @@ hooks = [
 repo = "https://github.com/jendrikseipp/vulture"
 rev = "v2.16"
 hooks = [
-  { id = "vulture", name = "🐍 python · Detect unused code" }
+  {
+    id = "vulture",
+    name = "🐍 python · Detect unused code",
+    # AST-PARSING HOOK — pin the interpreter (same class of bug as bandit).
+    # Unpinned, vulture's isolated env resolves non-deterministically to an older
+    # Python whose ast rejects PEP 695 generics ("invalid syntax at type X = ...")
+    # and PEP 758 except-clauses ("multiple exception types must be parenthesized").
+    # It then SKIPS every such file from dead-code analysis and exits 0 — observed
+    # blinding the gate to 35 real files. default_language_version does not help.
+    language_version = "3.14"        # or your project's version
+  }
   # requires vulture_whitelist.py at repo root for intentional unused symbols
 ]
 

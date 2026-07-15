@@ -5,6 +5,21 @@
 
 ### Fixed
 
+- **prek**: names the **vacuous PASS** — a hook that silently skips its input and
+  still exits 0. The skill only documented `default_language_version`, which does
+  NOT reach a hook's isolated env, so any hook parsing Python with the interpreter's
+  own `ast` could resolve an older Python and go blind. Observed: bandit's env
+  resolved to 3.12, could not parse PEP 758 `except A, B:`, logged "syntax error
+  while parsing AST" for 25 files, skipped them, and **exited success** — a security
+  gate silently not scanning; vulture's resolved to 3.11 and dropped 35 files on PEP
+  695 generics, which is why real dead code survived. Adds the per-hook
+  `language_version` rule, an AFFECTED (bandit, vulture, interrogate, local AST
+  checkers) vs IMMUNE (ruff, jscpd, tree-sitter, pyright) taxonomy so the pin is not
+  cargo-culted everywhere, and the empirical method: inspect the cached env under
+  `~/.cache/prek/hooks/` rather than theorise. Two sibling instances of the same
+  class are documented alongside it — `--all-files` only sees **git-tracked** files
+  (tell: `(no files to check) Skipped`), and it runs only the **pre-commit** stage.
+
 - **brunofaust-python-style**: `pydantic_contract.py` no longer fails OPEN on a file
   it cannot parse. It parses with the `ast` of the interpreter it runs on, so an env
   older than the project silently fails on new syntax (PEP 695 `type X = int`, PEP 758

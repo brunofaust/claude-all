@@ -139,7 +139,8 @@ ______________________________________________________________________
 ## prek.toml structure
 
 ```toml
-# Global Python version (all hooks that use Python default to this)
+# Global Python version — a DEFAULT only. It does NOT reach a hook's isolated
+# env; AST-parsing hooks need their own `language_version` (see below).
 default_language_version.python = "3.14"
 # OR:
 # default_language_version = { python = "python3.14" }
@@ -158,6 +159,7 @@ hooks = [
     args = ["--arg"],                      # optional CLI args
     files = "^src/",                       # regex: only run on matching paths
     exclude = { glob = ["tests/**"] },     # glob exclusion for this hook
+    language_version = "3.14",             # REQUIRED on Python-AST-parsing hooks
     types_or = ["python", "pyi"],          # file type filter
     pass_filenames = false,                # don't pass file list to entry
     stages = ["pre-commit"],               # only run at this git hook stage
@@ -176,6 +178,100 @@ hooks = [
 | `manual`     | Only via `prek run --hook-stage manual` |
 
 Hooks without `stages` run at `pre-commit` by default.
+
+______________________________________________________________________
+
+## The vacuous PASS — a hook that silently skips its input
+
+**A gate that skips input still exits 0.** Green is not evidence it looked at anything. This is the
+single most dangerous prek failure class: it doesn't break a build, it manufactures false confidence.
+Three known instances — pin `language_version`, stage your files, run the right hook stage.
+
+### 1. AST-parsing hooks need a per-hook `language_version`
+
+Any hook that parses Python with **Python's own `ast`** parses with the ast of *the interpreter it runs
+on* — not your project's. If its isolated env resolves to an older Python than the project, it hits a
+`SyntaxError` on modern syntax, **logs it, SKIPS the file, and still exits success**.
+
+**`default_language_version.python` does NOT fix this — it does not reach a hook's isolated env.**
+It's a default for language bootstrapping, not a guarantee about the interpreter a hook resolves. The
+only reliable fix is a **per-hook `language_version`**:
+
+```toml
+{
+  id = "vulture",
+  name = "🐍 python · Detect unused code",
+  # vulture parses with the ast of the interpreter it RUNS ON. Unpinned, its
+  # isolated env resolves non-deterministically to an older Python whose ast
+  # cannot parse PEP 695 generics / PEP 758 except-clauses — it then SKIPS those
+  # files and still exits 0. default_language_version does not reach this env.
+  language_version = "3.14"   # or your project's version
+}
+```
+
+Pin where it matters — **do not cargo-cult `language_version` onto every hook**:
+
+| Verdict | Hooks | Why |
+| --- | --- | --- |
+| **AFFECTED — pin it** | `bandit`, `vulture`, `interrogate`, any `local`/custom AST checker script | parse Python with the interpreter's own `ast` |
+| **IMMUNE — no pin** | `ruff` (Rust parser), `jscpd` (own parser), tree-sitter-based tools | ship their own parser, independent of the hook env |
+| **IMMUNE — no pin** | `pyright` | bypasses prek's env entirely |
+
+Observed cost: unpinned `vulture` resolved to 3.11 despite `default_language_version.python = "3.14"`
+at the top of the file, silently skipped **35 files** from dead-code analysis, and exited green — which
+is why real dead modules survived in that repo for months.
+
+#### The diagnostic tell — and how to prove it
+
+The tell is a hook that prints a parse complaint **and still exits 0**:
+
+- `syntax error while parsing AST` (bandit)
+- `invalid syntax at type X = ...` (PEP 695 generics on an old parser)
+- `multiple exception types must be parenthesized` / `expected '('` (PEP 758 `except A, B:`)
+
+**Don't theorise about which interpreter a hook got — inspect the cached hook env.** That empirical
+method is the lesson; the config is just the fix:
+
+```bash
+# 1. Find the hook's venv and see which Python it actually resolved to
+ls ~/.cache/prek/hooks/                       # one dir per hook env
+<hook-env>/bin/python --version               # the ast that will parse your code
+
+# 2. Run THAT interpreter against the source tree and count what it can't parse
+<hook-env>/bin/python - <<'PY'
+import ast, pathlib
+skipped = []
+for p in pathlib.Path("src").rglob("*.py"):
+    try:
+        ast.parse(p.read_text())
+    except SyntaxError as e:
+        skipped.append((p, e.msg))
+print(f"{len(skipped)} files this interpreter CANNOT parse (= silently skipped):")
+for p, msg in skipped:
+    print(f"  {p}: {msg}")
+PY
+```
+
+A non-zero count is the proof: those files were never scanned. Re-run with the pinned interpreter — the
+count must be **0**.
+
+**Rule: an exit-0 hook is not proof it scanned anything.** After adding or upgrading any AST-parsing
+hook, verify the file count it reports matches the file count you expect.
+
+### 2. `prek run --all-files` only sees **git-tracked** files
+
+An untracked new file is skipped and the gate passes vacuously. The tell is a hook reporting
+`(no files to check) Skipped`. **`git add` before trusting a run** (see § *Staged files vs `--all-files`*).
+
+### 3. `prek run --all-files` runs only the **pre-commit** stage
+
+`pre-push` hooks (typically mypy, ruff-format, the slow gates) are **not exercised** unless you ask:
+
+```bash
+prek run --all-files --hook-stage pre-push
+```
+
+A "prek is green" claim that never ran the push stage has verified roughly half the gate.
 
 ______________________________________________________________________
 
@@ -327,6 +423,9 @@ for older prek versions. If you must use `--files` mode in a hook script, filter
 `prek run` (no flags) only checks staged files. If prek reports "no files to lint", the likely cause
 is that the files you edited are not staged. Stage them first: `git add <file>` or use
 `prek run --all-files` to bypass the staged-file filter.
+
+`--all-files` is **not** "every file on disk" — it's every **git-tracked** file. A brand-new untracked
+file is skipped and the run passes without ever seeing it (see § *The vacuous PASS*). `git add` first.
 
 ### Fix-loop discipline — 2 failures, then stop
 
