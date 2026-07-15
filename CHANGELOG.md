@@ -39,6 +39,23 @@
 
 ### Fixed
 
+- **brunofaust-python-style**: `pyproject-toml.md` was a thin template that listed rule
+  groups to *select* and nothing about which to **reject**. Anyone can list selections;
+  knowing what to reject and why is what costs a day of measuring. It now carries the
+  measured rejections — `DOC` (pydoclint) at **196 false positives** because DOC501/502
+  can't trace exceptions through calls; blanket `PLR` at **~346** style findings (keep
+  only the complexity caps `PLR0911/0912/0913/0915`); umbrella `TRY` where `TRY003`
+  alone is **~185** (keep `TRY002/004/201`). The counts are the point: a number is what
+  stops the next person re-enabling the group. Also adds the `banned-api` (TID251)
+  ownership table that makes "one owner per external system" mechanical — including why
+  `botocore` is owned by the AWS module (its wrappers *translate* `ClientError` into
+  semantic errors, so a caller importing botocore to catch `ClientError` has reached
+  around the translation), justified `bandit`/`vulture` skips where every ignore states
+  its reason, and the `import-linter` contracts ("X are mutually independent" is the
+  reusable shape). Deliberately does **not** copy the upstream `exclude = ["tests/"]`:
+  this skill's whole data-modeling standard exists because a *test fixture* lied while
+  mypy stayed green, so excluding tests from lint leaves the least-checked code exactly
+  where the incident came from.
 - **release**: `uv.lock` no longer drifts every release. `version_toml` rewrites ONLY
   `pyproject.toml:project.version`, so the lockfile's record of this package's OWN
   version went stale on each bump — and the next `uv sync` silently rewrote that line
