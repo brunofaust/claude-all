@@ -5,6 +5,15 @@
 
 ### Changed
 
+- **brunofaust-python-style**: the test layout was **contradictory** and is now flat.
+  `testing.md` and `project-structure.md` documented a NESTED mirror
+  (`tests/unit/features/pii_detection/test_service.py`) while the convention actually
+  run in production is FLAT. Both claimed to "mirror `src/` 1:1" — the phrase is
+  ambiguous, which is exactly how the two coexisted unnoticed. The mapping is now
+  stated mechanically instead of in prose: take the module's path under `src/<pkg>/`,
+  replace every `/` with `_`, prefix `test_`. `enforcement.md` retires the nested
+  `skill_enforcer.py` rule `test_mirrors_src` in favour of the new checker — two gates
+  for one rule is two sources of truth that disagree.
 - **brunofaust-python-style**: baseline reverts to **Python 3.14+**. It was 3.14 in the
   skill's private origin and got downgraded to 3.11 during the port to this public repo;
   this restores it. Not a find-and-replace — a 3.14 floor *inverts* rules:
@@ -105,6 +114,16 @@
 
 ### Added
 
+- **brunofaust-python-style**: `checkers/flat_test_mirror.py` — the unit tier is ONE
+  flat folder, one file per module: `src/<pkg>/a/b.py` ⇒ `tests/unit/test_a_b.py`.
+  Rules: `not-flat`, `non-test-file`, `grab-bag` (the last one specifically kills the
+  `*_extra` / `*_coverage2` / `*_boost` parallel files coverage-chasing produces). It
+  needs no `language_version` pin — it walks the filesystem and never parses source.
+- **brunofaust-python-style**: `checkers/all_contract.py` — `from x import y` requires
+  `y` in `x.__all__`; no `_private` name may be exported. `__all__` IS the export
+  contract, so importing a name outside it couples you to an implementation detail
+  that can move without notice. Rules: `not-in-all`, `private-in-all`; handles
+  relative imports, aliases, and dotted attribute access.
 - **brunofaust-python-style**: `checkers/lambda_event_validation.py` — every Lambda
   entry point parses its `event` into a Pydantic model at the boundary, before any
   logic. The skill has mandated this in prose since it was written and nothing checked

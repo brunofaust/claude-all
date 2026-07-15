@@ -66,6 +66,7 @@ Read the matching file BEFORE deep work in that area. Each is a focused referenc
 | Parameters          | `snake_case`              | `table_name`, `primary_key_name`    |
 | Worker functions    | `_name_do` suffix         | `_batch_delete_do`                  |
 | Cache variables     | `function_name_cache`     | `get_data_cache`                    |
+| Test files (flat mirror) | `test_<src path with / -> _>` | `test_core_aws_s3.py`, `test_features_pii_detection_service.py` |
 
 ## Import organization
 

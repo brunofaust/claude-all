@@ -265,11 +265,15 @@ make test-lambda LAMBDA=<name>
 - Search: <correlation_id>=<value>
 ```
 
-## Tests mirror src/ exactly
+## Tests mirror src/ — ONE flat folder
+
+`tests/unit/` is flat: one file per source module, named `test_<source path with '/' -> '_'>.py`.
+No subdirectories, no non-mirror files (only `conftest.py` / `__init__.py`), no parallel
+`*_extra` / `*_coverage[N]` grab-bags. See `testing.md`; enforced by `checkers/flat_test_mirror.py`.
 
 ```
-src/<project>/features/pii_detection/service.py
-tests/unit/features/pii_detection/test_service.py
+src/<project>/core/aws/s3.py                     ->  tests/unit/test_core_aws_s3.py
+src/<project>/features/pii_detection/service.py  ->  tests/unit/test_features_pii_detection_service.py
 ```
 
 ## `__init__.py` declares public API

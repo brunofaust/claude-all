@@ -28,14 +28,16 @@ Every rule in this skill has an enforcement mechanism. If a rule has no enforcem
 | No raw `asyncio.to_thread`            | ruff `banned-api` (TID251) → `run_in_thread()`                     | `[per-file-ignores]`                       |
 | No raw `subprocess`                   | ruff `banned-api` (TID251) → `run_exec()`/`run_shell()`            | `scripts/**` per-file-ignore               |
 | Annotations, not type comments        | prek type-annotation-enforcement hook                              | none                                       |
-| `__all__` import contract valid       | pyright + AST `__all__`-contract hooks                             | fix/declare `__all__`                       |
+| `__all__` import contract valid       | `all_contract.py` rule `not-in-all` — `from x import y` requires `y` in `x.__all__`. pyright's `reportPrivateImportUsage` is the slower pre-push backstop. | fix the import, or declare the name in `__all__` if it is genuinely public |
+| No `_private` name exported in `__all__` | `all_contract.py` rule `private-in-all`                          | none — `__all__` IS the export contract; an underscore name is not public |
 | `__init__.py` re-exports only         | ruff `RUF067`                                                      | none — move logic to a real module         |
 | Stay async (no de-async on no-`await`)| ruff `RUF029` disabled in config (by design)                       | n/a — keep the API uniformly `async`       |
 | Bounded copy-paste duplication        | `jscpd` (regression-only `--threshold`)                            | dedup the clone — never `SKIP=jscpd`       |
 | Raw SQL valid vs migration schema     | `check_raw_sql.py` (sqlglot, regression baseline, no DB)           | fix the query / baseline a real bug        |
 | Single alembic head + id ≤ 32 chars   | `check_alembic_heads.py` (AST, no DB)                              | merge heads into one linear chain          |
 | CI-reserved env vars hard-set in tests| pygrep `no-ci-env-setdefault` (`GITHUB_*`/`RUNNER_*`/`CI`)         | assign directly, never `os.environ.setdefault` |
-| Test mirrors src structure            | `skill_enforcer.py` rule `test_mirrors_src`                        | none                                       |
+| Unit tier is ONE flat mirror of src   | `flat_test_mirror.py` rules `not-flat`, `non-test-file`, `grab-bag`. **Supersedes** `skill_enforcer.py` rule `test_mirrors_src`, which assumed a NESTED tree — retire the old rule rather than running both. | none — `src/<pkg>/a/b.py` ⇒ `tests/unit/test_a_b.py` |
+| No `*_extra` / `*_coverage` grab-bags | `flat_test_mirror.py` rule `grab-bag`                              | none — add the case to the module's own mirror |
 | No `TypedDict` carrying a contract    | `pydantic_contract.py` rule `no-typeddict` (regression baseline)   | none — it validates nothing at runtime; make it a `BaseModel` |
 | No `cast()`                           | `pydantic_contract.py` rule `no-cast` (regression baseline)        | none — `Model.model_validate(...)` proves the type instead of asserting it |
 | Every model forbids unknown fields    | `pydantic_contract.py` rule `extra-forbid` (regression baseline)   | none — no exceptions; a schema change must force a code change |
@@ -183,10 +185,11 @@ resource_folders = [
 required_files = ["README.md", "CLAUDE.md"]
 require_dockerfile = ["lambdas/*", "ecs_tasks/*", "batch_jobs/*"]
 
+# RETIRED — superseded by `flat_test_mirror.py`, which enforces the FLAT mirror
+# (`src/<pkg>/a/b.py` ⇒ `tests/unit/test_a_b.py`). This rule assumed a NESTED tree
+# and contradicted it. Two gates for one rule = two sources of truth that disagree.
 [rules.test_mirrors_src]
-enabled = true
-src_root = "src"
-test_root = "tests/unit"
+enabled = false
 ```
 
 ## Plug into `prek.toml`

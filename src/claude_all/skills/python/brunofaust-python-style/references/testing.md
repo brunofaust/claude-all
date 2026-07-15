@@ -1348,12 +1348,27 @@ def test_pii():
 
 ### Directory structure
 
-Mirror `src/`:
+`tests/unit/` is **ONE flat folder** — one file per source module. Do not nest: "mirror `src/`"
+is ambiguous prose (a nested tree and a flat one both claim to comply), so the mapping is stated
+mechanically instead — take the module's path under `src/<project>/`, replace every `/` with `_`,
+and prefix `test_`:
 
 ```
-src/myproject/features/pii_detection/service.py
-tests/unit/features/pii_detection/test_service.py
+src/myproject/core/aws/s3.py                    ->  tests/unit/test_core_aws_s3.py
+src/myproject/features/pii_detection/service.py ->  tests/unit/test_features_pii_detection_service.py
 ```
+
+Given a source path there is exactly one legal test path, and given a test file exactly one source
+module — so "does this module have tests?" is a glob, not a walk. `conftest.py` and `__init__.py`
+are the only non-mirror files allowed in the tier; shared helpers go in `conftest.py`, never a
+`helpers.py` parked beside the mirrors.
+
+**No grab-bags.** A module's tests all live in its mirror. Parallel `*_extra` / `*_edges` /
+`*_coverage[N]` / `*_boost[N]` / `*_remaining` / `*_near_threshold` files are banned — that is what
+gets written when appending a new file is easier than reading the existing one, and it splits a
+module's tests across files nobody knows to open. Add to the mirror instead.
+
+Enforced by `checkers/flat_test_mirror.py` (rules `not-flat`, `non-test-file`, `grab-bag`).
 
 ### Test categories
 
@@ -1370,6 +1385,7 @@ tests/unit/features/pii_detection/test_service.py
 
 ### Enforcement
 
-- `skill_enforcer.py` rule `test_mirrors_src` — checks every `src/.../*.py` has a matching `tests/unit/.../test_*.py`.
+- `skill_enforcer.py` rule `test_mirrors_src` — checks every `src/.../*.py` has a matching flat mirror `tests/unit/test_<path with '/' -> '_'>.py`.
+- `checkers/flat_test_mirror.py` — keeps the tier flat, mirror-only, and grab-bag-free (`not-flat`, `non-test-file`, `grab-bag`).
 - AST hook bans `<mod>._xxx = ...` assignments in test files.
 - Coverage threshold check pre-push.
