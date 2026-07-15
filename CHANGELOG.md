@@ -3,6 +3,15 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **brunofaust-python-style**: `pydantic_contract.py`'s `opaque-annotation` rule
+  only recursed into mapping containers, so `Sequence[Any]`, `list[dict[str, Any]]`
+  and `Mapping[str, Any] | None` all silently PASSED — each is the untyped dict one
+  level down. It now recurses through every subscript argument at any depth, while
+  still leaving concretely-subscripted containers (`Mapping[str, str]`,
+  `dict[VectorKey, SearchResult]`) legal.
+
 ### Changed
 
 - **brunofaust-python-style**: corrected two rules that were actively harmful.
@@ -29,6 +38,16 @@
 
 ### Added
 
+- **brunofaust-python-style**: `pydantic_contract.py` gains a `dict-return` rule —
+  a function returning a raw dict leaks a payload across a boundary, including a
+  CONCRETE `dict[str, str]` and an unannotated `return {...}` (which dodges every
+  annotation-based check). It also now recognises `RootModel`, treats `object` as
+  opaque, and exempts the full structlog surface (`.info`/`.exception`/
+  `.bind_contextvars`) from the `splat` rule rather than just `.bind`.
+- **brunofaust-python-style**: `pydantic_contract.py` **exits 1 on any finding**, so
+  it can be wired straight into prek/pre-commit with no baseline artifact. It owns no
+  state — writes no baseline, no JSON, no cache. `--exit-zero` is for composing it
+  behind `baseline_gate.py`, whose contract reads a non-zero exit as a crash.
 - **brunofaust-python-style**: `references/serialization.md` — crossing a
   boundary with a model without changing the bytes on the wire:
   `model_dump(mode="json")` + a round-trip proof, orjson can't serialize a model,

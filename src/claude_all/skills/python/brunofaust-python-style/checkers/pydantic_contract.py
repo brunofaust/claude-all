@@ -22,11 +22,15 @@ removable. So these rules push payloads into models, then pin the contract:
   masking-default   Optional ⇒ `T | None = None`. Required ⇒ no default. Any
                     other default (`""`, `0`, `[]`, `"task"`) is one more
                     spelling of "absent" and hides a missing key.
-  opaque-annotation `Any` — and any dict/Mapping whose VALUE is `Any` — is the
-                    untyped dict one level down. The *container* is fine when its
-                    value type is concrete: `Mapping[str, str]` and
-                    `dict[VectorKey, SearchResult]` (runtime keys, typed values)
-                    both stay legal.
+  opaque-annotation `Any`/`object` at ANY nesting depth — `Sequence[Any]`,
+                    `list[dict[str, Any]]` — is the untyped dict one level down.
+                    The *container* is fine when subscripted with concrete types:
+                    `Mapping[str, str]` and `dict[VectorKey, SearchResult]`
+                    (runtime keys, typed values) both stay legal.
+  dict-return       A function returning a raw dict — including a CONCRETE
+                    `dict[str, str]`, and including an unannotated
+                    `return {...}` — leaks a payload across a boundary. Stricter
+                    than `opaque-annotation`, and return-position only.
   splat             `f(**model.model_dump())` unpacks the model back into an
                     untyped dict and skips per-field checking at the one site
                     that pins the contract. Logging is the only exemption
@@ -38,17 +42,28 @@ removable. So these rules push payloads into models, then pin the contract:
 
 CONTRACT
 --------
-Prints one ``path: [rule] symbol — message`` finding per violation to stdout,
-keyed by rule + enclosing symbol + field name and NEVER by line number, so an
-unrelated edit does not churn the baseline. Composes with ``baseline_gate.py``.
-Exits 0 when it ran (regardless of finding count); non-zero only on bad args.
+Prints one ``path: [rule] symbol — message`` finding per violation to stdout and
+**exits 1 when there is any finding**, so wiring it straight into prek/pre-commit
+surfaces the findings and fails the commit — no baseline artifact required.
+
+Keys are rule + enclosing symbol + field name and NEVER a line number, so an
+unrelated edit does not churn a baseline; the repeatable rules carry a per-symbol
+ordinal so a second occurrence is a distinct finding rather than a duplicate key.
+
+The checker owns NO state: it writes no baseline, no JSON, no cache. If you want
+the regression-only ratchet, compose it with ``regression-gates/baseline_gate.py``
+and pass ``--exit-zero`` — that harness reads a non-zero exit as "the checker
+crashed" and fails closed, so the flag is required there and nowhere else.
 
 USAGE
 -----
+    # direct gate — prints findings, exits 1 (this is the prek/pre-commit wiring)
     python checkers/pydantic_contract.py src/
     python checkers/pydantic_contract.py --select no-cast,extra-forbid src/
+
+    # regression-only ratchet — the baseline lives in baseline_gate.py, not here
     baseline_gate.py --baseline pydantic_baseline.txt -- \\
-        python checkers/pydantic_contract.py src/
+        python checkers/pydantic_contract.py --exit-zero src/
 
 PARSER NOTE
 -----------
@@ -72,19 +87,41 @@ RULES: tuple[str, ...] = (
     "extra-forbid",
     "masking-default",
     "opaque-annotation",
+    "dict-return",
     "splat",
     "select-star",
     "secret-repr",
 )
 
 #: Base classes that make a class a validated model.
-MODEL_BASES = frozenset({"BaseModel", "BaseSettings"})
+MODEL_BASES = frozenset({"BaseModel", "BaseSettings", "RootModel"})
 
-#: Mapping-ish containers that are opaque when bare or when their value is `Any`.
+#: Mapping-ish containers. Opaque when BARE (unsubscripted); legal when subscripted
+#: with concrete types — `Mapping[str, str]` and `dict[VectorKey, SearchResult]` are
+#: fine. The container was never the problem; the opaque VALUE is.
 MAPPING_NAMES = frozenset({"dict", "Dict", "Mapping", "MutableMapping", "DefaultDict"})
 
+#: Annotations that erase the shape wherever they appear, at any nesting depth.
+OPAQUE_NAMES = frozenset({"Any", "object"})
+
 #: Receivers whose `**kwargs` splat is arbitrary context by design.
-LOG_RECEIVERS = frozenset({"log", "logger", "_log", "LOG", "LOGGER", "structlog"})
+LOG_RECEIVERS = frozenset({"log", "logger", "_log", "LOG", "LOGGER", "structlog", "tlog"})
+
+#: Logging method names — `.bind(**ctx)` / `.info(**ctx)` bind arbitrary context by
+#: design, so an explicit-params rule there would be noise.
+LOG_ATTRS = frozenset(
+    {
+        "bind",
+        "bind_contextvars",
+        "bound_contextvars",
+        "debug",
+        "info",
+        "warning",
+        "warn",
+        "error",
+        "exception",
+    }
+)
 
 #: Field-name fragments that denote a credential or PII value.
 SECRET_HINTS = ("password", "secret", "token", "api_key", "apikey", "credential", "private_key")
@@ -127,22 +164,18 @@ def _name_of(node: ast.expr | None, *, root: bool = False) -> str:
     return ""
 
 
-def _is_any(node: ast.expr | None) -> bool:
-    """Return whether *node* is the ``Any`` annotation.
-
-    Args:
-        node: The annotation AST node, or ``None``.
-    """
-    return _name_of(node) == "Any"
-
-
 def opaque_reason(node: ast.expr | None) -> str:
     """Return why *node* is an opaque annotation, or ``""`` when it is concrete.
 
-    Opaque means the annotation carries no usable type at its value position:
-    bare ``Any``, a bare mapping container, or a mapping whose VALUE type is
-    ``Any``. A mapping with a concrete value type is NOT opaque — the container
-    was never the problem.
+    Opaque means the annotation carries no usable type: ``Any``/``object`` at ANY
+    nesting depth, or a BARE mapping container. Recursion through every subscript
+    argument is load-bearing — ``Sequence[Any]``, ``list[dict[str, Any]]`` and
+    ``Mapping[str, Any] | None`` are each the untyped dict one level down, and a
+    value-position-only check silently passes all three.
+
+    A container subscripted with concrete types is NOT opaque: ``Mapping[str, str]``
+    and ``dict[VectorKey, SearchResult]`` (runtime keys, typed values) stay legal.
+    The container was never the problem.
 
     Args:
         node: The annotation AST node, or ``None`` when unannotated.
@@ -152,20 +185,68 @@ def opaque_reason(node: ast.expr | None) -> str:
     """
     if node is None:
         return ""
-    if _is_any(node):
-        return "Any"
-    if isinstance(node, ast.Name | ast.Attribute) and _name_of(node) in MAPPING_NAMES:
-        return f"bare {_name_of(node)}"
+    if isinstance(node, ast.Name | ast.Attribute):
+        name = _name_of(node)
+        if name in OPAQUE_NAMES:
+            return name
+        return f"bare {name}" if name in MAPPING_NAMES else ""
     if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
         return opaque_reason(node.left) or opaque_reason(node.right)
     if isinstance(node, ast.Subscript):
-        base = _name_of(node.value)
-        if base not in MAPPING_NAMES:
-            return ""
         elts = node.slice.elts if isinstance(node.slice, ast.Tuple) else [node.slice]
-        if elts and _is_any(elts[-1]):  # value position is the LAST arg
-            return f"{base}[..., Any]"
+        for elt in elts:
+            if reason := opaque_reason(elt):
+                return f"{_name_of(node.value)}[… {reason} …]"
     return ""
+
+
+def _is_dict_return(node: ast.expr | None) -> bool:
+    """Return whether *node* annotates a raw dict return.
+
+    A ``dict[...] | None`` union counts — the dict arm still leaks an unmodelled
+    payload. Unlike :func:`opaque_reason` this fires on a CONCRETE dict too
+    (``dict[str, str]``): a payload crossing a function boundary should be a
+    model, whatever its value type.
+
+    Args:
+        node: The return-annotation AST node, or ``None``.
+    """
+    if node is None:
+        return False
+    if isinstance(node, ast.Name | ast.Attribute):
+        return _name_of(node) in MAPPING_NAMES
+    if isinstance(node, ast.Subscript):
+        return _is_dict_return(node.value)
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
+        return _is_dict_return(node.left) or _is_dict_return(node.right)
+    return False
+
+
+def _returns_dict_literal(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    """Return whether *fn* returns a dict literal with no return annotation.
+
+    An unannotated ``return {...}`` leaks exactly the same unmodelled payload as
+    an annotated one, while dodging every annotation-based check.
+
+    Args:
+        fn: The function or coroutine definition.
+    """
+    if fn.returns is not None:
+        return False
+    return any(isinstance(n, ast.Return) and isinstance(n.value, ast.Dict) for n in ast.walk(fn))
+
+
+def _is_log_call(func: ast.expr) -> bool:
+    """Return whether *func* is a logging target whose ``**`` splat is by design.
+
+    Args:
+        func: The callee expression of a call.
+    """
+    if not isinstance(func, ast.Attribute):
+        return False
+    if func.attr in LOG_ATTRS:
+        return True
+    return _name_of(func, root=True) in LOG_RECEIVERS
 
 
 def _field_call_default(node: ast.expr) -> tuple[bool, str]:
@@ -396,11 +477,28 @@ class _Visitor(ast.NodeVisitor):
                     f"{self._qual()}({arg.arg})",
                     f"parameter is opaque ({reason}) — pass a model or a concrete type",
                 )
-        if reason := opaque_reason(fn.returns):
+        # dict-return is the stricter, more specific rule for the return position;
+        # check it first so a `-> dict[str, Any]` reports ONCE, not twice.
+        if _is_dict_return(fn.returns):
+            self._add(
+                "dict-return",
+                self._qual(),
+                "returns a raw dict — a payload crossing a function boundary should be a "
+                "model, so its fields are named, typed, required-vs-optional, and "
+                "validated at construction",
+            )
+        elif _returns_dict_literal(fn):
+            self._add(
+                "dict-return",
+                self._qual(),
+                "returns a dict literal with no return annotation — model it; an "
+                "unannotated dict dodges every annotation-based check",
+            )
+        elif reason := opaque_reason(fn.returns):
             self._add(
                 "opaque-annotation",
                 self._qual(),
-                f"return is opaque ({reason}) — return a model, not an untyped mapping",
+                f"return is opaque ({reason}) — return a model, not an untyped shape",
             )
         self.generic_visit(fn)
         self._stack.pop()
@@ -434,16 +532,13 @@ class _Visitor(ast.NodeVisitor):
                 "cast() asserts a type instead of proving one — cast(dtype, dict(row)) is a "
                 "no-op; parse with Model.model_validate(...) instead",
             )
-        if any(kw.arg is None for kw in node.keywords):
-            receiver = _name_of(node.func, root=True)
-            is_log = receiver in LOG_RECEIVERS or _name_of(node.func) == "bind"
-            if not is_log:
-                self._add(
-                    "splat",
-                    f"{self._qual()} -> {ast.unparse(node.func)}",
-                    "** splatting unpacks a model back into an untyped dict and skips "
-                    "per-field checking — name the fields (logging is the only exemption)",
-                )
+        if any(kw.arg is None for kw in node.keywords) and not _is_log_call(node.func):
+            self._add(
+                "splat",
+                f"{self._qual()} -> {ast.unparse(node.func)}",
+                "** splatting unpacks a model back into an untyped dict and skips "
+                "per-field checking — name the fields (logging is the only exemption)",
+            )
         self.generic_visit(node)
 
     def visit_Constant(self, node: ast.Constant) -> None:
@@ -528,15 +623,31 @@ def main(argv: list[str] | None = None) -> int:
         default=",".join(RULES),
         help=f"comma-separated rules to enforce (default: all). Available: {', '.join(RULES)}",
     )
+    parser.add_argument(
+        "--exit-zero",
+        action="store_true",
+        help="print findings but always exit 0 — ONLY for composing behind "
+        "baseline_gate.py, whose contract reads a non-zero exit as 'the checker "
+        "itself crashed' and fails closed",
+    )
     args = parser.parse_args(argv)
 
     select = frozenset(r.strip() for r in args.select.split(",") if r.strip())
     if unknown := select - set(RULES):
         parser.error(f"unknown rule(s): {', '.join(sorted(unknown))}")
 
+    count = 0
     for file in iter_py_files(args.roots):
         for finding in find_violations(file, select):
             print(finding)
+            count += 1
+
+    if count and not args.exit_zero:
+        print(
+            f"\n{count} finding(s) — an untyped dict must not carry a contract.",
+            file=sys.stderr,
+        )
+        return 1
     return 0
 
 
