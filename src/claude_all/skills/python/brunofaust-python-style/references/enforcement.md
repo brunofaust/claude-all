@@ -20,7 +20,7 @@ Every rule in this skill has an enforcement mechanism. If a rule has no enforcem
 | Docs updated with code                | `precommit_docs.sh` + GitHub Action                                | `skip-docs` label                          |
 | Resource CLAUDE.md updated            | `precommit_resource_docs.sh` + GitHub Action                       | none                                       |
 | Conventional commits                  | commitizen `commit-msg` hook                                       | none                                       |
-| Docstring coverage ≥ 90%              | interrogate                                                        | raise the floor                            |
+| Docstring coverage 100%               | `interrogate` (`fail-under = 100`)                                 | none — carve out the noise case explicitly (`ignore-magic`, `ignore-setters`, `ignore-overloaded-functions`, `ignore-init-module`), never lower the floor |
 | No bare `# type: ignore`              | `python-check-blanket-type-ignore`                                 | use specific code                          |
 | No bare `# noqa`                      | ruff `RUF100`                                                      | use specific code                          |
 | No `Any` from a typed return          | mypy strict `no-any-return`                                        | none — `Model.model_validate(...)` at the seam. **Not** `cast(...)`: that asserts a type instead of proving one and is itself banned by `pydantic_contract.py` rule `no-cast` |

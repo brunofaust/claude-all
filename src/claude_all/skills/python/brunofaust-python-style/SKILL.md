@@ -8,7 +8,7 @@ user-invocable: true
 
 # Python Coding Style Guide (condensed)
 
-Production-grade async Python. Async-first, strict types, immutable parameter types, docstrings everywhere (≥90% gate), real-infra tests (LocalStack).
+Production-grade async Python. Async-first, strict types, immutable parameter types, docstrings everywhere (100% gate), real-infra tests (LocalStack).
 
 **This is the condensed entry point.** Depth and full examples live under `references/`. Read the relevant reference file before deep work in that area.
 
@@ -18,7 +18,7 @@ Production-grade async Python. Async-first, strict types, immutable parameter ty
 1. **Async everything** — custom functions are `async def`. Exceptions: `__init__`, `__iter__`, `__enter__`, other stdlib sync dunder methods.
 1. **Immutable parameter types** — `Mapping`/`Sequence` from `collections.abc`, not `dict`/`list`, for every non-mutated parameter (not just cached function inputs/outputs). Reserve mutable concrete types for params you actually mutate.
 1. **Type safety first** — full type hints, `Literal`, `@overload`, Pydantic models at boundaries. **No `TypedDict`** (static-only — validates nothing at runtime) and **no `typing.cast`** (asserts a type instead of proving one — use `Model.model_validate(...)`). Enforced via mypy (strict) + Ruff.
-1. **Docstring coverage ≥ 90%** (interrogate gate; aim for 100%) — Google-style with Args / Returns / Raises / Examples.
+1. **Docstring coverage 100%** (`interrogate` gate, `fail-under = 100`) — Google-style with Args / Returns / Raises / Examples. 100 is the floor, not an aspiration: a percentage floor below 100 leaves the gate unable to say which missing docstring is acceptable, so it drifts. Carve out the genuinely-noise cases explicitly instead (`ignore-init-module`, `ignore-magic`, `ignore-setters`, `ignore-overloaded-functions`) → [`references/pyproject-toml.md`](references/pyproject-toml.md).
 1. **Test everything** — `MonkeyPatch.context()` for mocks. Unit + integration (LocalStack) + class structural tests. Data tests cover the full data lifecycle.
 
 ## Table of references

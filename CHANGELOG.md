@@ -39,6 +39,23 @@
 
 ### Fixed
 
+- **release**: drop `[skip ci]` from python-semantic-release's `commit_message`. It
+  reads as harmless — "don't re-run CI for a bot's version bump" — but GitHub applies
+  skip-ci to the HEAD commit of `push` AND `pull_request` events, and that commit
+  becomes the release PR's head. So it suppressed the `pull_request: closed` run on
+  merge, which is the ONLY trigger for the publish job: `main` was left bumped-but-
+  untagged on **both** the release/0.2.0 and release/0.3.0 merges, and **0.2.2 was
+  stranded and skipped entirely**. It also meant release PRs merged with zero CI. The
+  prepare job's own idempotency guard (`next == current` → exit 0) is what stops the
+  bump push from looping — not `[skip ci]` — exactly as `release.yml` documented all
+  along. The config simply never matched its own comment.
+- **brunofaust-python-style**: docstring coverage is **100%**, not `≥ 90%`. A
+  percentage floor below 100 cannot say WHICH missing docstring is acceptable, so it
+  drifts down to whatever today's code scores; the noise cases are carved out by name
+  instead (`ignore-magic`, `ignore-setters`, `ignore-overloaded-functions`,
+  `ignore-init-module`). `enforcement.md`'s bypass column said "raise the floor",
+  which is not a bypass, and `pyproject-toml.md` documented no `interrogate` config at
+  all — the skill mandated a gate it never showed you how to configure.
 - **brunofaust-python-style** / **prek**: both `claude_md.md` snippets (injected into
   the always-loaded `~/.claude/CLAUDE.md`) contradicted the rules they front.
   - python-style listed `TypedDict` as a *recommended* strict-typing tool while the

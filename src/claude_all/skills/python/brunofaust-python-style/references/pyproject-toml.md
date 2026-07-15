@@ -46,6 +46,19 @@ no_implicit_optional = true
 [[tool.mypy.overrides]]
 module = "tests.*"
 disallow_untyped_defs = false
+
+[tool.interrogate]
+# 100 is the FLOOR, not an aspiration. A percentage floor below 100 cannot say
+# WHICH missing docstring is acceptable, so the gap silently fills with whatever
+# was written last — the number drifts down to whatever today's code happens to
+# score. Carve out the genuinely-noise cases by NAME instead, so each exemption is
+# a decision someone made rather than slack in a percentage.
+fail-under = 100
+ignore-init-module = true          # a re-export-only __init__.py documents nothing
+ignore-magic = true                # __repr__ / __eq__ — the dunder IS the contract
+ignore-setters = true              # the property's getter carries the docstring
+ignore-overloaded-functions = true # @overload stubs; the implementation documents it
+exclude = [ "__init__.py", "tests", ".venv", "conftest.py", "alembic" ]
 ```
 
 Run with:
@@ -54,4 +67,5 @@ Run with:
 uv run ruff check --fix .  # Lint and auto-fix
 uv run ruff format .       # Format code
 uv run mypy .              # Type check
+uv run interrogate -c pyproject.toml .  # Docstring coverage (fail-under = 100)
 ```

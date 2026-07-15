@@ -93,7 +93,16 @@ MD025 = false
 version_toml = [ "pyproject.toml:project.version" ]
 tag_format = "v{version}"
 major_on_zero = false
-commit_message = "chore(release): v{version} [skip ci]"
+# NO `[skip ci]`. It looks harmless — "don't re-run CI for a bot's version bump" —
+# but GitHub applies skip-ci to the HEAD commit of `push` AND `pull_request` events,
+# and this commit becomes the release PR's head. So it suppressed the
+# `pull_request: closed` run on merge, which is the ONLY trigger for the publish job:
+# main was left bumped-but-untagged on both the release/0.2.0 and release/0.3.0
+# merges, and 0.2.2 was stranded and skipped entirely. It also meant release PRs
+# merged with zero CI. The prepare job's own idempotency guard (next == current ->
+# exit 0) is what stops the bump push from looping — not this — as release.yml has
+# always documented.
+commit_message = "chore(release): v{version}"
 changelog_file = "CHANGELOG.md"
 exclude_commit_patterns = [
   "^chore",
