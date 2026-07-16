@@ -303,3 +303,128 @@ uv run interrogate -c pyproject.toml .  # Docstring coverage (fail-under = 100)
 uv run lint-imports         # Architectural dependency direction
 uv run vulture              # Dead code
 ```
+
+## Checker exception config — `[tool.*]` / hook flags
+
+The first-party AST checkers this skill ships (`pydantic_contract.py`,
+`lambda_event_validation.py`, `flat_test_mirror.py`, `all_contract.py`,
+`model_contract.py`) take their project config as **CLI flags on the prek `entry`
+line** — that entry string *is* the checker's config, versioned next to
+`pyproject.toml`. Every allowlist knob below obeys ONE discipline:
+
+> **An allowlist entry carries a proven reason or it rots.** Key every entry on a
+> `(path suffix, name)` pair — a bare name-set can silently match a second call
+> site the exemption was never meant to cover, whereas `(path, name)` can't
+> drift. State the reason inline; a checker that can re-prove the reason turns a
+> stale exemption into its own finding. **An entry that matches no code is itself
+> dead — delete it** (the same rule vulture's `ignore_names` obeys above).
+
+### `pydantic_contract.py` — model-base registration, per-rule rollout, opaque exclude
+
+```toml
+[[repos]]
+repo = "local"
+hooks = [{
+  id = "pydantic-contract",
+  name = "🐍 skill · Pydantic data contract",
+  # --model-base: register EVERY project model base or the checker goes blind to
+  #   its subclasses and they rot invisibly (models it can't see are models it
+  #   can't gate). Name your own base the moment you add one.
+  # --select: adopt rules one at a time on a legacy tree (one baseline per rule).
+  entry = "python scripts/pydantic_contract.py --model-base myapp.core.model.StrictModel --select no-cast,extra-forbid src/",
+  language = "system",
+  language_version = "3.14",
+  pass_filenames = false,
+  always_run = true,
+  files = "\\.py$"
+}]
+```
+
+`opaque-annotation` has no CLI allowlist — a genuinely-polymorphic vendor payload
+is excluded by PATH at the prek layer, with the reason inline, so the exemption
+is one auditable line and not a blanket:
+
+```toml
+# acme's webhook body is a true union we don't control — model it in TICK-1.
+# Scope the exclude to the ONE file, never the package.
+lint.per-file-ignores  # (n/a — this is a prek `exclude`, shown for shape)
+# prek.toml:  exclude = "^src/myapp/integrations/acme/payload\\.py$"
+```
+
+### `lambda_event_validation.py` — `--allow DIR=CALLABLE`, positively verified
+
+```toml
+# --allow api=Mangum does NOT mean "skip api/" — it means "api/ is exempt BECAUSE
+# it calls Mangum(...)", re-proved every run. Refactor the proxy away and the
+# predicate stops holding, so the gate re-arms and reports `stale-allowlist`.
+entry = "python scripts/lambda_event_validation.py --allow api=Mangum src/"
+```
+
+Each `--allow` is `(dir suffix, callable)` — the callable IS the machine-checkable
+reason. No reason ⇒ no exemption; a reason that no longer holds ⇒ a finding.
+
+### `flat_test_mirror.py` — `--root`, no allowlist by design
+
+```toml
+# --root points at the flat unit tier. There is deliberately NO allowlist:
+# every src module maps to exactly one `tests/unit/test_<a>_<b>.py` mirror, and
+# "this one file is special" is precisely the drift the rule exists to stop.
+entry = "python scripts/flat_test_mirror.py --root tests/unit src/"
+```
+
+### `all_contract.py` — `--package`
+
+```toml
+# --package names the import root whose `__all__` export contract is enforced.
+# No per-name allowlist: a name is public (declared in __all__) or it is not.
+entry = "python scripts/all_contract.py --package myapp src/"
+```
+
+### `model_contract.py` — config symbol + two `(path, name)` allowlists
+
+```toml
+[[repos]]
+repo = "local"
+hooks = [{
+  id = "model-contract",
+  name = "🐍 skill · Model contract (7 rules)",
+  # --config-symbol: the shared ConfigDict every model_config must START FROM
+  #   (`PYDANTIC_CONFIG | ConfigDict(...)`). A bare ConfigDict(...) silently drops
+  #   extra="forbid"/strict=True, so `pydantic-config` flags it.
+  # --allow-dataclass PATHSUFFIX=ClassName (repeatable): a @dataclass survivor with
+  #   a PROVEN structural reason — holds a live object / DI container / a
+  #   TYPE_CHECKING-only import / a `dataclasses.replace()` target. `(path, name)`
+  #   keyed, so it can't leak to another class of the same name elsewhere.
+  # --allow-private PATHSUFFIX=attr: a `_name` that is public-despite-underscore
+  #   (e.g. SQLAlchemy Row's `_mapping`), likewise `(path, attr)` keyed.
+  # verbatim-strip's field-name pattern
+  #   (content|body|text|diff|snippet|patch|raw|chunk_text|output|source|html|preview)
+  #   is built in — set str_strip_whitespace=False on the model, don't widen it.
+  entry = """python scripts/model_contract.py \
+    --config-symbol PYDANTIC_CONFIG \
+    --allow-dataclass core/container.py=AppContainer \
+    --allow-dataclass core/typing_shim.py=VendorStub \
+    --allow-private core/db/row.py=_mapping \
+    src/""",
+  language = "system",
+  language_version = "3.14",
+  pass_filenames = false,
+  always_run = true,
+  files = "\\.py$"
+}]
+```
+
+Read each allowlist entry as `(path suffix, name)` + a REQUIRED reason:
+
+| Flag | `(path suffix, name)` | Required reason (inline comment) |
+| --- | --- | --- |
+| `--allow-dataclass` | `(core/container.py, AppContainer)` | wires live singletons; a Pydantic model would validate the DI graph on every access |
+| `--allow-dataclass` | `(core/typing_shim.py, VendorStub)` | `TYPE_CHECKING`-only shim for an untyped vendor class — never instantiated at runtime |
+| `--allow-private` | `(core/db/row.py, _mapping)` | SQLAlchemy's documented public accessor that happens to be underscore-prefixed |
+
+`no-alias`, `no-dataclass` (beyond the allowlist), `barrel-init`,
+`json-parse-then-validate`, and cross-object `private-access` (beyond the
+allowlist) have **no** escape hatch — they are always wrong. If one of the two
+`--allow-*` entries above ever matches no code (the class was deleted, the attr
+renamed), the entry is dead: remove it in the same PR, never leave it as a
+standing hole the next drift can slip through.

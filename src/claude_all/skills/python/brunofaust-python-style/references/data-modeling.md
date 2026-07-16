@@ -1,8 +1,10 @@
 # Data Modeling — Pydantic vs Dataclass (TypedDict is banned)
 
-**Decision rule:** Pydantic at trust boundaries, frozen dataclasses for internal
-contracts. **TypedDict is banned outright** (checker rule `no-typeddict`), and so
-is `typing.cast` (checker rule `no-cast`).
+**Decision rule:** Pydantic everywhere a contract exists — at trust boundaries AND
+for internal contracts. A `@dataclass` is the rare, allowlisted exception, used
+only for a proven STRUCTURAL reason (see *Internal contracts* below), never as the
+internal default: a dataclass validates nothing. **TypedDict is banned outright**
+(checker rule `no-typeddict`), and so is `typing.cast` (checker rule `no-cast`).
 
 ## Why TypedDict is banned
 
@@ -147,6 +149,60 @@ def _normalize_issue(issue: Mapping[str, Any]) -> NormalizedTicket:
     )
 ```
 
+## Every model starts from one shared config
+
+A model's `model_config` must START FROM a single shared config object — not be
+hand-written per model. A bare `ConfigDict(...)` on each model silently drops the
+project's decisions and re-litigates strictness one model at a time; the day
+someone forgets `extra="forbid"` is the day a renamed field goes silent.
+
+```python
+from pydantic import BaseModel, ConfigDict
+
+# One place. Every model extends this; nobody re-decides strictness per model.
+PYDANTIC_CONFIG = ConfigDict(
+    extra="forbid",
+    strict=True,
+    validate_assignment=True,
+    str_strip_whitespace=True,
+)
+
+
+class CustomerRow(BaseModel):
+    model_config = PYDANTIC_CONFIG  # inherits every decision above
+
+    customer_id: str
+    interval_seconds: int
+```
+
+Extend it with `|` when one model genuinely needs a different setting — the shared
+decisions still come along: `model_config = PYDANTIC_CONFIG | ConfigDict(...)`.
+This shared object is the anchor for the `extra="forbid"` rule below: forbid lives
+in ONE place, not re-typed (and re-forgettable) on every model.
+
+## `str_strip_whitespace=True` corrupts verbatim content — opt out
+
+The shared config sets `str_strip_whitespace=True` because it's right for
+identifiers — a stray space around a name or email should die at the boundary. But
+it SILENTLY strips leading/trailing whitespace from VERBATIM content — code, diffs,
+chunk text, HTML — with no error and no log. It once stripped the leading
+indentation off every code chunk entering a RAG index; nothing failed, the data was
+just quietly wrong.
+
+A field carrying verbatim content must opt OUT via the shared config:
+
+```python
+class CodeChunk(BaseModel):
+    model_config = PYDANTIC_CONFIG | ConfigDict(str_strip_whitespace=False)
+
+    content: str  # leading indentation is DATA — must survive verbatim
+```
+
+**Field-name smell list** — if a field is named any of these, it almost certainly
+carries verbatim content and its model must set `str_strip_whitespace=False`:
+`content`, `body`, `text`, `diff`, `snippet`, `patch`, `raw`, `chunk_text`,
+`output`, `source`, `html`, `preview`.
+
 ## `extra="forbid"` everywhere — no exceptions
 
 A schema change must be followed by a code change. `extra="ignore"` turns a
@@ -262,21 +318,64 @@ TASK_SETTINGS = TaskSettings()  # fails fast at import if RUN_DATE is unset
 See [`config.md`](config.md) for the full `pydantic-settings` patterns and
 [`serialization.md`](serialization.md) for crossing back out over a boundary.
 
-## Internal contracts — use `@dataclass(frozen=True, slots=True)`
+## Internal contracts — default to Pydantic, dataclass is the allowlisted exception
 
-- Data passed between modules within our system
-- Return types of business-logic functions
-- Domain models in `domain/models/`
-- Already-validated data flowing between features
+**A dataclass validates NOTHING.** "It's already validated upstream, so skip
+Pydantic" is not a reason — it just means the type is a hint nobody checks. In the
+incident that produced this file, 85 of 98 internal dataclasses became Pydantic
+models; the 13 survivors each had a proven STRUCTURAL reason, not a performance one.
+
+**Default: a Pydantic `BaseModel`** — for data passed between modules,
+business-logic return types, `domain/models/`, and already-validated data flowing
+between features. If the concern is re-validating trusted data in a hot loop, use
+`model_construct()` (see *Performance note*) to skip validation on a REAL model —
+never drop to a dataclass for speed.
+
+**Yes, validation costs something — and it is worth it.** A `BaseModel` is heavier
+to construct than a `@dataclass` (roughly ~1–5μs per simple model; a dataclass is
+near-free), and every boundary parse spends a little CPU a dataclass would not.
+That cost buys the entire point of this file: a renamed key fails loud instead of
+silently defaulting (incident 1 — silent billing), a credential can carry
+`repr=False`, a schema drift is caught at construction rather than three calls
+deep, and content survives verbatim or is rejected — never quietly corrupted
+(incident 6). The failures this trades against were *invisible* and ran for months;
+the microseconds are visible and bounded. When the microseconds genuinely matter,
+the answer is `model_construct()` on a real model (validate once at the boundary,
+skip re-validation on the trusted hot path) — not a dataclass that validates
+nothing, ever. Security and robustness first; buy back the speed narrowly, where a
+profiler proves you need it. → [`incidents.md`](incidents.md)
 
 ```python
-@dataclass(frozen=True, slots=True)
-class TicketContext:
-    """Context assembled for a ticket. Already validated upstream."""
+# GOOD: default — a model even for an internal, already-validated contract
+class TicketContext(BaseModel):
+    """Context assembled for a ticket. A model, not a dataclass — it validates."""
+
+    model_config = PYDANTIC_CONFIG  # the shared strict config
 
     ticket_key: str
     parent_summary: str | None
     siblings: tuple[str, ...]
+```
+
+**A `@dataclass(frozen=True, slots=True)` is allowed ONLY for a proven structural
+reason, and each such use is allowlisted:**
+
+- it holds a live, non-serializable object (a DB client / connection pool, an open
+  socket, an aiobotocore client) that Pydantic would refuse to validate;
+- it is a DI container wiring dependencies together;
+- it carries a `TYPE_CHECKING`-only type a model field can't reference;
+- it is the target of `dataclasses.replace()`.
+
+"Already validated" is **not** on that list. If none of these apply, use a model.
+
+```python
+# ALLOWED (allowlisted): holds live clients a model can't validate
+@dataclass(frozen=True, slots=True)
+class StoreDeps:
+    """DI container — holds live clients, not serializable data."""
+
+    ddb: DynamoClient
+    sqs: SqsClient
 ```
 
 ## Migration realities

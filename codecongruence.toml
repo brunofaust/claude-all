@@ -13,5 +13,13 @@
 exclude = [
   "src/claude_all/hooks/**",
   "src/claude_all/skills/**/hook.py",
-  "src/claude_all/skills/generic/regression-gates/checkers/**",
+  # Self-contained, copy-into-your-project template scripts under ANY skill's
+  # checkers/ or scripts/ dir (regression-gates, brunofaust-python-style, …). Each
+  # is lifted as ONE file into a consuming repo's CI, so they share dispatch
+  # scaffolding (main / iter_py_files / _name_of / find_violations / check_tree)
+  # BY DESIGN — a shared import would break the single-file-copy model. The
+  # duplication IS the portability, not debt. Glob, not an enumerated list, so a
+  # new checker added to any skill is covered automatically without re-baselining.
+  "src/claude_all/skills/**/checkers/**",
+  "src/claude_all/skills/**/scripts/**",
 ]

@@ -30,7 +30,7 @@ Every rule in this skill has an enforcement mechanism. If a rule has no enforcem
 | Annotations, not type comments        | prek type-annotation-enforcement hook                              | none                                       |
 | `__all__` import contract valid       | `all_contract.py` rule `not-in-all` — `from x import y` requires `y` in `x.__all__`. pyright's `reportPrivateImportUsage` is the slower pre-push backstop. | fix the import, or declare the name in `__all__` if it is genuinely public |
 | No `_private` name exported in `__all__` | `all_contract.py` rule `private-in-all`                          | none — `__all__` IS the export contract; an underscore name is not public |
-| `__init__.py` re-exports only         | ruff `RUF067`                                                      | none — move logic to a real module         |
+| `__init__.py` is docstring-ONLY (no barrel) | `model_contract.py` rule `barrel-init` — ANY import/def/assign in an `__init__.py` is flagged. A re-export barrel forces every consumer to load the whole package (measured 324ms across 12 submodules → 0.3ms once emptied). ruff `RUF067` is INSUFFICIENT here: it permits docstrings **and re-exports**, and the re-exports are exactly what this bans. | none — a barrel is always wrong; move logic to a real module |
 | Stay async (no de-async on no-`await`)| ruff `RUF029` disabled in config (by design)                       | n/a — keep the API uniformly `async`       |
 | Bounded copy-paste duplication        | `jscpd` (regression-only `--threshold`)                            | dedup the clone — never `SKIP=jscpd`       |
 | Raw SQL valid vs migration schema     | `check_raw_sql.py` (sqlglot, regression baseline, no DB)           | fix the query / baseline a real bug        |
@@ -48,6 +48,12 @@ Every rule in this skill has an enforcement mechanism. If a rule has no enforcem
 | Credential/PII fields are `repr=False`| `pydantic_contract.py` rule `secret-repr` (regression baseline)    | none — add `Field(repr=False)`; verify with `repr(Model(...))` |
 | Lambda event parsed at the boundary   | `lambda_event_validation.py` rule `missing-validation`             | `--allow DIR=CALLABLE`, which is re-verified every run (below) |
 | An allowlist entry still earns it     | `lambda_event_validation.py` rule `stale-allowlist`                | none — the exemption proves its own reason or becomes a finding |
+| No parse-then-validate at a seam      | `model_contract.py` rule `json-parse-then-validate` — bans `MyModel.model_validate(orjson.loads(raw))`; strict mode is context-aware and rejects a pre-parsed dict, so use `model_validate_json(raw)`. A real system skipped billing for months because the caller failed open on the swallowed error. | none — the parse-callee set (`orjson.loads`, `json.loads`) is the trigger, not an escape hatch |
+| `model_config` starts from the shared config | `model_contract.py` rule `pydantic-config` — `model_config` must be `PYDANTIC_CONFIG \| ConfigDict(...)`; a bare `ConfigDict(...)` silently drops `extra="forbid"`/`strict=True`. | `--config-symbol NAME` names the shared config — a project knob, not a per-model exemption |
+| Verbatim content field keeps whitespace | `model_contract.py` rule `verbatim-strip` — a field whose name matches `content\|body\|text\|diff\|snippet\|patch\|raw\|chunk_text\|output\|source\|html\|preview` on a model that does NOT set `str_strip_whitespace=False`; the shared strict config strips whitespace and silently corrupted RAG code chunks. | none — set `str_strip_whitespace=False` on the model; the field-name pattern is the trigger |
+| No pydantic field alias               | `model_contract.py` rule `no-alias` — bans `Field(alias=...)` / `populate_by_name`; dig the wire key out explicitly so a renamed key fails loud. | none |
+| No `@dataclass`                       | `model_contract.py` rule `no-dataclass` — a dataclass validates nothing; use Pydantic. | `--allow-dataclass PATHSUFFIX=ClassName` (repeatable) + a `dataclasses`-import exempt list. Each survivor carries a proven STRUCTURAL reason (holds a live object / DI container / TYPE_CHECKING import / `dataclasses.replace()` target); the `(path, name)` key can't drift to another class |
+| No cross-object private access        | `model_contract.py` rule `private-access` — a `_name` reached ACROSS objects (`other._conn`); `self._x`/`cls._x`/`super()._x`/`OwnClass._x` and dunders are allowed. | `--allow-private PATHSUFFIX=attr` + a documented-public-despite-underscore set (e.g. SQLAlchemy's `_mapping`); re-verified and `(path, attr)`-keyed so it can't drift silently |
 
 ### Positively-verified allowlists
 
@@ -325,3 +331,16 @@ is silently skipped and the run reports green. The tell:
 - Run the other stage too: `prek run --all-files --hook-stage pre-push`.
 - Prove the gate bites before believing it: introduce one violation, confirm the
   hook fails, revert, confirm it passes.
+
+### Baseline hygiene — baseline the SAME paths the hook `--check`s
+
+The `--baseline` seed run and the enforcing run must scan the **identical** path
+argument. Seed against `src/` but `--check` only `src/myapp/` and every finding
+under the wider tree is baselined yet never re-checked — permanent, invisible
+amnesty. One real incident wrote **618 baseline entries for a hook that checks
+281 files**: the ~337 orphans could never be cleared (the enforcing run never
+re-emits them, so they read as neither present nor stale) and silently forgave
+real debt outside the checked scope. `baseline_gate.py` carries a
+scope-consistency guard for exactly this — it refuses to run (exit 2) when the
+baseline was seeded over a wider path set than the run is checking — but the
+discipline is still yours: seed and enforce with the **same** trailing path.

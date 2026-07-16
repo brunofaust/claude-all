@@ -9,6 +9,41 @@ A "boundary" is anywhere the payload leaves the process: a Step Functions state
 output, an SQS message body, a DynamoDB item, an HTTP response, a Lambda return
 value. In-memory equality is not evidence. Bytes are.
 
+## Rule 0 — parse AND validate in ONE step: `model_validate_json`, never `model_validate(orjson.loads(...))`
+
+**This is the single most important rule on this page — a real system skipped
+billing for MONTHS because it broke it.** Pydantic strict mode is *context-aware*:
+handed raw JSON bytes, it knows a `UUID` / `datetime` / enum can only ARRIVE as a
+string (JSON has no native type for them) and converts it. Pre-parsing with
+`orjson.loads` THROWS THAT CONTEXT AWAY — pydantic then sees a plain
+`dict[str, str]`, and `strict=True` correctly REJECTS it.
+
+Verified on identical bytes / model / config:
+
+```python
+# BAD: strict model REJECTS this — 3 validation errors (UUID, datetime, enum)
+model = MyModel.model_validate(orjson.loads(raw))
+
+# GOOD: strict model ACCEPTS this — the parse and the validation are one step
+model = MyModel.model_validate_json(raw)
+```
+
+Emit the same way: `model.model_dump_json()` encodes the JSON-native forms and is
+the counterpart to `model_validate_json`.
+
+**The incident:** production did the first form, its caller failed open
+(`except ValidationError: return None`), and every populated response was silently
+rejected — billing skipped for months. It hid because the test fixture's list was
+empty, so no row was ever validated (a fixture pinned to the code, not to reality —
+see [`testing.md`](testing.md)).
+
+**The orjson nuance, stated explicitly:** orjson is still the right choice for
+*dumping* and for moving *untyped* data around. But a strict Pydantic model must
+OWN the JSON boundary itself — parse with `model_validate_json(raw)`, emit with
+`model_dump_json()`. Never hand a strict model a dict you already `orjson.loads`-ed;
+you stripped the type context it needs. See [`data-modeling.md`](data-modeling.md)
+for which type belongs at the boundary.
+
 ## Rule 1 — dump at every boundary, prove the shape didn't move
 
 `model_dump(mode="json")` is the boundary form: JSON-native types only
@@ -47,35 +82,61 @@ Do **not** reach for `orjson.dumps(task, default=...)` to paper over it — a
 `default` hook hides the missing boundary dump and will silently pick a different
 shape (e.g. `__dict__`) than `model_dump` would.
 
-## Rule 3 — aliases silently rename wire keys
+## Rule 3 — aliases are BANNED: dig the wire key out explicitly
 
-An alias exists precisely because the wire key is not a legal Python attribute
-name — `class`, `from`, `id`, `type` are the usual suspects. The attribute name is
-what `model_dump()` emits **by default**, which is not the wire key.
+An alias silently maps a wire key onto a differently-named field. That looks
+convenient until the vendor renames or drops the key: with an alias the field
+falls back to its DEFAULT instead of failing loud, so a contract break arrives as
+a wrong-but-valid value three calls deep. `Field(alias="...")` is exactly the
+masking-default bug from [`data-modeling.md`](data-modeling.md) wearing a wire hat.
 
-```python
-from pydantic import BaseModel, ConfigDict, Field
-
-
-class Attachment(BaseModel):
-    """Wire payload for an attachment; `class` is a Python keyword."""
-
-    model_config = ConfigDict(populate_by_name=True, extra="forbid")
-
-    attachment_class: str = Field(alias="class")
-    source_url: str = Field(alias="from")
-```
+Don't alias. Dig the wire key out explicitly in a classmethod constructor — the
+raw-dict access IS the parse, and the RETURN is the model. A missing key then
+raises a `KeyError` (or a documented `.get()` for a genuinely-optional field) at
+the ONE site that owns the boundary.
 
 ```python
-# BAD: emits {"attachment_class": ..., "source_url": ...} — consumers see NO `class` key
-orjson.dumps(att.model_dump(mode="json"))
+from collections.abc import Mapping
+from typing import Any, Self
 
-# GOOD: emits {"class": ..., "from": ...} — matches the pre-migration dict
-orjson.dumps(att.model_dump(mode="json", by_alias=True))
+from pydantic import BaseModel, ConfigDict
+
+
+class TokenClaims(BaseModel):
+    """Our model of a verified token — NOT a mirror of the wire claim names."""
+
+    model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
+
+    subject: str
+    issuer: str
+    expires_at: int
+
+    @classmethod
+    def from_raw_claims(cls, raw: Mapping[str, Any]) -> Self:
+        """Dig each wire key out explicitly — a renamed/absent key fails loud here."""
+        return cls(
+            subject=raw["sub"],
+            issuer=raw["iss"],
+            expires_at=raw["exp"],
+        )
 ```
 
-Pick ONE convention per boundary and state it in the model's docstring. Mixed
-`by_alias` usage across two call sites is how half the consumers break.
+Wire keys that are Python keywords (`class`, `from`, `type`) — the classic reason
+people reach for an alias — are dug out the same way: `attachment_class=raw["class"]`.
+No alias is ever needed.
+
+To EMIT the wire shape, build the dict explicitly in a method — never rely on a
+dump to rename fields back:
+
+```python
+def to_wire(self) -> dict[str, str | int]:
+    """Explicit wire construction — the emit side of the boundary we own."""
+    return {"sub": self.subject, "iss": self.issuer, "exp": self.expires_at}
+```
+
+Explicit construction is longer than `by_alias=True`, and that is the point: the
+rename lives in code you read, not in a `Field(alias=...)` that silently swallows a
+vendor's breaking change.
 
 ## Rule 4 — `exclude_none` decides absent vs null
 
@@ -156,30 +217,28 @@ dump proves nothing).
 
 ```python
 import orjson
-import pytest
 
 from myapp.domain.models import Attachment
 
 # Captured verbatim from a myapp-dev-worker Step Functions execution BEFORE the
 # dict -> model migration. Do not regenerate — this is the external truth.
+# `class` / `from` are Python keywords: dug out in Attachment.from_wire(), never aliased.
 LEGACY_PAYLOAD: dict[str, object] = {
     "class": "image",
     "from": "https://example.com/a.png",
 }
 
 
-def test_model_dump_matches_legacy_wire_shape() -> None:
-    """The post-migration dump must be byte-identical to the legacy dict."""
-    att = Attachment.model_validate(LEGACY_PAYLOAD)
-    assert att.model_dump(mode="json", by_alias=True) == LEGACY_PAYLOAD
-    assert orjson.dumps(att.model_dump(mode="json", by_alias=True)) == orjson.dumps(
-        LEGACY_PAYLOAD
-    )
+def test_to_wire_matches_legacy_wire_shape() -> None:
+    """The post-migration emit must be byte-identical to the legacy dict."""
+    att = Attachment.from_wire(LEGACY_PAYLOAD)
+    assert att.to_wire() == LEGACY_PAYLOAD
+    assert orjson.dumps(att.to_wire()) == orjson.dumps(LEGACY_PAYLOAD)
 
 
-def test_model_parses_in_flight_legacy_payload() -> None:
+def test_from_wire_parses_in_flight_legacy_payload() -> None:
     """An execution started by the old code must still parse after the deploy."""
-    att = Attachment.model_validate(LEGACY_PAYLOAD)
+    att = Attachment.from_wire(LEGACY_PAYLOAD)
     assert att.attachment_class == "image"
 ```
 
@@ -193,8 +252,8 @@ half-proof.
 2. Round-trip test asserts `model_dump(mode="json", ...) == captured_dict`.
 3. Reverse test asserts the new model parses the captured (old) payload — for
    in-flight Step Functions executions and messages already sitting in a queue.
-4. Every `orjson.dumps(model)` replaced with `orjson.dumps(model.model_dump(mode="json"))`.
-5. `by_alias=True` decided per boundary and applied at **every** call site.
+4. Every `orjson.dumps(model)` replaced with `orjson.dumps(model.model_dump(mode="json"))` — or `model_dump_json()` when a strict model owns the boundary (Rule 0).
+5. Wire-key renames done by explicit classmethod construction + `to_wire()` — **no** `Field(alias=...)`, **no** `by_alias=True` (Rule 3).
 6. `exclude_none` decided per boundary, with the absent-vs-null reason documented.
 7. Explicit `str()`/`int()` casts kept for stringly-typed store reads.
 8. No `model_construct()` anywhere data enters from outside the process.
@@ -203,7 +262,9 @@ half-proof.
 
 - Compare a dump to a dump — the fixture must come from outside the code.
 - Add `default=` to `orjson.dumps` to make a model encodable.
-- Mix `by_alias=True` and `by_alias=False` across call sites for one model.
+- Use `Field(alias=...)` / `by_alias=True` to rename wire keys — a dropped alias
+  key falls back to a default silently. Dig keys out explicitly instead (Rule 3).
+- `model_validate(orjson.loads(raw))` on a strict model — use `model_validate_json(raw)` (Rule 0).
 - Let `exclude_none` be decided by whoever wrote the line first.
 - Loosen a boundary model's config (`coerce_numbers_to_str`, `extra="allow"`) to
   make a wire mismatch go away — fix the producer or cast at the read.

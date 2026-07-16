@@ -3,7 +3,70 @@
 
 ## [Unreleased]
 
+### Added
+
+- **brunofaust-python-style**: a *Wiring the gates* mandate in `SKILL.md`. Installing
+  the skill ships the checkers as files but does NOT wire them into a project's
+  `prek.toml` / `.pre-commit-config.yaml` — wiring is per-project. A shipped-but-unwired
+  checker enforces nothing (an un-run checker is prose), so on every invocation the
+  skill now verifies each shipped checker is actually in the project's hook config,
+  pinned, and green on both stages — and auto-searches for checkers present as files
+  but absent from the hook config (a code change can mint a new gate). An unwired
+  checker is a finding, not a nit.
+- **brunofaust-python-style**: `checkers/model_contract.py` — a fifth AST gate for the
+  model-contract rules a production migration proved out. Seven rules:
+  `json-parse-then-validate` (bans `Model.model_validate(orjson.loads(raw))` on a
+  strict model — see the billing incident below), `barrel-init` (`__init__.py` is
+  docstring-ONLY; ruff `RUF067` is insufficient — it permits the re-exports being
+  banned), `pydantic-config` (a model's config must extend the shared config, not a
+  bare `ConfigDict`), `verbatim-strip` (a content field on a `str_strip_whitespace`
+  model corrupts indentation silently), `no-alias`, `no-dataclass`, `private-access`.
+  Same contract as the siblings (line-independent keys, exit 1 on findings, exit 2
+  fail-closed, `--exit-zero` only behind `baseline_gate.py`). `no-typeddict` stays in
+  `pydantic_contract.py` — one owner per rule. Exceptions are passed as CLI `args` on
+  the prek hook entry (`--config-symbol`, `--allow-dataclass PATH=Class`,
+  `--allow-private PATH=attr`), each a `(path, name)` key that can't drift.
+- **brunofaust-python-style**: `references/incidents.md` — the catalog of real
+  production failures behind the mechanical rules, so a rule that reads as ceremony
+  can be traced to its scar. Six incidents (the silent billing failure, two gates
+  that went blind on a base-class rename, fixtures that lied, the re-export barrel
+  cost, aliases that fail soft, `str_strip_whitespace` eating code indentation) plus
+  "strict config is not one config" — the FastAPI-request and asyncpg-enum seams
+  where the strict base is wrong and the fix is at the boundary, never a weaker model.
+
 ### Changed
+
+- **brunofaust-python-style**: adopts the stricter model rules a production codebase
+  proved out, reversing two things shipped earlier in this cycle.
+  - **`serialization.md`**: `model_validate_json(raw)` is now Rule 0 — parse and
+    validate in ONE step. `Model.model_validate(orjson.loads(raw))` on a strict model
+    is a **silent-data bug**: strict mode is context-aware and, handed a pre-parsed
+    `dict`, rejects the `UUID`/`datetime`/enum it would have coerced from raw JSON. A
+    real system's caller failed open (`except ValidationError: return None`) and
+    skipped billing for months; it hid because the fixture list was empty.
+  - **`serialization.md`**: aliases are now **banned**, not documented — an alias maps
+    a renamed wire key to a default instead of failing loud. Dig the key out in a
+    `from_raw_claims()`-style classmethod so a rename raises at the parse site.
+  - **`data-modeling.md` + `SKILL.md`**: Pydantic is the default even for internal
+    contracts; a `@dataclass` is the rare **allowlisted** exception for a proven
+    structural reason (holds a live object, DI container, `TYPE_CHECKING` import,
+    `dataclasses.replace()` target), never "it's already validated". For a hot loop use
+    `model_construct()` on a real model. The validation cost (~1–5μs) is stated and
+    accepted: security and robustness first, buy back speed narrowly where a profiler
+    proves it.
+  - **`data-modeling.md`**: every model starts from one shared config (the
+    `extra="forbid"` anchor), and a verbatim-content field must opt out of
+    `str_strip_whitespace`.
+- **brunofaust-python-style**: `pydantic_contract.py` — `MODEL_BASES` is now a
+  `--model-base NAME` option, after a production migration to a project base class
+  (`class AppModel(BaseModel)`) silently blinded the equivalent gate: it saw zero
+  models in a 285-model codebase and reported clean. The docstring flags the rot
+  loudly. A base-class set that names symbols by string fails toward FALSE CLEAN.
+- **regression-gates**: `baseline_gate.py` guards against a wider-`--baseline`-than-
+  checked scope — a real incident wrote 618 baseline entries for a hook that checks
+  281, giving 337 findings permanent invisible amnesty. `enforcement.md` retires the
+  `RUF067` "re-exports only" row (RUF067 permits the barrel being banned) in favour of
+  `model_contract.py` rule `barrel-init`, and documents baseline hygiene.
 
 - **brunofaust-python-style**: the test layout was **contradictory** and is now flat.
   `testing.md` and `project-structure.md` documented a NESTED mirror

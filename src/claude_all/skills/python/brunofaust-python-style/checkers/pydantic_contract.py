@@ -40,6 +40,23 @@ removable. So these rules push payloads into models, then pin the contract:
   secret-repr       A credential/PII field without `repr=False` leaks the value
                     into any log line that reprs the model.
 
+MODEL RECOGNITION ROTS SILENTLY — register your own base
+---------------------------------------------------------
+A class only gets the field-level rules (extra-forbid, masking-default,
+secret-repr, opaque-annotation on fields) when it subclasses a base this checker
+recognises — the ``MODEL_BASES`` set below. That set names SYMBOLS by string, so
+it rots silently: rename a base, or introduce your own project base
+(``class AppModel(BaseModel)`` and then have everything extend ``AppModel``), and
+every such model becomes INVISIBLE to the checker. Zero findings then reads as
+clean when it actually means "nothing was inspected" — the exact silent-rot this
+tool exists to prevent. Register each project base with a (repeatable)
+``--model-base NAME`` so its subclasses are checked:
+
+    python checkers/pydantic_contract.py --model-base AppModel src/
+
+The default set stays ``{BaseModel, BaseSettings, RootModel}``; ``--model-base``
+only ADDS to it.
+
 CONTRACT
 --------
 Prints one ``path: [rule] symbol — message`` finding per violation to stdout and
@@ -60,6 +77,7 @@ USAGE
     # direct gate — prints findings, exits 1 (this is the prek/pre-commit wiring)
     python checkers/pydantic_contract.py src/
     python checkers/pydantic_contract.py --select no-cast,extra-forbid src/
+    python checkers/pydantic_contract.py --model-base AppModel src/  # register a base
 
     # regression-only ratchet — the baseline lives in baseline_gate.py, not here
     baseline_gate.py --baseline pydantic_baseline.txt -- \\
@@ -111,7 +129,11 @@ RULES: tuple[str, ...] = (
     "secret-repr",
 )
 
-#: Base classes that make a class a validated model.
+#: Base classes that make a class a validated model. This names SYMBOLS by string
+#: and ROTS SILENTLY: rename a base or introduce a project-specific base (e.g.
+#: `class AppModel(BaseModel)`) and its subclasses go UNCHECKED — 0 findings then
+#: means "not inspected", not "clean". Register a project base via the repeatable
+#: `--model-base NAME` CLI option, which ADDS to (never replaces) this default set.
 MODEL_BASES = frozenset({"BaseModel", "BaseSettings", "RootModel"})
 
 #: Mapping-ish containers. Opaque when BARE (unsubscripted); legal when subscripted
@@ -351,13 +373,16 @@ def _config_forbids_extra(body: list[ast.stmt]) -> bool:
     return False
 
 
-def _is_model(node: ast.ClassDef) -> bool:
+def _is_model(node: ast.ClassDef, model_bases: frozenset[str] = MODEL_BASES) -> bool:
     """Return whether *node* subclasses a validated pydantic model base.
 
     Args:
         node: The class definition.
+        model_bases: Base-class names that mark a class as a validated model.
+            Defaults to :data:`MODEL_BASES`; a project registers its own base(s)
+            via ``--model-base`` so their subclasses are not silently unchecked.
     """
-    return any(_name_of(b) in MODEL_BASES for b in node.bases)
+    return any(_name_of(b) in model_bases for b in node.bases)
 
 
 def _is_typeddict(node: ast.ClassDef) -> bool:
@@ -372,9 +397,12 @@ def _is_typeddict(node: ast.ClassDef) -> bool:
 class _Visitor(ast.NodeVisitor):
     """Walks a module collecting contract violations with stable, line-free keys."""
 
-    def __init__(self, path: str, select: frozenset[str]) -> None:
+    def __init__(
+        self, path: str, select: frozenset[str], model_bases: frozenset[str] = MODEL_BASES
+    ) -> None:
         self.path = path
         self.select = select
+        self.model_bases = model_bases
         self.findings: list[Finding] = []
         self._stack: list[str] = []
         self._ordinals: dict[tuple[str, str], int] = {}
@@ -418,7 +446,7 @@ class _Visitor(ast.NodeVisitor):
                 self._qual(),
                 "TypedDict validates nothing at runtime — use a pydantic BaseModel",
             )
-        if _is_model(node):
+        if _is_model(node, self.model_bases):
             if not _config_forbids_extra(node.body):
                 self._add(
                     "extra-forbid",
@@ -574,28 +602,36 @@ class _Visitor(ast.NodeVisitor):
             )
 
 
-def check_tree(tree: ast.AST, path: str, select: frozenset[str]) -> list[Finding]:
+def check_tree(
+    tree: ast.AST, path: str, select: frozenset[str], model_bases: frozenset[str] = MODEL_BASES
+) -> list[Finding]:
     """Collect every violation in an already-parsed module.
 
     Args:
         tree: The parsed module.
         path: Path string used to key findings.
         select: The rule names to report.
+        model_bases: Base-class names that mark a class as a validated model
+            (defaults to :data:`MODEL_BASES`; extend via ``--model-base``).
 
     Returns:
         One finding per violation, in source order.
     """
-    visitor = _Visitor(path, select)
+    visitor = _Visitor(path, select, model_bases)
     visitor.visit(tree)
     return visitor.findings
 
 
-def find_violations(path: Path, select: frozenset[str]) -> list[Finding]:
+def find_violations(
+    path: Path, select: frozenset[str], model_bases: frozenset[str] = MODEL_BASES
+) -> list[Finding]:
     """Parse *path* and return its findings.
 
     Args:
         path: The Python file to scan.
         select: The rule names to report.
+        model_bases: Base-class names that mark a class as a validated model
+            (defaults to :data:`MODEL_BASES`; extend via ``--model-base``).
 
     Returns:
         One finding per violation, in source order.
@@ -609,7 +645,7 @@ def find_violations(path: Path, select: frozenset[str]) -> list[Finding]:
         UnicodeDecodeError: When the file is not valid UTF-8.
     """
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-    return check_tree(tree, path.as_posix(), select)
+    return check_tree(tree, path.as_posix(), select, model_bases)
 
 
 def iter_py_files(roots: list[Path]) -> list[Path]:
@@ -647,6 +683,17 @@ def main(argv: list[str] | None = None) -> int:
         help=f"comma-separated rules to enforce (default: all). Available: {', '.join(RULES)}",
     )
     parser.add_argument(
+        "--model-base",
+        action="append",
+        default=[],
+        metavar="NAME",
+        dest="model_base",
+        help="register an ADDITIONAL model base class whose subclasses get the field "
+        f"rules (repeatable). Defaults stay {sorted(MODEL_BASES)}; a project base "
+        "(e.g. AppModel) is invisible until registered — an unrecognised base silently "
+        "unchecks its models",
+    )
+    parser.add_argument(
         "--exit-zero",
         action="store_true",
         help="print findings but always exit 0 — ONLY for composing behind "
@@ -659,11 +706,13 @@ def main(argv: list[str] | None = None) -> int:
     if unknown := select - set(RULES):
         parser.error(f"unknown rule(s): {', '.join(sorted(unknown))}")
 
+    model_bases = MODEL_BASES | frozenset(args.model_base)
+
     count = 0
     unparsable: list[str] = []
     for file in iter_py_files(args.roots):
         try:
-            findings = find_violations(file, select)
+            findings = find_violations(file, select, model_bases)
         except (SyntaxError, ValueError, UnicodeDecodeError) as exc:
             unparsable.append(f"{file}: {exc}")
             continue
