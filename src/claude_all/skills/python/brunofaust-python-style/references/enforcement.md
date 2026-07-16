@@ -27,6 +27,9 @@ Every rule in this skill has an enforcement mechanism. If a rule has no enforcem
 | `Final` attr not redeclared           | mypy `[misc]`                                                      | rethink the override                       |
 | No raw `asyncio.to_thread`            | ruff `banned-api` (TID251) → `run_in_thread()`                     | `[per-file-ignores]`                       |
 | No raw `subprocess`                   | ruff `banned-api` (TID251) → `run_exec()`/`run_shell()`            | `scripts/**` per-file-ignore               |
+| Stdlib `json` banned → orjson         | ruff `banned-api` (TID251) → `orjson.loads`/`orjson.dumps`         | one serde/codec `[per-file-ignore]` with a reason |
+| Stdlib `logging` banned → structlog   | ruff `banned-api` (TID251) → `structlog.get_logger()`             | the logging-bootstrap module `[per-file-ignore]` |
+| No `os.getenv` outside `Settings`     | ruff `banned-api` (TID251) → the `Settings` singleton             | `src/**/settings.py` `[per-file-ignore]`   |
 | Annotations, not type comments        | prek type-annotation-enforcement hook                              | none                                       |
 | `__all__` import contract valid       | `all_contract.py` rule `not-in-all` — `from x import y` requires `y` in `x.__all__`. pyright's `reportPrivateImportUsage` is the slower pre-push backstop. | fix the import, or declare the name in `__all__` if it is genuinely public |
 | No `_private` name exported in `__all__` | `all_contract.py` rule `private-in-all`                          | none — `__all__` IS the export contract; an underscore name is not public |

@@ -100,6 +100,18 @@
   installer, not a project following this skill. The shipped checker keeps its
   `from __future__ import annotations` for that reason, now with a comment saying so.
 
+### Added
+
+- **brunofaust-python-style**: the skill's own library-preference and config rules are
+  now *enforced*, not just stated. Ruff `banned-api` (TID251) bans stdlib `json` (→
+  orjson), stdlib `logging` (→ structlog), and `os.getenv` (→ the `Settings` singleton)
+  — the same mechanism already used for the SDK/thread bans, so "use orjson", "use
+  structlog", "config through Settings" stop being prose the moment they're wired. Each
+  has one documented owner exception (a serde boundary for `json`, the logging-bootstrap
+  module, `settings.py` for `os.getenv`). This is the prek/CI layer; a project wanting
+  the *edit-time* layer too (block the Write before it lands) can add the equivalent
+  PreToolUse guards, but the durable enforcement is the ruff ban.
+
 ### Fixed
 
 - **brunofaust-python-style**: `all_contract.py` gains a `missing-all` rule, closing a

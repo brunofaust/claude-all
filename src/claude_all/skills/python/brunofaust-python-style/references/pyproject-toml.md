@@ -132,6 +132,16 @@ TID251 enforces it. Each ban names the owner and the escape hatch:
 | `httpx` | `myapp.core.connector` |
 | `asyncio.to_thread` | `myapp.core.thread_pool.run_in_thread()` |
 | `concurrent.futures` | `myapp.core.thread_pool.ThreadPool` |
+| `json` | **orjson** — `orjson.loads` / `orjson.dumps` (this skill's *Preferred libraries*: never stdlib `json`) |
+| `logging` | **structlog** — `structlog.get_logger()` |
+| `os.getenv` | the `Settings` singleton — config is read once, typed, at startup; never scattered `os.getenv` calls |
+
+The last three are not external SDKs but the skill's own **library-preference and config
+rules made mechanical** — the same TID251 mechanism, so "use orjson", "use structlog",
+"config through `Settings`" stop being prose the moment they are wired. `json` and
+`logging` are banned *everywhere* except a single owner: a serde/codec boundary that
+genuinely needs stdlib `json`, and the logging-bootstrap module that configures the
+stdlib backend `structlog` wraps — each per-file-ignored with that reason.
 
 ```toml
 # External system ownership — all SDK access goes through core/ modules.
@@ -149,12 +159,20 @@ lint.flake8-tidy-imports.banned-api.openai.msg = "Use myapp.core.ai.llm.openai. 
 lint.flake8-tidy-imports.banned-api.httpx.msg = "Use myapp.core.connector. Raw httpx only in core/connector/**."
 lint.flake8-tidy-imports.banned-api."asyncio.to_thread".msg = "Use run_in_thread() from myapp.core.thread_pool — configurable pool + structured logging. Raw asyncio.to_thread only in core/thread_pool.py."
 lint.flake8-tidy-imports.banned-api."concurrent.futures".msg = "Use myapp.core.thread_pool.ThreadPool. Raw ThreadPoolExecutor only in core/thread_pool.py."
+# The skill's own library-preference + config rules, made mechanical (not external SDKs).
+lint.flake8-tidy-imports.banned-api.json.msg = "Use orjson (orjson.loads/orjson.dumps). Stdlib json only in a documented serde/codec boundary."
+lint.flake8-tidy-imports.banned-api.logging.msg = "Use structlog (structlog.get_logger()). Stdlib logging only in the logging-bootstrap module structlog wraps."
+lint.flake8-tidy-imports.banned-api."os.getenv".msg = "Read config through the Settings singleton (typed, validated once at startup) — never scattered os.getenv."
 
 # Owner folders — the ONLY places the raw SDK is legal.
 lint.per-file-ignores."src/myapp/core/aws/**" = [ "TID251" ]
 lint.per-file-ignores."src/myapp/core/ai/llm/**" = [ "TID251" ]
 lint.per-file-ignores."src/myapp/core/connector/**" = [ "TID251" ]
 lint.per-file-ignores."src/myapp/core/thread_pool.py" = [ "TID251" ]
+# stdlib json/logging owners: the one serde boundary + the logging bootstrap. Settings owns os.getenv.
+lint.per-file-ignores."src/myapp/core/serde.py" = [ "TID251" ]        # stdlib json where a lib requires it
+lint.per-file-ignores."src/myapp/core/logging_setup.py" = [ "TID251" ] # configures the stdlib backend structlog wraps
+lint.per-file-ignores."src/myapp/core/settings.py" = [ "TID251" ]      # the ONE place os.getenv is read
 # Deploy-time scripts run outside the app runtime, before the wrappers exist.
 lint.per-file-ignores."scripts/**" = [ "D301", "T201", "TID251" ]
 # Tests are LINTED (see the exclude note above) — only the genuinely test-only rules relax.
