@@ -31,6 +31,19 @@ Every rule in this skill has an enforcement mechanism. If a rule has no enforcem
 | Stdlib `logging` banned → structlog   | ruff `banned-api` (TID251) → `structlog.get_logger()`             | the logging-bootstrap module `[per-file-ignore]` |
 | No `os.getenv` outside `Settings`     | ruff `banned-api` (TID251) → the `Settings` singleton             | `src/**/settings.py` `[per-file-ignore]`   |
 | Annotations, not type comments        | prek type-annotation-enforcement hook                              | none                                       |
+
+**Two layers for the library rules.** The `json` / `logging` / `os.getenv` /
+concurrency bans above are the **CI layer** (ruff `banned-api`, caught at
+commit/CI). claude-all also ships the **edit-time layer** — four PreToolUse
+guards (`python-orjson-guard`, `python-structlog-guard`, `python-settings-env-guard`,
+`python-thread-subprocess-guard`) that **block the Write in Claude Code before the
+bad import lands**, so generation is steered rather than corrected after the fact
+(edit-time guards steer generation better than review comments). Each has a
+`# guard:allow` / env-var escape hatch for the one owner file that legitimately
+keeps the stdlib. Install them at user level (`claude-all --all --user`); they
+apply in every repo. The two layers are complementary — the guard stops it being
+written, the ruff ban stops it being merged.
+
 | `__all__` import contract valid       | `all_contract.py` rule `not-in-all` — `from x import y` requires `y` in `x.__all__`. pyright's `reportPrivateImportUsage` is the slower pre-push backstop. | fix the import, or declare the name in `__all__` if it is genuinely public |
 | No `_private` name exported in `__all__` | `all_contract.py` rule `private-in-all`                          | none — `__all__` IS the export contract; an underscore name is not public |
 | A module with public names declares `__all__` | `all_contract.py` rule `missing-all` — a module that defines a public module-level `def`/`class` but has no `__all__`. Closes the fail-open hole in `not-in-all`: without it, deleting `__all__` opts a module out of the gate entirely (in one repo, 53% of modules were unenforced while the gate stayed green). | none — add `__all__`; exempt BY CONSTRUCTION (a module with nothing public is never flagged) |
