@@ -73,11 +73,15 @@ if TYPE_CHECKING:
 else:
     from botocore.client import BaseClient as S3Client
 
-# NOTE: On the 3.11–3.13 baseline, add `from __future__ import annotations`
-# (PEP 563) so annotations are stored as strings and evaluated lazily — this
-# lets forward references and TYPE_CHECKING-only imports work with zero runtime
-# cost. (On 3.14+, PEP 649 makes annotations lazy by default and the
-# future-import becomes redundant.) TYPE_CHECKING is STILL needed regardless for:
+# NOTE: On the 3.14 baseline, do NOT add `from __future__ import annotations`.
+# PEP 649 makes annotations lazy natively: they are no longer evaluated at
+# def-time, but compiled into a per-object `__annotate__` function that only runs
+# when something actually asks for `__annotations__`. So forward references and
+# TYPE_CHECKING-only imports already work with zero runtime cost — and, unlike
+# PEP 563's stringification, the annotations still evaluate to REAL objects when
+# introspected (`typing.get_type_hints()`, Pydantic, dataclasses keep working).
+# The future-import is dead weight on 3.14; don't carry it into new code.
+# TYPE_CHECKING is STILL needed regardless for:
 #   - Runtime type swapping (as above — different type for static vs. runtime)
 #   - Imports that have heavy side effects you want to avoid at runtime
 ```
@@ -148,15 +152,17 @@ Define reusable type aliases for complex types and callback signatures.
 
 ```python
 from collections.abc import Callable, Awaitable, Sequence
-from typing import TypeAlias
 
-# Simple type aliases (3.11 baseline — use `type entity_id = str` once on 3.12+)
-entity_id: TypeAlias = str
-s3_uri: TypeAlias = str
+# Simple type aliases — PEP 695 `type` statement (lazily evaluated, no import)
+type EntityId = str
+type S3Uri = str
 
 # Complex type aliases
-async_handler: TypeAlias = Callable[[dict[str, Any]], Awaitable[dict[str, Any]]]
-progress_callback: TypeAlias = Callable[[int, int], None]  # (current, total)
+type AsyncHandler = Callable[[dict[str, Any]], Awaitable[dict[str, Any]]]
+type ProgressCallback = Callable[[int, int], None]  # (current, total)
+
+# Legacy: `X: TypeAlias = ...` (needs `from typing import TypeAlias`) is what
+# you'll see in pre-3.12 code. Read it, don't write it.
 
 
 # Callable with named parameters (use Protocol)
@@ -175,7 +181,7 @@ class on_progress(Protocol):
 # Usage in function signatures
 async def process_batch(
     items: Sequence[item_dtype],
-    on_progress: progress_callback | None = None,
+    on_progress: ProgressCallback | None = None,
 ) -> Sequence[result_dtype]:
     """Process items with optional progress callback."""
     for i, item in enumerate(items):
@@ -186,26 +192,21 @@ async def process_batch(
 
 #### Generic Functions and Classes
 
-On the 3.11 baseline, declare type parameters with `TypeVar` / `ParamSpec` and
-`Generic[...]`. PEP 695's inline syntax (`def first[T]()`, `class Stack[T]`) is
-**3.12+** — adopt it once the project moves to 3.12+; it's cleaner and avoids
-repeating the variable name.
+Declare type parameters with **PEP 695 inline syntax** — `def first[T](...)`,
+`class Stack[T]:`, `type EntityId = str`. The type parameter is scoped to the thing
+that declares it, so there's no module-level variable to name, import, or keep in
+sync. No `TypeVar`, no `ParamSpec`, no `Generic[...]` base.
 
 ```python
-# Baseline (3.11) — explicit TypeVar / ParamSpec
-from collections.abc import Sequence
-from typing import Generic, ParamSpec, TypeVar
-
-T = TypeVar("T")
-P = ParamSpec("P")
+from collections.abc import Callable, Coroutine, Sequence
 
 
-def first(items: Sequence[T]) -> T:
+def first[T](items: Sequence[T]) -> T:
     """Return the first item from a sequence."""
     return items[0]
 
 
-class Stack(Generic[T]):
+class Stack[T]:
     """A generic stack."""
 
     def __init__(self) -> None:
@@ -220,31 +221,50 @@ class Stack(Generic[T]):
         return self._items.pop()
 
 
-# With bounds and constraints — constrained TypeVar
-Serializable = TypeVar("Serializable", str, bytes)
-
-
-def serialize(value: Serializable) -> Serializable:
+# Constraints and bounds, inline
+def serialize[T: (str, bytes)](value: T) -> T:
     """Serialize a value constrained to str or bytes."""
     ...
+
+
+def largest[T: float](items: Sequence[T]) -> T:
+    """Return the largest item (upper bound: any float-comparable)."""
+    return max(items)
+
+
+# ParamSpec, inline — `**P` forwards a wrapped callable's whole signature
+async def run[**P, T](
+    fn: Callable[P, Coroutine[Any, Any, T]],
+    *args: P.args,
+    **kwargs: P.kwargs,
+) -> T:
+    """Await fn with its arguments forwarded unchanged."""
+    return await fn(*args, **kwargs)
 ```
 
+**Legacy form — read it, don't write it.** Explicit `TypeVar` / `ParamSpec` +
+`Generic[...]` is what pre-3.12 code (and any project still on a <3.12 floor) must
+use. Same semantics, more boilerplate, and the type variable leaks into module scope:
+
 ```python
-# 3.12+ upgrade — PEP 695 inline syntax (same semantics, less boilerplate)
-def first[T](items: Sequence[T]) -> T:
+from typing import Generic, TypeVar
+
+T = TypeVar("T")
+
+
+def first(items: Sequence[T]) -> T:  # legacy equivalent of `def first[T]`
     """Return the first item from a sequence."""
     return items[0]
 
 
-def serialize[T: (str, bytes)](value: T) -> T:
-    """Serialize a value constrained to str or bytes."""
-    ...
+class Stack(Generic[T]):  # legacy equivalent of `class Stack[T]`
+    """A generic stack."""
 ```
 
 #### Naming for Types
 
 - TypedDict names: `snake_case_dtype` suffix (e.g., `entity_info_dtype`, `keys_dtype`)
 - Protocol names: `snake_case` matching the class convention (e.g., `loadable_client`, `cacheable`)
-- Type aliases: `snake_case` (e.g., `entity_id`, `async_handler`)
-- Type variables (old style): `T = TypeVar("T")`, `P = ParamSpec("P")`
-- Type variables (PEP 695): inline `def func[T]()`, `class Foo[T]:`
+- Type aliases (PEP 695 `type` statement): `PascalCase` (e.g., `type EntityId = str`, `type AsyncHandler = ...`)
+- Type variables: declared inline, PEP 695 — `def func[T]()`, `class Foo[T]:`, `async def run[**P, T]()`
+- Type variables (legacy, in pre-3.12 code you read): `T = TypeVar("T")`, `P = ParamSpec("P")`

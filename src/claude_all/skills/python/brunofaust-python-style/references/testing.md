@@ -1279,6 +1279,50 @@ def _make_task(**overrides):
     return defaults
 ```
 
+### Fixtures are where TypedDict lies — pin every fixture to an EXTERNAL truth
+
+> The worst masking-default bug of a whole `dict`→model migration lived in a **test fixture**. It
+> hand-built a settings dict whose defaults matched **neither the database nor the TypedDict** that
+> annotated it — and mypy stayed green the entire time. That's not a mypy failure: `TypedDict` is a
+> **static annotation that validates NOTHING at runtime**. A plain dict satisfies it whatever's in it.
+> Tests then asserted against the fixture's invented defaults, so the suite agreed with itself and
+> never touched reality.
+
+**`TypedDict` is banned outright** — an AST checker enforces `no-typeddict`. (Earlier guidance in this
+skill said "TypedDict is fine for static test data". That was exactly backwards: static test data is
+precisely where it does the most damage, because a fixture is the *only* place nothing else
+cross-checks the shape.) Use the real Pydantic model — see [`data-modeling.md`](data-modeling.md).
+
+**The rule: a fixture must be pinned to an external truth, not to the code's own assumptions.**
+
+| The truth to pin to        | How                                                                             |
+| -------------------------- | ------------------------------------------------------------------------------- |
+| The real DB / schema       | Read defaults from the migration / seed the real table, don't retype the values  |
+| The real SDK               | Build from the SDK's own model, at the **production version**                    |
+| The real message contract  | Construct via the shared model both sides import                                 |
+
+Build fixtures **through the model** — `Model(...)` directly, or a `polyfactory` factory over it (see
+[§ Factory pattern](#factory-pattern)). Then a fixture that no longer matches the contract **fails at
+construction** (missing field, bad type, out-of-range) instead of silently agreeing with itself.
+
+```python
+# ❌ BAD — a hand-built dict + a TypedDict annotation. Validates nothing at runtime;
+#          drifts from the DB defaults and mypy stays green forever.
+class Limits(TypedDict):
+    poll_interval_seconds: int
+
+
+limits: Limits = {"poll_interval_seconds": 300}  # is 300 what the DB actually defaults to?
+
+
+# ✅ GOOD — built through the real model; a contract change fails HERE, loudly.
+limits = LimitsFactory.build(poll_interval_seconds=300)  # or Limits(poll_interval_seconds=300)
+```
+
+If a fixture value is a **default**, it must come from wherever the default really lives (the model's
+field default, the migration's `server_default`) — never a second copy typed into the test. Two copies
+of a default is one copy too many; the test copy is the one that goes stale.
+
 ### Anti-pattern — module-global mocks
 
 ```python
@@ -1304,12 +1348,27 @@ def test_pii():
 
 ### Directory structure
 
-Mirror `src/`:
+`tests/unit/` is **ONE flat folder** — one file per source module. Do not nest: "mirror `src/`"
+is ambiguous prose (a nested tree and a flat one both claim to comply), so the mapping is stated
+mechanically instead — take the module's path under `src/<project>/`, replace every `/` with `_`,
+and prefix `test_`:
 
 ```
-src/myproject/features/pii_detection/service.py
-tests/unit/features/pii_detection/test_service.py
+src/myproject/core/aws/s3.py                    ->  tests/unit/test_core_aws_s3.py
+src/myproject/features/pii_detection/service.py ->  tests/unit/test_features_pii_detection_service.py
 ```
+
+Given a source path there is exactly one legal test path, and given a test file exactly one source
+module — so "does this module have tests?" is a glob, not a walk. `conftest.py` and `__init__.py`
+are the only non-mirror files allowed in the tier; shared helpers go in `conftest.py`, never a
+`helpers.py` parked beside the mirrors.
+
+**No grab-bags.** A module's tests all live in its mirror. Parallel `*_extra` / `*_edges` /
+`*_coverage[N]` / `*_boost[N]` / `*_remaining` / `*_near_threshold` files are banned — that is what
+gets written when appending a new file is easier than reading the existing one, and it splits a
+module's tests across files nobody knows to open. Add to the mirror instead.
+
+Enforced by `checkers/flat_test_mirror.py` (rules `not-flat`, `non-test-file`, `grab-bag`).
 
 ### Test categories
 
@@ -1326,6 +1385,7 @@ tests/unit/features/pii_detection/test_service.py
 
 ### Enforcement
 
-- `skill_enforcer.py` rule `test_mirrors_src` — checks every `src/.../*.py` has a matching `tests/unit/.../test_*.py`.
+- `skill_enforcer.py` rule `test_mirrors_src` — checks every `src/.../*.py` has a matching flat mirror `tests/unit/test_<path with '/' -> '_'>.py`.
+- `checkers/flat_test_mirror.py` — keeps the tier flat, mirror-only, and grab-bag-free (`not-flat`, `non-test-file`, `grab-bag`).
 - AST hook bans `<mod>._xxx = ...` assignments in test files.
 - Coverage threshold check pre-push.

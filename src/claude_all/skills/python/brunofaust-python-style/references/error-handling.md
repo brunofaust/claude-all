@@ -25,7 +25,7 @@ class NoItemsToProcess(Warning):
 #### Error Handling Patterns
 
 ```python
-# Pattern 1: Add context to exceptions with add_note (Python 3.11+)
+# Pattern 1: Add context to exceptions with add_note
 try:
     value = config[layer][entity_name]
 except KeyError as e:
@@ -60,11 +60,17 @@ except ValueError as e:
     logger.error("Invalid input", error=str(e))
     raise BadRequestError(str(e))
 
-# Pattern 4b: Multiple exceptions in one handler (parenthesised tuple)
-# On the 3.11–3.13 baseline use a parenthesised tuple. PEP 758's paren-less
-# form (`except ConnectionError, TimeoutError:`) is 3.14+ only, and even
-# there it is disallowed with `as` — parentheses are always required when
-# binding the exception (`except (ConnectionError, TimeoutError) as e:`).
+# Pattern 4b: Multiple exceptions in one handler (PEP 758)
+# On the 3.14 baseline, write the paren-less form when you do NOT bind the
+# exception. Parentheses remain REQUIRED whenever you bind with `as` — that is
+# a language rule, not a style choice, so both forms are current code:
+try:
+    process()
+except ConnectionError, TimeoutError:  # no `as` → no parentheses
+    logger.warning("Transient failure, will retry")
+    raise
+
+# Binding with `as` → parenthesised tuple, always:
 try:
     process()
 except (ConnectionError, TimeoutError) as e:
@@ -73,6 +79,9 @@ except (ConnectionError, TimeoutError) as e:
 except (ValueError, TypeError) as e:
     logger.error("Invalid input", error=str(e))
     raise BadRequestError(str(e))
+
+# Older code parenthesises unconditionally (`except (ValueError, TypeError):`).
+# That still works and is never wrong — don't churn it just to drop the parens.
 
 # Pattern 5: Suppress expected exceptions using contextlib.suppress
 from contextlib import suppress
@@ -396,8 +405,8 @@ except AnthropicAPIError as e:
 
 The `no_debug_in_except` rule bans `log.debug` *inside* a handler. To still surface the
 benign/swallowed-exception class — every `except` that quietly handles something — register **one
-process-global** [`sys.monitoring`](https://docs.python.org/3/library/sys.monitoring.html) (PEP 669,
-3.12+) `EXCEPTION_HANDLED` callback that DEBUG-logs *every* handled exception centrally. Nothing is
+process-global** [`sys.monitoring`](https://docs.python.org/3/library/sys.monitoring.html) (PEP 669)
+`EXCEPTION_HANDLED` callback that DEBUG-logs *every* handled exception centrally. Nothing is
 ever fully silent, and you touch zero `except` blocks. This is the clean alternative to sprinkling
 `log.debug` everywhere.
 

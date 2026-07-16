@@ -13,6 +13,24 @@ The stale-entry rule is what makes the file a ratchet instead of a dumping groun
 every fix forces a baseline edit, so the debt is visible and monotonically
 decreasing. Burn it down one notch per PR.
 
+SCOPE SAFETY — baseline the SAME paths the gate checks
+------------------------------------------------------
+Baselining a WIDER path than the gate enforces over is SILENT AMNESTY. If you
+seed with ``-- checker src/x`` but enforce with ``-- checker src/x/core``, every
+finding under ``src/x`` that lives OUTSIDE ``src/x/core`` is grandfathered into
+the baseline yet never re-examined by the gate — it is permanent, invisible
+forgiveness. This is not hypothetical: a seed over ``src/x`` wrote 618 entries
+where the gate only ever checks 281, so **337 findings outside the checked path
+became permanent amnesty** and nobody noticed.
+
+To make that a HARD ERROR instead of a silent one, ``--update`` records the exact
+checker command (the argv after ``--``) into a header line of the baseline file,
+and enforce refuses to run when the current checker command differs from the one
+the baseline was seeded with — naming both commands. Seed and enforce MUST use
+the same command (as the USAGE below already shows); the guard turns "must" into
+"cannot do otherwise". A legacy baseline with no recorded command is tolerated
+(the guard simply cannot check it) — re-seed to opt in.
+
 CONTRACT WITH THE CHECKER COMMAND
 ---------------------------------
 The wrapped checker prints ONE finding per line on stdout, each line a STABLE
@@ -39,11 +57,17 @@ Copy this file per gate (or call it N times with different --baseline files).
 from __future__ import annotations
 
 import argparse
+import shlex
 import subprocess
 import sys
 from pathlib import Path
 
-__all__ = ["compare", "load_baseline", "main", "run_checker"]
+__all__ = ["compare", "load_baseline", "load_seed_command", "main", "run_checker"]
+
+#: Header line prefix recording the checker command a baseline was seeded with.
+#: It is a ``#`` comment, so :func:`load_baseline` ignores it as an annotation;
+#: only :func:`load_seed_command` reads it back for the scope-safety guard.
+_SEED_MARKER = "# baseline_gate:seed-command: "
 
 
 def load_baseline(path: Path) -> set[str]:
@@ -65,6 +89,26 @@ def load_baseline(path: Path) -> set[str]:
         if line and not line.startswith("#"):
             findings.add(line)
     return findings
+
+
+def load_seed_command(path: Path) -> list[str] | None:
+    """Read the checker command a baseline was seeded with, if recorded.
+
+    ``--update`` writes the seed command into a ``_SEED_MARKER`` header line so
+    enforce can detect a scope divergence (seeding a wider path than the gate
+    checks — see the SCOPE SAFETY note in the module docstring). Returns the
+    parsed argv, or ``None`` for a missing file or a legacy baseline with no
+    recorded command (in which case the guard is skipped).
+
+    Args:
+        path: Path to the baseline file.
+    """
+    if not path.exists():
+        return None
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        if raw.startswith(_SEED_MARKER):
+            return shlex.split(raw[len(_SEED_MARKER) :])
+    return None
 
 
 def run_checker(command: list[str]) -> set[str]:
@@ -118,10 +162,29 @@ def main(argv: list[str] | None = None) -> int:
     if not command:
         parser.error("provide the checker command after `--`")
 
+    # SCOPE SAFETY: enforce over the SAME command the baseline was seeded with.
+    # A wider seed path is silent amnesty (see the module docstring). Check before
+    # running the checker so a mismatch fails fast and loud.
+    if not args.update:
+        seed_command = load_seed_command(args.baseline)
+        if seed_command is not None and seed_command != command:
+            raise SystemExit(
+                "baseline_gate: SCOPE MISMATCH — the baseline was seeded with a different "
+                "checker command than the one being enforced. Baselining a WIDER path than "
+                "the gate checks is SILENT AMNESTY: findings outside the checked path get "
+                "grandfathered forever and never re-examined (337 findings once slipped in "
+                "this way). Re-seed with --update using the SAME command, or fix the enforce "
+                "command so both match.\n"
+                f"  seeded with:  {shlex.join(seed_command)}\n"
+                f"  enforcing:    {shlex.join(command)}"
+            )
+
     seen = run_checker(command)
 
     if args.update:
-        args.baseline.write_text("\n".join(sorted(seen)) + ("\n" if seen else ""), encoding="utf-8")
+        header = _SEED_MARKER + shlex.join(command) + "\n"
+        body = "\n".join(sorted(seen)) + ("\n" if seen else "")
+        args.baseline.write_text(header + body, encoding="utf-8")
         print(f"baseline_gate: wrote {len(seen)} finding(s) to {args.baseline}")
         return 0
 

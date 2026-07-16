@@ -1,6 +1,297 @@
 # CHANGELOG
 
 
+## [Unreleased]
+
+### Added
+
+- **brunofaust-python-style**: a *Wiring the gates* mandate in `SKILL.md`. Installing
+  the skill ships the checkers as files but does NOT wire them into a project's
+  `prek.toml` / `.pre-commit-config.yaml` — wiring is per-project. A shipped-but-unwired
+  checker enforces nothing (an un-run checker is prose), so on every invocation the
+  skill now verifies each shipped checker is actually in the project's hook config,
+  pinned, and green on both stages — and auto-searches for checkers present as files
+  but absent from the hook config (a code change can mint a new gate). An unwired
+  checker is a finding, not a nit.
+- **brunofaust-python-style**: `checkers/model_contract.py` — a fifth AST gate for the
+  model-contract rules a production migration proved out. Seven rules:
+  `json-parse-then-validate` (bans `Model.model_validate(orjson.loads(raw))` on a
+  strict model — see the billing incident below), `barrel-init` (`__init__.py` is
+  docstring-ONLY; ruff `RUF067` is insufficient — it permits the re-exports being
+  banned), `pydantic-config` (a model's config must extend the shared config, not a
+  bare `ConfigDict`), `verbatim-strip` (a content field on a `str_strip_whitespace`
+  model corrupts indentation silently), `no-alias`, `no-dataclass`, `private-access`.
+  Same contract as the siblings (line-independent keys, exit 1 on findings, exit 2
+  fail-closed, `--exit-zero` only behind `baseline_gate.py`). `no-typeddict` stays in
+  `pydantic_contract.py` — one owner per rule. Exceptions are passed as CLI `args` on
+  the prek hook entry (`--config-symbol`, `--allow-dataclass PATH=Class`,
+  `--allow-private PATH=attr`), each a `(path, name)` key that can't drift.
+- **brunofaust-python-style**: `references/incidents.md` — the catalog of real
+  production failures behind the mechanical rules, so a rule that reads as ceremony
+  can be traced to its scar. Six incidents (the silent billing failure, two gates
+  that went blind on a base-class rename, fixtures that lied, the re-export barrel
+  cost, aliases that fail soft, `str_strip_whitespace` eating code indentation) plus
+  "strict config is not one config" — the FastAPI-request and asyncpg-enum seams
+  where the strict base is wrong and the fix is at the boundary, never a weaker model.
+
+### Changed
+
+- **brunofaust-python-style**: adopts the stricter model rules a production codebase
+  proved out, reversing two things shipped earlier in this cycle.
+  - **`serialization.md`**: `model_validate_json(raw)` is now Rule 0 — parse and
+    validate in ONE step. `Model.model_validate(orjson.loads(raw))` on a strict model
+    is a **silent-data bug**: strict mode is context-aware and, handed a pre-parsed
+    `dict`, rejects the `UUID`/`datetime`/enum it would have coerced from raw JSON. A
+    real system's caller failed open (`except ValidationError: return None`) and
+    skipped billing for months; it hid because the fixture list was empty.
+  - **`serialization.md`**: aliases are now **banned**, not documented — an alias maps
+    a renamed wire key to a default instead of failing loud. Dig the key out in a
+    `from_raw_claims()`-style classmethod so a rename raises at the parse site.
+  - **`data-modeling.md` + `SKILL.md`**: Pydantic is the default even for internal
+    contracts; a `@dataclass` is the rare **allowlisted** exception for a proven
+    structural reason (holds a live object, DI container, `TYPE_CHECKING` import,
+    `dataclasses.replace()` target), never "it's already validated". For a hot loop use
+    `model_construct()` on a real model. The validation cost (~1–5μs) is stated and
+    accepted: security and robustness first, buy back speed narrowly where a profiler
+    proves it.
+  - **`data-modeling.md`**: every model starts from one shared config (the
+    `extra="forbid"` anchor), and a verbatim-content field must opt out of
+    `str_strip_whitespace`.
+- **brunofaust-python-style**: `pydantic_contract.py` — `MODEL_BASES` is now a
+  `--model-base NAME` option, after a production migration to a project base class
+  (`class AppModel(BaseModel)`) silently blinded the equivalent gate: it saw zero
+  models in a 285-model codebase and reported clean. The docstring flags the rot
+  loudly. A base-class set that names symbols by string fails toward FALSE CLEAN.
+- **regression-gates**: `baseline_gate.py` guards against a wider-`--baseline`-than-
+  checked scope — a real incident wrote 618 baseline entries for a hook that checks
+  281, giving 337 findings permanent invisible amnesty. `enforcement.md` retires the
+  `RUF067` "re-exports only" row (RUF067 permits the barrel being banned) in favour of
+  `model_contract.py` rule `barrel-init`, and documents baseline hygiene.
+
+- **brunofaust-python-style**: the test layout was **contradictory** and is now flat.
+  `testing.md` and `project-structure.md` documented a NESTED mirror
+  (`tests/unit/features/pii_detection/test_service.py`) while the convention actually
+  run in production is FLAT. Both claimed to "mirror `src/` 1:1" — the phrase is
+  ambiguous, which is exactly how the two coexisted unnoticed. The mapping is now
+  stated mechanically instead of in prose: take the module's path under `src/<pkg>/`,
+  replace every `/` with `_`, prefix `test_`. `enforcement.md` retires the nested
+  `skill_enforcer.py` rule `test_mirrors_src` in favour of the new checker — two gates
+  for one rule is two sources of truth that disagree.
+- **brunofaust-python-style**: baseline reverts to **Python 3.14+**. It was 3.14 in the
+  skill's private origin and got downgraded to 3.11 during the port to this public repo;
+  this restores it. Not a find-and-replace — a 3.14 floor *inverts* rules:
+  - `from __future__ import annotations` flips from **mandated** to **anti-pattern** —
+    PEP 649 makes annotations lazy by default, so the import is dead weight (and unlike
+    PEP 563 they still resolve to real objects for `get_type_hints()` / Pydantic).
+  - **PEP 695 is now the baseline**, not the upgrade: `type EntityId = str`,
+    `def first[T](...)`, `class Stack[T]`, `async def run[**P, T]`. `TypeVar` /
+    `ParamSpec` / `Generic[...]` demote to a read-it-don't-write-it legacy note. Alias
+    naming moves `snake_case` → `PascalCase`, forced by `type` (an alias must not read
+    as a variable).
+  - **PEP 758** paren-less `except ValueError, TypeError:` is available — but ONLY
+    without an `as` clause; `except A, B as e:` is a SyntaxError, so the parenthesised
+    form stays required when binding. Verified against CPython 3.14.6.
+  - **PEP 734** `InterpreterPoolExecutor` is available on the baseline; the
+    when-to-use-it-vs-`run_in_thread()` judgement is unchanged.
+  - A 3.14 floor makes the prek `language_version` pin **mandatory, not advisory**: PEP
+    695 and PEP 758 are precisely the syntax an older hook interpreter cannot parse, and
+    such hooks skip the file silently and still exit 0.
+  claude-all itself deliberately stays `requires-python = ">=3.11"` — it is the
+  installer, not a project following this skill. The shipped checker keeps its
+  `from __future__ import annotations` for that reason, now with a comment saying so.
+
+### Added
+
+- **brunofaust-python-style**: the skill's own library-preference and config rules are
+  now *enforced*, not just stated. Ruff `banned-api` (TID251) bans stdlib `json` (→
+  orjson), stdlib `logging` (→ structlog), and `os.getenv` (→ the `Settings` singleton)
+  — the same mechanism already used for the SDK/thread bans, so "use orjson", "use
+  structlog", "config through Settings" stop being prose the moment they're wired. Each
+  has one documented owner exception (a serde boundary for `json`, the logging-bootstrap
+  module, `settings.py` for `os.getenv`). This is the prek/CI layer; a project wanting
+  the *edit-time* layer too (block the Write before it lands) can add the equivalent
+  PreToolUse guards, but the durable enforcement is the ruff ban.
+
+### Fixed
+
+- **brunofaust-python-style**: `all_contract.py` gains a `missing-all` rule, closing a
+  fail-open hole. `not-in-all` verifies `from x import y` against `x.__all__` and
+  **skips** a target module that has no `__all__` — so deleting `__all__` was a way to
+  opt a module out of the gate entirely (in the production repo, 53% of modules had no
+  `__all__` and got zero enforcement while the gate reported green; one such module
+  broke mypy strict's `no_implicit_reexport` with a real blocking error). `missing-all`
+  flags any module that defines a public module-level `def`/`class` but declares no
+  `__all__`, closing the hole from the other side — exempt by construction (a module
+  with nothing public is never flagged), not by a path allowlist. `not-in-all`'s skip is
+  unchanged; the two rules coexist.
+- **brunofaust-python-style**: `pyproject-toml.md` was a thin template that listed rule
+  groups to *select* and nothing about which to **reject**. Anyone can list selections;
+  knowing what to reject and why is what costs a day of measuring. It now carries the
+  measured rejections — `DOC` (pydoclint) at **196 false positives** because DOC501/502
+  can't trace exceptions through calls; blanket `PLR` at **~346** style findings (keep
+  only the complexity caps `PLR0911/0912/0913/0915`); umbrella `TRY` where `TRY003`
+  alone is **~185** (keep `TRY002/004/201`). The counts are the point: a number is what
+  stops the next person re-enabling the group. Also adds the `banned-api` (TID251)
+  ownership table that makes "one owner per external system" mechanical — including why
+  `botocore` is owned by the AWS module (its wrappers *translate* `ClientError` into
+  semantic errors, so a caller importing botocore to catch `ClientError` has reached
+  around the translation), justified `bandit`/`vulture` skips where every ignore states
+  its reason, and the `import-linter` contracts ("X are mutually independent" is the
+  reusable shape). Deliberately does **not** copy the upstream `exclude = ["tests/"]`:
+  this skill's whole data-modeling standard exists because a *test fixture* lied while
+  mypy stayed green, so excluding tests from lint leaves the least-checked code exactly
+  where the incident came from.
+- **release**: `uv.lock` no longer drifts every release. `version_toml` rewrites ONLY
+  `pyproject.toml:project.version`, so the lockfile's record of this package's OWN
+  version went stale on each bump — and the next `uv sync` silently rewrote that line
+  and dirtied an unrelated working tree. Fixed at the source: the `prepare` job now
+  runs `uv lock` after the bump and folds the result into the same commit (nothing
+  else catches it — no prek hook runs in CI). Adds the local half too: the
+  `astral-sh/uv-pre-commit` `uv-lock` hook, at **pre-push** rather than pre-commit
+  because it REWRITES `uv.lock`, and a hook that mutates a file fails the run it
+  mutates on.
+- **release**: drop `[skip ci]` from python-semantic-release's `commit_message`. It
+  reads as harmless — "don't re-run CI for a bot's version bump" — but GitHub applies
+  skip-ci to the HEAD commit of `push` AND `pull_request` events, and that commit
+  becomes the release PR's head. So it suppressed the `pull_request: closed` run on
+  merge, which is the ONLY trigger for the publish job: `main` was left bumped-but-
+  untagged on **both** the release/0.2.0 and release/0.3.0 merges, and **0.2.2 was
+  stranded and skipped entirely**. It also meant release PRs merged with zero CI. The
+  prepare job's own idempotency guard (`next == current` → exit 0) is what stops the
+  bump push from looping — not `[skip ci]` — exactly as `release.yml` documented all
+  along. The config simply never matched its own comment.
+- **brunofaust-python-style**: docstring coverage is **100%**, not `≥ 90%`. A
+  percentage floor below 100 cannot say WHICH missing docstring is acceptable, so it
+  drifts down to whatever today's code scores; the noise cases are carved out by name
+  instead (`ignore-magic`, `ignore-setters`, `ignore-overloaded-functions`,
+  `ignore-init-module`). `enforcement.md`'s bypass column said "raise the floor",
+  which is not a bypass, and `pyproject-toml.md` documented no `interrogate` config at
+  all — the skill mandated a gate it never showed you how to configure.
+- **brunofaust-python-style** / **prek**: both `claude_md.md` snippets (injected into
+  the always-loaded `~/.claude/CLAUDE.md`) contradicted the rules they front.
+  - python-style listed `TypedDict` as a *recommended* strict-typing tool while the
+    skill now bans it, and said only "Pydantic at trust boundaries" — too weak. It now
+    carries a **fix vs fake-fix table**: every gate has one real fix and one tempting
+    fake fix that makes the message vanish while the bug survives (relax to
+    `extra="ignore"`, add a "safe-looking" default, widen to `Any`, `cast()` into a
+    TypedDict, re-add a `SyntaxError` fail-open, `--select`/`SKIP=`/`--no-verify`).
+    Agents follow incentives literally — an undocumented escape hatch one keystroke
+    away is the gate's real failure mode.
+  - prek asserted "`prek run --all-files` is the single gate". It is not: that is one
+    stage over tracked files only, and a hook that silently skips still exits 0. Now
+    states `git add` first, run the pre-push stage too, watch for
+    `(no files to check) Skipped`, and pin per-hook `language_version`.
+
+- **prek**: names the **vacuous PASS** — a hook that silently skips its input and
+  still exits 0. The skill only documented `default_language_version`, which does
+  NOT reach a hook's isolated env, so any hook parsing Python with the interpreter's
+  own `ast` could resolve an older Python and go blind. Observed: bandit's env
+  resolved to 3.12, could not parse PEP 758 `except A, B:`, logged "syntax error
+  while parsing AST" for 25 files, skipped them, and **exited success** — a security
+  gate silently not scanning; vulture's resolved to 3.11 and dropped 35 files on PEP
+  695 generics, which is why real dead code survived. Adds the per-hook
+  `language_version` rule, an AFFECTED (bandit, vulture, interrogate, local AST
+  checkers) vs IMMUNE (ruff, jscpd, tree-sitter, pyright) taxonomy so the pin is not
+  cargo-culted everywhere, and the empirical method: inspect the cached env under
+  `~/.cache/prek/hooks/` rather than theorise. Two sibling instances of the same
+  class are documented alongside it — `--all-files` only sees **git-tracked** files
+  (tell: `(no files to check) Skipped`), and it runs only the **pre-commit** stage.
+
+- **brunofaust-python-style**: `pydantic_contract.py` no longer fails OPEN on a file
+  it cannot parse. It parses with the `ast` of the interpreter it runs on, so an env
+  older than the project silently fails on new syntax (PEP 695 `type X = int`, PEP 758
+  `except A, B:`) — the same blind spot that had bandit skip 25 files and vulture skip
+  35, both while exiting success. An unparsable file now exits **2** (a tool error,
+  distinct from 1 = findings) even under `--exit-zero`, and points at the fix: pin
+  `language_version` on the hook. A file the checker could not read is a file it did
+  not check.
+- **brunofaust-python-style**: `enforcement.md`'s wiring recipe passes `--exit-zero`
+  when composing behind `baseline_gate.py` — without it the gate reads exit-1-on-
+  findings as a crash and fails closed on every run — and pins `language_version`.
+
+- **brunofaust-python-style**: `pydantic_contract.py`'s `opaque-annotation` rule
+  only recursed into mapping containers, so `Sequence[Any]`, `list[dict[str, Any]]`
+  and `Mapping[str, Any] | None` all silently PASSED — each is the untyped dict one
+  level down. It now recurses through every subscript argument at any depth, while
+  still leaving concretely-subscripted containers (`Mapping[str, str]`,
+  `dict[VectorKey, SearchResult]`) legal.
+
+### Changed
+
+- **brunofaust-python-style**: corrected two rules that were actively harmful.
+  `data-modeling.md` said *"TypedDict only for static test data"* — backwards: a
+  test fixture that matched neither the database nor the TypedDict was the worst
+  offender in a real incident, and mypy stayed green throughout, because
+  TypedDict validates nothing at runtime. It also claimed Pydantic was
+  unnecessary for DB rows because *"the DB schema already enforces"* — a lie: one
+  migration breaks everything, and `cast(row_dtype, dict(row))` enforces nothing.
+  TypedDict and `cast` are now banned; `SKILL.md`'s `*_dtype` naming row (which
+  taught the very pattern that caused the incident) is gone.
+- **brunofaust-python-style**: `data-modeling.md` gains 11 rules — required-vs-
+  optional is the contract (the bug is a default on a required field, not the
+  `.get(k, d)` spelling), empty string is not a value, no opaque model fields, no
+  `**` splatting, model our side of a boundary not the vendor's wire,
+  `extra="forbid"` always, model where the shape is fixed, codec-or-nothing
+  exemptions, blast radius, frozen-model gotchas, `Field(repr=False)`.
+- **merge-main** / **mock-drift-sweep**: name `dict`→model as a semantic-conflict
+  class. New code on main doing dict-style access on a newly-modelled type merges
+  **clean** and crashes at runtime — a clean textual merge is not a clean merge.
+- **enforcement.md**: retires `no_dict_any_in_signatures` in favour of the new
+  checker (one gate per rule), and stops recommending `cast(...)` as the escape
+  hatch for `no-any-return` — `Model.model_validate(...)` proves the type instead.
+
+### Added
+
+- **brunofaust-python-style**: `checkers/flat_test_mirror.py` — the unit tier is ONE
+  flat folder, one file per module: `src/<pkg>/a/b.py` ⇒ `tests/unit/test_a_b.py`.
+  Rules: `not-flat`, `non-test-file`, `grab-bag` (the last one specifically kills the
+  `*_extra` / `*_coverage2` / `*_boost` parallel files coverage-chasing produces). It
+  needs no `language_version` pin — it walks the filesystem and never parses source.
+- **brunofaust-python-style**: `checkers/all_contract.py` — `from x import y` requires
+  `y` in `x.__all__`; no `_private` name may be exported. `__all__` IS the export
+  contract, so importing a name outside it couples you to an implementation detail
+  that can move without notice. Rules: `not-in-all`, `private-in-all`; handles
+  relative imports, aliases, and dotted attribute access.
+- **brunofaust-python-style**: `checkers/lambda_event_validation.py` — every Lambda
+  entry point parses its `event` into a Pydantic model at the boundary, before any
+  logic. The skill has mandated this in prose since it was written and nothing checked
+  it; this is the seam (an untrusted AWS envelope) where a renamed field ships
+  silently. Rules: `missing-validation`, `stale-allowlist`. Accepts BOTH sanctioned
+  shapes — `Model.model_validate(event)` and `Model(field=event.get(...))` — and
+  documents why the second is often preferable for an AWS envelope (`model_validate`
+  on AWS's raw dict forces `extra="ignore"`; extracting your own fields lets the model
+  stay `extra="forbid"`).
+- **brunofaust-python-style**: **positively-verified allowlists** — an exemption never
+  just skips. `--allow api=Mangum` means "exempt **because** it calls `Mangum(...)`",
+  and the checker re-proves that predicate every run; when the reason evaporates the
+  gate re-arms itself with a distinct `stale-allowlist` finding rather than leaving a
+  permanent hole. A name-set allowlist rots silently and never tells you it outlived
+  its reason. Documented in `enforcement.md` as a shape to apply to every allowlist.
+
+- **brunofaust-python-style**: `pydantic_contract.py` gains a `dict-return` rule —
+  a function returning a raw dict leaks a payload across a boundary, including a
+  CONCRETE `dict[str, str]` and an unannotated `return {...}` (which dodges every
+  annotation-based check). It also now recognises `RootModel`, treats `object` as
+  opaque, and exempts the full structlog surface (`.info`/`.exception`/
+  `.bind_contextvars`) from the `splat` rule rather than just `.bind`.
+- **brunofaust-python-style**: `pydantic_contract.py` **exits 1 on any finding**, so
+  it can be wired straight into prek/pre-commit with no baseline artifact. It owns no
+  state — writes no baseline, no JSON, no cache. `--exit-zero` is for composing it
+  behind `baseline_gate.py`, whose contract reads a non-zero exit as a crash.
+- **brunofaust-python-style**: `references/serialization.md` — crossing a
+  boundary with a model without changing the bytes on the wire:
+  `model_dump(mode="json")` + a round-trip proof, orjson can't serialize a model,
+  aliases, `exclude_none` absent-vs-null, lax mode won't coerce `int`→`str`.
+- **brunofaust-python-style**: `checkers/pydantic_contract.py` — an AST gate that
+  enforces the Pydantic data contract, so an untyped `dict` can no longer carry one.
+  Eight rules: `no-typeddict` (a TypedDict validates nothing at runtime),
+  `no-cast` (`cast()` asserts a type instead of proving one), `extra-forbid`,
+  `masking-default` (optional ⇒ `| None = None`, required ⇒ no default),
+  `opaque-annotation` (bans the opaque *value*, `Any` — not the container),
+  `splat` (logging is the only exemption), `select-star`, and `secret-repr`.
+  Composes with the existing `regression-gates/baseline_gate.py` ratchet.
+
+
 ## v0.3.0 (2026-07-15)
 
 ### Bug Fixes
