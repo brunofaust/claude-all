@@ -1,6 +1,24 @@
 # CHANGELOG
 
 
+## [Unreleased]
+
+### Added
+
+- **hooks / brunofaust-python-style**: four **edit-time guards** — `python-orjson-guard`,
+  `python-structlog-guard`, `python-settings-env-guard`, `python-thread-subprocess-guard`
+  — ported from the source repo's `.claude/hooks/`. They are PreToolUse guards that
+  **block the Write in Claude Code** when an edit introduces stdlib `json`/`logging`,
+  `os.getenv`/`os.environ.get`, or raw `asyncio.create_subprocess`/`to_thread`/
+  `ThreadPoolExecutor` — steering generation toward orjson/structlog/`Settings`/the
+  owner wrappers *before* the bad import lands. The edit-time layer complementing the CI
+  layer (the ruff `banned-api` bans): the guard stops it being written, the ban stops it
+  being merged. Each has a `# guard:allow` comment + per-guard env-var escape hatch for
+  the one owner file that legitimately keeps the stdlib, exempts tests/scripts/migrations,
+  and handles `MultiEdit`'s `edits[]` array (not just `Write`/`Edit`). Installed at user
+  level (`claude-all --all --user`), they apply in every repo.
+
+
 ## v0.4.0 (2026-07-16)
 
 ### Bug Fixes
