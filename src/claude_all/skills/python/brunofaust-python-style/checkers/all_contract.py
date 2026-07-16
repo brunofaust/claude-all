@@ -16,7 +16,7 @@ reporting it, so ``_helper`` rots forever instead of being deleted. ``__all__``,
 not a leading underscore, is how a module says "private": list the public names,
 and everything else is private *by omission* while staying visible to tooling.
 
-The two rules are the two halves of that contract:
+Three rules enforce that contract:
 
   not-in-all      ``from x import y`` where ``y`` is not in ``x``'s ``__all__``.
                   Also fires on attribute access through an imported module
@@ -27,19 +27,51 @@ The two rules are the two halves of that contract:
   private-in-all  ``__all__ = ["_helper"]``. Exporting an underscore name is a
                   contradiction: it declares "public" and "private" at once.
                   Drop the underscore (it is public — say so) or drop the entry.
+  missing-all     A module that DEFINES a public module-level ``def`` /
+                  ``async def`` / ``class`` but declares no ``__all__``. That
+                  module has no export contract at all, so ``not-in-all`` cannot
+                  verify imports FROM it — deleting ``__all__`` was the escape
+                  hatch out of the whole gate. This flags the module itself, from
+                  the other side. See the section below.
 
 Dunder names (``__version__``, ``__author__``, …) are always allowed: they are
 protocol, not exports. Star imports are skipped — a separate rule bans them.
 
-MODULES WITH NO ``__all__`` ARE SKIPPED
---------------------------------------
-A module with no ``__all__`` has declared no contract, and Python's default is
-that every module-level name is public. There is nothing to violate, so flagging
-its importers would report the *importer* for the *imported* module's omission —
-punishing the wrong file, and firing on every intra-repo import in a codebase
-that has not adopted the convention yet, which makes the gate impossible to
-adopt incrementally. "Every module must declare ``__all__``" is a real rule, but
-it is a *different* rule about a *different* file; enforce it on its own.
+THE ``missing-all`` RULE — CLOSING THE FAIL-OPEN HOLE
+----------------------------------------------------
+``not-in-all`` validates an import against the *imported* module's ``__all__``,
+and a module that declares none is skipped there — deliberately: you genuinely
+cannot verify ``from x import y`` when ``x`` promises nothing, and flagging the
+*importer* for the *imported* module's omission would punish the wrong file and
+fire on every intra-repo import in a codebase mid-adoption.
+
+But that skip was a fail-open hole big enough to drive a truck through: because a
+module with no ``__all__`` is not checked, **deleting ``__all__`` opted a module
+out of the gate entirely.** In production this bit hard — over half a package's
+modules had no ``__all__`` and got ZERO enforcement while the gate reported
+GREEN. It is not cosmetic: a module with public names and no ``__all__`` also
+breaks mypy strict's ``no_implicit_reexport`` — a re-export from it fails with
+``Module "x" does not explicitly export attribute "Y"``, a real, blocking error.
+
+``missing-all`` closes the hole from the OTHER side. ``not-in-all`` skips ``x``
+from the *importer's* file; ``missing-all`` flags ``x`` in ``x``'s OWN file the
+moment ``x`` defines a public name and declares no ``__all__``. Once ``x`` gets
+its ``__all__``, ``not-in-all`` can enforce every import from it. The two rules
+coexist: one names the missing contract, the other enforces the declared one.
+
+The exemption is BY CONSTRUCTION, not by path — there is no allowlist. The rule
+fires ONLY when a module DEFINES a public module-level ``def`` / ``async def`` /
+``class``: ``__all__`` is the mechanism for saying "this is the public API", so a
+module with a public definition and no ``__all__`` has genuinely opted out. A
+module with nothing to export — a docstring-only ``__init__.py``, a module of
+only ``_private`` definitions (handled by the underscore rule), a module that is
+only imports and constants with no public ``def``/``class`` — has no contract to
+declare and is NEVER flagged. That carve-out is structural: it cannot drift and
+needs no allowlist to maintain. A public name is one that does not start with
+``_``; a dunder (``__version__``) is protocol, not exported API, and never counts.
+The declaration is recognised in either form — ``__all__ = [...]`` and the
+annotated ``__all__: list[str] = [...]`` — so annotating your ``__all__`` never
+trips the rule.
 
 CONTRACT
 --------
@@ -112,16 +144,19 @@ __all__ = [
     "RULES",
     "Finding",
     "check_tree",
+    "declares_all",
     "discover_packages",
     "extract_all",
     "find_violations",
     "iter_py_files",
     "main",
     "module_to_path",
+    "public_module_level_names",
     "resolve_relative",
 ]
 
 RULES: tuple[str, ...] = (
+    "missing-all",
     "not-in-all",
     "private-in-all",
 )
@@ -368,6 +403,63 @@ def extract_all(path: Path, cache: dict[Path, frozenset[str] | None]) -> frozens
     return names
 
 
+def declares_all(tree: ast.Module) -> bool:
+    """Return whether *tree* declares ``__all__`` at module scope, in either form.
+
+    This is deliberately BROADER than :func:`extract_all`, and the two answer
+    different questions. ``extract_all`` asks "which names can I STATICALLY
+    resolve?" and returns ``None`` for anything it cannot read — including the
+    annotated ``__all__: list[str] = [...]`` form. This asks only "did the author
+    DECLARE a public API?"; an author who annotated their ``__all__`` plainly did,
+    and the ``missing-all`` rule must not punish correct code for adding a type
+    annotation. Only ``tree.body`` is inspected — ``__all__`` is a module-scope
+    protocol, so an assignment buried inside a function is not the declaration.
+
+    Args:
+        tree: The parsed module.
+
+    Returns:
+        True when a module-scope ``__all__`` assignment exists, plain or annotated.
+    """
+    for stmt in tree.body:
+        if (
+            isinstance(stmt, ast.AnnAssign)
+            and isinstance(stmt.target, ast.Name)
+            and stmt.target.id == "__all__"
+        ):
+            return True
+        if isinstance(stmt, ast.Assign) and any(
+            isinstance(t, ast.Name) and t.id == "__all__" for t in stmt.targets
+        ):
+            return True
+    return False
+
+
+def public_module_level_names(tree: ast.Module) -> list[str]:
+    """Return the names of every PUBLIC ``def``/``async def``/``class`` at module scope.
+
+    Only definitions count, not plain assignments: a module whose module-level
+    names are a ``router = make_router()`` or a table of constants has no *defined*
+    public API to declare via ``__all__``, and the export contract governs the
+    names a consumer would ``import``. Only ``tree.body`` is walked — a method
+    inside a class is that class's API, not the module's, and the class itself is
+    already counted here. A dunder (``__version__``) is protocol, not exported API,
+    and the leading-underscore test drops it along with every ``_private`` name.
+
+    Args:
+        tree: The parsed module.
+
+    Returns:
+        The public top-level definition names, in source order.
+    """
+    return [
+        stmt.name
+        for stmt in tree.body
+        if isinstance(stmt, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef)
+        and not stmt.name.startswith("_")
+    ]
+
+
 class _Visitor(ast.NodeVisitor):
     """Walks a module collecting ``__all__``-contract violations with line-free keys."""
 
@@ -466,6 +558,31 @@ class _Visitor(ast.NodeVisitor):
             "importing it couples you to an implementation detail that can move or vanish "
             "without notice. Export it (add it to __all__) or import a name that is exported",
         )
+
+    def visit_Module(self, node: ast.Module) -> None:
+        """Flag a module that defines public names but declares no ``__all__``, then descend.
+
+        This is the ``missing-all`` rule. It runs once, at module scope — a module
+        has at most one ``__all__`` contract, so the finding is keyed on the module
+        alone (``<module>``) with no ordinal. ``generic_visit`` is then called so
+        the per-node rules (``not-in-all``, ``private-in-all``) still fire on the
+        children; skipping it would silence every other rule in the file.
+
+        Args:
+            node: The module node being visited.
+        """
+        if not declares_all(node) and public_module_level_names(node):
+            self._add(
+                "missing-all",
+                "<module>",
+                "defines a public module-level def/class but declares no __all__, so it "
+                "has no export contract — `not-in-all` cannot verify imports FROM it, and "
+                "deleting __all__ becomes an escape hatch out of the whole gate. A module "
+                "with public names and no __all__ also breaks mypy strict's "
+                'no_implicit_reexport ("Module X does not explicitly export attribute Y"). '
+                "Declare __all__ = [...] listing the public API",
+            )
+        self.generic_visit(node)
 
     def _push_pop(self, node: ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef) -> None:
         """Visit a def/class body with its name pushed on the qualname stack.

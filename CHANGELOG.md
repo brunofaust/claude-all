@@ -102,6 +102,16 @@
 
 ### Fixed
 
+- **brunofaust-python-style**: `all_contract.py` gains a `missing-all` rule, closing a
+  fail-open hole. `not-in-all` verifies `from x import y` against `x.__all__` and
+  **skips** a target module that has no `__all__` — so deleting `__all__` was a way to
+  opt a module out of the gate entirely (in the production repo, 53% of modules had no
+  `__all__` and got zero enforcement while the gate reported green; one such module
+  broke mypy strict's `no_implicit_reexport` with a real blocking error). `missing-all`
+  flags any module that defines a public module-level `def`/`class` but declares no
+  `__all__`, closing the hole from the other side — exempt by construction (a module
+  with nothing public is never flagged), not by a path allowlist. `not-in-all`'s skip is
+  unchanged; the two rules coexist.
 - **brunofaust-python-style**: `pyproject-toml.md` was a thin template that listed rule
   groups to *select* and nothing about which to **reject**. Anyone can list selections;
   knowing what to reject and why is what costs a day of measuring. It now carries the
