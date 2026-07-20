@@ -26,6 +26,7 @@ import contextlib
 import curses
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -384,6 +385,188 @@ def forget_records(entries: list[dict]) -> list[str]:
         forgotten.append(f"{kind}/{name} (record forgotten; binary left in place)")
     save_state(state)
     return forgotten
+
+
+# ---------------------- install health check (doctor) ----------------------
+#
+# Lives here, beside install/prune, because all three share ONE secret: the
+# artifact model — what an install owns (a symlink, a settings.json hook entry, a
+# tagged CLAUDE.md block, a state record). Install creates them, prune removes
+# them when a resource stops shipping, doctor reports when they go *inconsistent*.
+# Splitting doctor out would force exposing that model across a boundary
+# (in_install_scope, drop_settings_command, strip_claude_md_block, load_state) —
+# the false-seam test says the cohesion is real. → project-structure.md.
+#
+# Distinct from --prune: prune answers "this resource is no longer shipped".
+# Doctor answers "this install is broken" — a dangling link whose resource still
+# ships, a settings entry pointing at a deleted script, a CLAUDE.md block with no
+# owner. Prune structurally cannot see those (a healthy primary is never stale).
+
+#: Directories holding installed resource symlinks.
+LINK_DIRS = ("skills", "agents", "hooks")
+
+
+def install_root_of(path: Path) -> str:
+    """Return the claude-all install root a symlink target belongs to.
+
+    Args:
+        path: A symlink target path.
+
+    Returns:
+        The path up to the ``claude_all`` package dir, or "" when the target does
+        not look like a claude-all resource.
+    """
+    text = str(path)
+    marker = "/claude_all/"
+    return text.split(marker)[0] if marker in text else ""
+
+
+def check_links(level: str) -> list[str]:
+    """Report symlinks that dangle, or a MIXED install spanning several roots.
+
+    "Outdated" is not "differs from the CLI I'm running" — running a dev build to
+    inspect a tool install is normal, and comparing against it produces a finding
+    for every link. The real defect is links that disagree with EACH OTHER: a
+    partial install where some resources point at one claude-all and the rest at
+    another, so upgrading one leaves the others stale.
+
+    Args:
+        level: Install scope — ``'user'`` or ``'project'``.
+
+    Returns:
+        One finding per dangling link, plus one summary finding per minority root
+        when the install is mixed.
+    """
+    base = USER_CLAUDE_DIR if level == "user" else Path.cwd() / ".claude"
+    findings: list[str] = []
+    roots: dict[str, list[str]] = {}
+    for sub in LINK_DIRS:
+        directory = base / sub
+        if not directory.is_dir():
+            continue
+        for link in sorted(directory.iterdir()):
+            if not link.is_symlink():
+                continue
+            if not link.exists():
+                findings.append(f"dangling-link   {sub}/{link.name} -> {os.readlink(link)}")
+                continue
+            root = install_root_of(Path(os.readlink(link)))
+            if root:
+                roots.setdefault(root, []).append(f"{sub}/{link.name}")
+    if len(roots) > 1:
+        main_root = max(roots, key=lambda r: len(roots[r]))
+        for root, names in roots.items():
+            if root == main_root:
+                continue
+            sample = ", ".join(names[:3]) + (" …" if len(names) > 3 else "")
+            findings.append(
+                f"mixed-install   {len(names)} link(s) point at {root} "
+                f"while {len(roots[main_root])} point at {main_root} ({sample})"
+            )
+    return findings
+
+
+def check_settings_hooks(level: str) -> list[str]:
+    """Report settings.json hook entries that are broken or double-wired.
+
+    Args:
+        level: Install scope — ``'user'`` or ``'project'``.
+
+    Returns:
+        One finding string per problem entry.
+    """
+    settings_file = settings_path(level)
+    if not settings_file.exists():
+        return []
+    try:
+        # guard:allow — claude-all is a stdlib-only installer (dependencies = []),
+        # so orjson is not available here; stdlib json is mandatory, not a choice.
+        settings = json.loads(settings_file.read_text())
+    except json.JSONDecodeError:
+        return [f"unreadable      {settings_file} is not valid JSON"]
+    findings: list[str] = []
+    seen: dict[str, int] = {}
+    for event, blocks in settings.get("hooks", {}).items():
+        for block in blocks:
+            for hook in block.get("hooks", []):
+                command = hook.get("command", "")
+                basename = command_hook_basename(command)
+                if not basename:
+                    continue  # not a script command (e.g. an inline shell one-liner)
+                seen[basename] = seen.get(basename, 0) + 1
+                script = next(
+                    (p for p in command.replace('"', " ").split() if p.endswith(".py")), ""
+                )
+                if script and not Path(script).exists():
+                    findings.append(f"orphan-hook     {event}: {basename} — script not found")
+    findings += [
+        f"double-wired    {name} appears in {count} hook entries (may fire twice)"
+        for name, count in sorted(seen.items())
+        if count > 1
+    ]
+    return findings
+
+
+def check_claude_md(level: str) -> list[str]:
+    """Report CLAUDE.md blocks that are malformed or have no install record.
+
+    Args:
+        level: Install scope — ``'user'`` or ``'project'``.
+
+    Returns:
+        One finding string per problem block.
+    """
+    target = claude_md_target(level)
+    if not target.exists():
+        return []
+    text = target.read_text()
+    starts = re.findall(r"<!-- claude-all:([^:]+):start -->", text)
+    ends = set(re.findall(r"<!-- claude-all:([^:]+):end -->", text))
+    installs = load_state().get("installs", {})
+    findings = [
+        f"unclosed-block  {k} has a start tag but no end tag" for k in starts if k not in ends
+    ]
+    findings += [
+        f"orphan-block    {k} — block present but no install record"
+        for k in sorted(set(starts))
+        if k not in installs
+    ]
+    findings += [
+        f"duplicate-block {k} appears {starts.count(k)} times"
+        for k in sorted({k for k in starts if starts.count(k) > 1})
+    ]
+    return findings
+
+
+def run_doctor(level: str) -> int:
+    """Report install-health problems across links, hook entries and CLAUDE.md.
+
+    Report-only — it never modifies anything; each finding names its remedy.
+
+    Args:
+        level: Install scope — ``'user'`` or ``'project'``.
+
+    Returns:
+        0 when healthy, 1 when any finding was reported.
+    """
+    findings = check_links(level) + check_settings_hooks(level) + check_claude_md(level)
+    scope = USER_CLAUDE_DIR if level == "user" else Path.cwd() / ".claude"
+    if not findings:
+        print(f"✓ install looks healthy ({scope})")
+        return 0
+    print(f"Found {len(findings)} issue(s) in {scope}:\n")
+    for finding in findings:
+        print(f"  ⚠ {finding}")
+    print(
+        "\nRemedies:"
+        "\n  dangling-link / orphan-hook / orphan-block — leftovers from an older claude-all."
+        "\n      Re-run the installer, then `claude-all --prune`. Anything still listed is an"
+        "\n      artifact this version no longer creates and is safe to delete by hand."
+        "\n  foreign-link  — points at a different/older claude-all; re-run the installer."
+        "\n  double-wired  — re-run the installer; it sweeps prior entries for the same script."
+        "\n  unclosed/duplicate-block — hand-edit CLAUDE.md between the claude-all markers."
+    )
+    return 1
 
 
 def notify_stale() -> None:
@@ -1841,8 +2024,17 @@ def main(argv: list[str]) -> int:
         action="store_true",
         help="Remove installs that are no longer shipped by the repo (no confirmation)",
     )
+    ap.add_argument(
+        "--doctor",
+        action="store_true",
+        help="Report install health — dangling/foreign symlinks, broken or double-wired "
+        "settings hooks, orphaned CLAUDE.md blocks. Read-only.",
+    )
     ap.add_argument("filters", nargs="*", help="Filter tokens (each must appear in path)")
     args = ap.parse_args(argv)
+
+    if args.doctor:
+        return run_doctor("project" if args.project else "user")
 
     if args.prune:
         removed = prune_installs(stale_installs())
