@@ -5,6 +5,41 @@
 
 ### Added
 
+- **brunofaust-python-style / ship / ship-pr**: the audit generalized into a **skill-audit
+  framework**. New `references/audit.md` — the skill's master *judgment* checklist (minimalism,
+  layering, error-handling, async, boundaries, config, tests, ownership), explicitly the layer the
+  mechanical checkers can't see, so it never restates a checker-gated rule. `/ship` and `/ship-pr` now
+  audit **each changed file against its stack skill's `audit.md`** via a file-type map (`.py` →
+  brunofaust-python-style; frontend → brunofaust-frontend-style when it lands). `/ship-pr` also gains a
+  **surface-scoped SEO review** step (fires when the diff renders crawler-visible HTML — a frontend
+  page OR a server-rendered template OR sitemap/robots, never a pure JSON API) and makes the
+  **security-review** standard-when-a-security-surface-is-touched rather than loose judgment.
+- **ship / ship-pr**: the **simplification audit is now a STANDARD step**, not optional. Both
+  pipelines audit every changed file against `yagni.md`'s new "Audit checklist" (pass-through method
+  chains, one-impl `Protocol`s, a repository wrapping SQLAlchemy, factories a dict replaces, config for
+  one-value options, speculative extension points) before the gates, applying mechanical fixes via
+  `/simplify` and reporting judgment calls. It scales to the diff — a trivial rename gets a quick pass,
+  feature code gets the full list — but is never skipped, and never strips the skill's hard rules.
+- **brunofaust-python-style**: `references/yagni.md` gains the **pass-through-chain** anti-pattern — the
+  single most common over-engineering — with the six-hop `get_by_id → _get_by_id → _get_from_database
+  → _query → _result_as_pydantic` example collapsed to one method (a routine ~30% line reduction), the
+  rule that a private method must do something distinct-and-shared (not just forward), and an **Audit
+  checklist** that `/ship` and `/ship-pr` run against every changed file.
+- **brunofaust-python-style**: `references/yagni.md` — a minimalism / do-not-over-engineer
+  reference, the counterweight to `architecture.md`. Structure is a cost, not a virtue:
+  name a concrete *present* reason for every unit ("might need it later" / "more flexible"
+  / "cleaner" / "separation of concerns" are not reasons). Target shapes (one table = one
+  class + its model; called once → inline; one impl → no `Protocol`; one method → no
+  class), a banned-by-default list (pass-throughs, a "repository" wrapping SQLAlchemy,
+  factories/registries/single-subclass bases, config for one-value options), the cost of
+  the wrong abstraction (duplication is cheaper), when a boundary is *earned* (Rule of
+  Three / a real second impl today / a genuine test seam), the **architectural exception**
+  (foundations that are expensive to reverse — boundary models, schema, security/tenant
+  boundaries, module layout — warrant foresight; YAGNI governs features, not foundations),
+  and a **deletion pass**. Synthesized from the user's minimalism prompt + the lev-os YAGNI
+  skill. `SKILL.md` gets it as architectural rule #1 (the default), and `architecture.md`
+  now carries "these patterns are tools, not defaults" caveats on the Service/Repository/
+  Protocol-DI examples so the skill no longer argues with itself.
 - **hooks / brunofaust-python-style**: four **edit-time guards** — `python-orjson-guard`,
   `python-structlog-guard`, `python-settings-env-guard`, `python-thread-subprocess-guard`
   — ported from the source repo's `.claude/hooks/`. They are PreToolUse guards that

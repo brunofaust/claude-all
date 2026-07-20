@@ -2,6 +2,16 @@
 
 > Reference page for the `brunofaust-python-style` skill. The main SKILL.md keeps a condensed summary; this file holds the full depth.
 
+> **These patterns are tools, not defaults.** The default is minimalism —
+> [`yagni.md`](yagni.md): one implementation → no `Protocol`; a data-access class
+> that only forwards to SQLAlchemy → inline it; called once → no wrapper. Reach for
+> a Service / Repository / Protocol-DI *layer below only when a concrete present
+> need justifies the boundary* (a real second implementation, a genuine test seam,
+> the Rule of Three). The examples here show the shape of each pattern *when it is
+> warranted* — they are NOT an instruction to add all of them to every feature. If
+> `yagni.md` and this file seem to disagree, minimalism wins until you can write
+> down the need. Several examples below carry a **When to reach for this** note.
+
 ### Pattern 1: KISS - Keep It Simple
 
 Choose the simplest solution that works. Complexity must be justified by concrete requirements.
@@ -131,6 +141,13 @@ Organize code into distinct layers with clear responsibilities.
 │  - Cache operations                                  │
 └─────────────────────────────────────────────────────┘
 ```
+
+**When to reach for this:** only when the layers carry *distinct, real* logic. If
+the "service" only forwards to the "repository", collapse them into one. If the
+"repository" only wraps SQLAlchemy without adding translation or a real query, it
+is a banned pass-through ([`yagni.md`](yagni.md)) — inline the query. A three-box
+diagram is not a target to hit; most single-table reads are one thin store class
+with a query per method.
 
 Each layer depends only on layers below it:
 
@@ -279,6 +296,13 @@ def process_order(order: Order) -> Result:
 ### Pattern 7: Dependency Injection
 
 Pass dependencies through constructors for testability.
+
+**When to reach for this:** inject a dependency when you have a *real* second
+implementation today (two backends, a genuine fake the test needs) — not because
+injection is tidy. A `Protocol` with exactly one implementation is banned by
+[`yagni.md`](yagni.md): use the concrete type and, if a test needs to substitute
+it, inject the concrete type directly. Don't grow a `Protocol` per collaborator on
+the chance a second impl might appear.
 
 ```python
 from typing import Protocol
