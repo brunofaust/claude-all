@@ -75,6 +75,126 @@ def record_install(kind: str, name: str, target_path: Path | None) -> None:
     save_state(state)
 
 
+# ---------------------- stale-install pruning ----------------------
+#
+# The installer records every install in state.json. When a resource is later
+# DELETED from the repo (e.g. skills merged/retired), its install lingers in
+# ~/.claude — a dangling symlink, a CLAUDE.md block, a settings hook entry. This
+# detects those and can remove them.
+#
+# Detecting "stale" is "recorded but no longer shipped" — but a naive diff of
+# state vs discover() is UNSAFE and would delete live resources. Three guards,
+# each closing a real false-positive found against a real state.json:
+#   1. Skip companion sub-records (`<name>.claude_md`) — they belong to a PRIMARY
+#      resource and are pruned only WITH it; alone they'd strip an installed
+#      resource's CLAUDE.md block.
+#   2. Never flag a kind for which discover() currently returns ZERO items — a
+#      missing/empty enumerator (e.g. no `plugins/` dir in the package) would
+#      otherwise mark every recorded plugin stale.
+#   3. The candidate list is only ever ADVISORY on a normal run; removal happens
+#      only under an explicit `--prune`. The human sees the list first.
+
+COMPANION_SUFFIX = ".claude_md"
+
+
+def _is_companion_key(name: str) -> bool:
+    """True when a state name is a companion sub-record, not a primary resource."""
+    return name.endswith(COMPANION_SUFFIX)
+
+
+def _infer_level(target: str | None) -> str:
+    """Infer the install scope from a recorded target path.
+
+    Args:
+        target: The recorded target path, or ``None``.
+
+    Returns:
+        ``"user"`` when the target is under ``~/.claude`` (or unknown — the
+        common, safe default), else ``"project"``.
+    """
+    if target and str(Path.cwd()) in target and str(Path.home()) not in target:
+        return "project"
+    return "user"
+
+
+def stale_installs() -> list[dict]:
+    """Return recorded installs that are no longer shipped by the repo.
+
+    Applies the safety guards above: companion sub-records and kinds with zero
+    currently-discovered items are never reported. Each returned dict is a
+    primary state entry (``kind`` / ``name`` / ``target`` / ``installed_at``).
+    """
+    discovered = discover([])
+    shippable = {state_key(it.kind, it.name) for it in discovered}
+    kinds_present = {it.kind for it in discovered}  # guard 2: skip empty enumerators
+    stale: list[dict] = []
+    for key, entry in load_state().get("installs", {}).items():
+        name = entry.get("name", "")
+        if _is_companion_key(name):  # guard 1: companions ride their primary
+            continue
+        if entry.get("kind") not in kinds_present:
+            continue
+        if key not in shippable:
+            stale.append(entry)
+    return stale
+
+
+def prune_installs(entries: list[dict]) -> list[str]:
+    """Remove each stale install (symlink + CLAUDE.md block + hook entry) and its companions.
+
+    Symlink-guarded: only unlinks a recorded target when it is actually a symlink,
+    so a recorded real file (e.g. a CLAUDE.md path) is never deleted. Uses the
+    idempotent ``remove_claude_md`` / ``remove_hook`` for the tagged block and the
+    settings hook entry. Drops the primary and its companion records from state.
+
+    Args:
+        entries: Primary state entries to prune (from :func:`stale_installs`).
+
+    Returns:
+        One human-readable line per pruned resource.
+    """
+    state = load_state()
+    installs = state.get("installs", {})
+    removed: list[str] = []
+    for entry in entries:
+        kind, name = entry["kind"], entry["name"]
+        level = _infer_level(entry.get("target"))
+        item = Item(kind=kind, subcategory="", name=name, src=Path("."))
+        actions: list[str] = []
+
+        target = entry.get("target")
+        if target and Path(target).is_symlink():
+            Path(target).unlink()
+            actions.append("symlink")
+
+        if remove_claude_md(item, level):
+            actions.append("CLAUDE.md block")
+        if remove_hook(item, level):
+            actions.append("hook")
+
+        # Drop the primary + any companion records from state.
+        installs.pop(state_key(kind, name), None)
+        installs.pop(state_key(kind, name + COMPANION_SUFFIX), None)
+        removed.append(f"{kind}/{name} ({', '.join(actions) or 'state only'})")
+
+    save_state(state)
+    return removed
+
+
+def notify_stale() -> None:
+    """Print an advisory notice (to stderr) listing prunable stale installs, if any."""
+    stale = stale_installs()
+    if not stale:
+        return
+    print(
+        f"\n⚠  You have {len(stale)} installed resource(s) that are stale and can be "
+        "deleted. Run `claude-all --prune`:",
+        file=sys.stderr,
+    )
+    for entry in stale:
+        print(f"     - {entry['kind']}/{entry['name']}", file=sys.stderr)
+
+
 # ---------------------- item model ----------------------
 
 
@@ -1414,8 +1534,23 @@ def main(argv: list[str]) -> int:
         action="store_true",
         help="Install to ./.claude (skip level prompt)",
     )
+    ap.add_argument(
+        "--prune",
+        action="store_true",
+        help="Remove installs that are no longer shipped by the repo (no confirmation)",
+    )
     ap.add_argument("filters", nargs="*", help="Filter tokens (each must appear in path)")
     args = ap.parse_args(argv)
+
+    if args.prune:
+        removed = prune_installs(stale_installs())
+        if removed:
+            print(f"Pruned {len(removed)} stale install(s):")
+            for line in removed:
+                print(f"  ✓ {line}")
+        else:
+            print("Nothing to prune — no stale installs.")
+        return 0
 
     items = discover(args.filters)
     if not items:
@@ -1427,6 +1562,7 @@ def main(argv: list[str]) -> int:
 
     if args.list:
         cmd_list(items)
+        notify_stale()
         return 0
 
     # Selection
@@ -1488,8 +1624,10 @@ def main(argv: list[str]) -> int:
 
     if failures:
         print(f"\nDone with {failures} failure(s) — see errors above.", file=sys.stderr)
+        notify_stale()
         return 1
     print("\nDone. Symlinks → edits in repo propagate to install location.")
+    notify_stale()
     return 0
 
 
