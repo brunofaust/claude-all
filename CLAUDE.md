@@ -154,6 +154,11 @@ Always update **`README.md`** to reflect any additions or changes:
 
 The README is the single source of truth for what's in the repo. A PR without a README update is incomplete.
 
+**This is gated, not just asked for.** The `check-md-links` prek hook fails when a discovered
+resource has no README row, and when any relative markdown link doesn't resolve. Each row links the
+resource name to its source file (`SKILL.md` / `agent.md` / hook script) — keep that shape when
+adding one, since the link is what the coverage check looks for.
+
 ## Naming conventions — always use generic placeholders
 
 All examples, agent prompts, skill documentation, and config snippets must use

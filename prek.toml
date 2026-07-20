@@ -281,6 +281,14 @@ hooks = [
     pass_filenames = false,
     always_run = true
   },
+  {
+    id = "check-md-links",
+    name = "🔗 docs · Links resolve + every resource is in the README",
+    entry = "python3 scripts/check_md_links.py",
+    language = "system",
+    pass_filenames = false,
+    always_run = true
+  },
   # Dogfooding: claude-all SHIPS these checkers but never ran them on itself — which
   # is exactly how a module-level `_name` (banned by the visibility rule this repo
   # publishes) slipped into cli.py. Run our own gates on our own source.

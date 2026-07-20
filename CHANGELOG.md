@@ -5,6 +5,23 @@
 
 ### Added
 
+- **docs**: every resource row in `README.md` now **links to its source file** — 117 rows across
+  agents, skills, hooks, MCPs, tools and instructions — so a reader can click a name and land on the
+  `SKILL.md` / `agent.md` / hook script instead of hunting the tree. The mapping came from the
+  installer's own `discover()`, not a hand-written path list, so a rename can't leave a stale link
+  behind.
+- **gate**: `check-md-links` (prek) — **relative markdown links must resolve, and every discovered
+  resource must be linked from the README**. Both halves are things this repo already got wrong:
+  four cross-skill links shipped one `../` short (one of them in an already-merged PR), and
+  CLAUDE.md's "a PR without a README update is incomplete" was prose, so nothing enforced it. Linking
+  every row makes "is it documented?" a question a checker can answer.
+  Vendored files are exempt — they're kept byte-identical to upstream, so *their* relative links
+  legitimately don't resolve here; `local_only` files in the same directory are ours and stay checked.
+  The first version reported **18 findings, all false positives** (fenced code blocks, inline code
+  spans like `` `def first[T](...)` ``, site-absolute llms.txt paths, and `vendor_mode: "dir"` entries
+  that list no individual files) — each one is now a named test, alongside negative tests proving the
+  gate still bites on a genuinely broken link and on an undocumented resource.
+
 - **installer**: `--prune` now also clears **leftover artifacts** — things broken on their own terms,
   typically created by an *older* claude-all that linked or wired something this version doesn't.
   Stale-resource detection structurally cannot see these, because a healthy still-shipped resource is
