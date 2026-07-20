@@ -17,8 +17,19 @@
   a kind for which discovery returns **zero** items is never flagged (a missing enumerator,
   e.g. no `plugins/` dir, would otherwise mark every recorded plugin stale); and the target
   symlink is unlinked **only when it is actually a symlink**, so a recorded real file is
-  never deleted. Verified end-to-end in an isolated `HOME` (removes all four artifacts +
-  companion, preserves unrelated `CLAUDE.md` content).
+  never deleted. **`tools` and `plugins` are never pruned** — their install is more than a
+  symlink+block+hook (a brew binary, a marketplace entry), so removing only our artifacts
+  would leave the real thing half-installed.
+  Each install now records its **full footprint** in `state.json` — an `artifacts` list of
+  every side-effect it created (the `CLAUDE.md` block + tags, each `settings.json` hook
+  command, the hook symlink) — so `--prune` reverses *exactly* what the install did, source-
+  independently, even after the resource is deleted from the repo. This closes the
+  standalone-hook gap (its `<name>.py` symlink + command are recorded, not re-derived from
+  the companion `<kind>-<name>.py` convention that reconstruction would miss). Entries
+  recorded before footprints fall back to `kind/name` reconstruction. Verified end-to-end in
+  an isolated `HOME`: artifact-path removal (hook symlink + block + settings command),
+  legacy fallback, tools/plugins exclusion, and reinstall-resets-footprint all pass;
+  unrelated `CLAUDE.md` content preserved.
 
 - **brunofaust-python-style / ship / ship-pr**: the audit generalized into a **skill-audit
   framework**. New `references/audit.md` — the skill's master *judgment* checklist (minimalism,

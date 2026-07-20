@@ -66,12 +66,44 @@ def save_state(state: dict) -> None:
 def record_install(kind: str, name: str, target_path: Path | None) -> None:
     state = load_state()
     state.setdefault("installs", {})
-    state["installs"][state_key(kind, name)] = {
+    key = state_key(kind, name)
+    prior = state.get("installs", {}).get(key, {})
+    state["installs"][key] = {
         "kind": kind,
         "name": name,
         "target": str(target_path) if target_path else None,
         "installed_at": datetime.now(UTC).isoformat(),
+        # A re-install replays every artifact-recording call, so start clean each
+        # time rather than accumulating duplicates from the previous install.
+        "artifacts": [],
     }
+    # Preserve nothing from `prior` — record_install runs FIRST in every install
+    # path, then the artifact-creating steps (claude_md / hook) append via
+    # record_artifact. This reset is what keeps the footprint current, not stale.
+    _ = prior
+    save_state(state)
+
+
+def record_artifact(kind: str, name: str, artifact: dict) -> None:
+    """Append one concrete side-effect to a resource's recorded footprint.
+
+    The footprint lets ``--prune`` reverse EXACTLY what an install did — a
+    ``CLAUDE.md`` block, a ``settings.json`` hook entry, a hook symlink — even
+    after the resource's source has been deleted from the repo, without
+    re-deriving it from a naming convention that may have drifted.
+
+    Args:
+        kind: Resource kind.
+        name: Resource name.
+        artifact: A ``{"type": ...}`` record. Types: ``"symlink"`` (``path``),
+            ``"claude_md"`` (``file`` / ``start`` / ``end``), ``"settings_hook"``
+            (``file`` / ``command``).
+    """
+    state = load_state()
+    entry = state.setdefault("installs", {}).get(state_key(kind, name))
+    if entry is None:  # record_install always runs first; defensive only
+        return
+    entry.setdefault("artifacts", []).append(artifact)
     save_state(state)
 
 
@@ -95,6 +127,11 @@ def record_install(kind: str, name: str, target_path: Path | None) -> None:
 #      only under an explicit `--prune`. The human sees the list first.
 
 COMPANION_SUFFIX = ".claude_md"
+
+# Kinds excluded from pruning: their install is more than a symlink+block+hook
+# (a brew binary, a plugin-marketplace entry), so removing only our recorded
+# artifacts would leave the real thing half-installed. Prune never touches them.
+PRUNE_EXCLUDED_KINDS = frozenset({"tools", "plugins"})
 
 
 def _is_companion_key(name: str) -> bool:
@@ -132,7 +169,9 @@ def stale_installs() -> list[dict]:
         name = entry.get("name", "")
         if _is_companion_key(name):  # guard 1: companions ride their primary
             continue
-        if entry.get("kind") not in kinds_present:
+        if entry.get("kind") in PRUNE_EXCLUDED_KINDS:  # tools/plugins: never prune
+            continue
+        if entry.get("kind") not in kinds_present:  # guard 2: skip empty enumerators
             continue
         if key not in shippable:
             stale.append(entry)
@@ -158,27 +197,111 @@ def prune_installs(entries: list[dict]) -> list[str]:
     removed: list[str] = []
     for entry in entries:
         kind, name = entry["kind"], entry["name"]
-        level = _infer_level(entry.get("target"))
-        item = Item(kind=kind, subcategory="", name=name, src=Path("."))
         actions: list[str] = []
 
+        # The resource symlink (recorded as `target`), symlink-guarded so a
+        # recorded real file is never deleted.
         target = entry.get("target")
         if target and Path(target).is_symlink():
             Path(target).unlink()
             actions.append("symlink")
 
-        if remove_claude_md(item, level):
-            actions.append("CLAUDE.md block")
-        if remove_hook(item, level):
-            actions.append("hook")
+        artifacts = entry.get("artifacts") or []
+        if artifacts:
+            # Precise, source-independent: reverse exactly what the install did.
+            actions.extend(_undo_artifact(a) for a in artifacts)
+        else:
+            # Legacy entry (recorded before footprints): reconstruct from kind/name.
+            item = Item(kind=kind, subcategory="", name=name, src=Path("."))
+            level = _infer_level(target)
+            if remove_claude_md(item, level):
+                actions.append("CLAUDE.md block")
+            if remove_hook(item, level):
+                actions.append("hook")
 
-        # Drop the primary + any companion records from state.
         installs.pop(state_key(kind, name), None)
         installs.pop(state_key(kind, name + COMPANION_SUFFIX), None)
-        removed.append(f"{kind}/{name} ({', '.join(actions) or 'state only'})")
+        done = [a for a in actions if a]
+        removed.append(f"{kind}/{name} ({', '.join(done) or 'state only'})")
 
     save_state(state)
     return removed
+
+
+def _undo_artifact(artifact: dict) -> str:
+    """Reverse one recorded install artifact. Returns a short label (or "").
+
+    Args:
+        artifact: A footprint record from :func:`record_artifact`.
+    """
+    kind = artifact.get("type")
+    if kind == "symlink":
+        path = Path(artifact["path"])
+        if path.is_symlink():  # guard: only unlink a symlink, never a real file
+            path.unlink()
+            return "hook symlink"
+        return ""
+    if kind == "claude_md":
+        return _strip_block(Path(artifact["file"]), artifact["start"], artifact["end"])
+    if kind == "settings_hook":
+        return _drop_settings_command(Path(artifact["file"]), artifact["command"])
+    return ""
+
+
+def _strip_block(target: Path, start_tag: str, end_tag: str) -> str:
+    """Remove the tagged block between *start_tag* and *end_tag* from *target*.
+
+    Args:
+        target: The ``CLAUDE.md`` file.
+        start_tag: The block's opening marker.
+        end_tag: The block's closing marker.
+
+    Returns:
+        ``"CLAUDE.md block"`` when a block was removed, else ``""``.
+    """
+    if not target.exists():
+        return ""
+    text = target.read_text()
+    if start_tag not in text or end_tag not in text:
+        return ""
+    before = text.split(start_tag, 1)[0].rstrip()
+    after = text.split(end_tag, 1)[1].lstrip("\n")
+    target.write_text((before + "\n" + after).rstrip() + "\n")
+    return "CLAUDE.md block"
+
+
+def _drop_settings_command(settings_file: Path, command: str) -> str:
+    """Remove every hook entry whose ``command`` equals *command* from *settings_file*.
+
+    Args:
+        settings_file: The ``settings.json`` to edit.
+        command: The exact command string the install wired.
+
+    Returns:
+        ``"settings hook"`` when an entry was removed, else ``""``.
+    """
+    if not settings_file.exists():
+        return ""
+    try:
+        settings = json.loads(settings_file.read_text())
+    except json.JSONDecodeError:
+        return ""
+    removed = False
+    for event, blocks in list(settings.get("hooks", {}).items()):
+        for block in blocks:
+            before = len(block.get("hooks", []))
+            block["hooks"] = [h for h in block.get("hooks", []) if h.get("command") != command]
+            if len(block.get("hooks", [])) != before:
+                removed = True
+        settings["hooks"][event] = [b for b in blocks if b.get("hooks")]
+        if not settings["hooks"][event]:
+            del settings["hooks"][event]
+    if not settings.get("hooks"):
+        settings.pop("hooks", None)
+    if removed:
+        settings_file.write_text(json.dumps(settings, indent=2) + "\n")
+        return "settings hook"
+    return ""
 
 
 def notify_stale() -> None:
@@ -814,6 +937,12 @@ def inject_hook(item: Item, level: str) -> str | None:
     )
 
     settings_file.write_text(json.dumps(settings, indent=2) + "\n")
+    record_artifact(item.kind, item.name, {"type": "symlink", "path": str(dest)})
+    record_artifact(
+        item.kind,
+        item.name,
+        {"type": "settings_hook", "file": str(settings_file), "command": cmd_str},
+    )
     return f"hook installed → {dest}, registered in {settings_file}"
 
 
@@ -825,30 +954,10 @@ def remove_hook(item: Item, level: str) -> str | None:
         level: Installation scope — ``'user'`` or ``'project'``.
     """
     dest = hook_symlink_dest(level, item)
-    settings_file = settings_path(level)
-
-    removed_any = False
-
-    if settings_file.exists():
-        try:
-            settings = json.loads(settings_file.read_text())
-        except json.JSONDecodeError:
-            settings = {}
-        cmd_str = str(dest)
-        for event_blocks in settings.get("hooks", {}).values():
-            for block in event_blocks:
-                before = len(block.get("hooks", []))
-                block["hooks"] = [h for h in block.get("hooks", []) if h.get("command") != cmd_str]
-                if before != len(block.get("hooks", [])):
-                    removed_any = True
-            # Drop empty blocks
-        for ev, blocks in list(settings.get("hooks", {}).items()):
-            settings["hooks"][ev] = [b for b in blocks if b.get("hooks")]
-            if not settings["hooks"][ev]:
-                del settings["hooks"][ev]
-        if not settings.get("hooks"):
-            settings.pop("hooks", None)
-        settings_file.write_text(json.dumps(settings, indent=2) + "\n")
+    # The settings-entry removal IS `_drop_settings_command` — one owner for
+    # "strip this command from settings.json", used by both remove_hook and the
+    # artifact-based prune path.
+    removed_any = bool(_drop_settings_command(settings_path(level), str(dest)))
 
     if dest.is_symlink() or dest.exists():
         dest.unlink()
@@ -926,6 +1035,11 @@ def inject_claude_md(item: Item, level: str) -> str | None:
         action = "appended"
 
     target.write_text(new_text)
+    record_artifact(
+        item.kind,
+        item.name,
+        {"type": "claude_md", "file": str(target), "start": start_tag, "end": end_tag},
+    )
     return f"CLAUDE.md {action} ({target})"
 
 
@@ -1086,6 +1200,12 @@ def install_standalone_hook(item: Item, level: str) -> str:
 
     settings_file.write_text(json.dumps(settings, indent=2) + "\n")
     record_install(item.kind, item.name, None)
+    record_artifact(item.kind, item.name, {"type": "symlink", "path": str(dest)})
+    record_artifact(
+        item.kind,
+        item.name,
+        {"type": "settings_hook", "file": str(settings_file), "command": cmd_str},
+    )
     return f"installed hook {item.name} → {dest} ({event}/{matcher or '*'})"
 
 
