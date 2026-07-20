@@ -265,3 +265,20 @@ hooks = [
     stages = ["pre-push"]
   }
 ]
+
+# ── Dependency-manifest integrity ─────────────────────────────────────────────
+# Every `claude-all.json` `requires` entry must resolve to a real resource, or the
+# installer would silently skip a dependency. Runs whenever a manifest or the
+# installer changes (a rename in cli.py's discover() can invalidate a requires).
+[[repos]]
+repo = "local"
+hooks = [
+  {
+    id = "check-requires",
+    name = "🔗 deps · Validate claude-all.json requires",
+    entry = "python3 scripts/check_requires.py",
+    language = "system",
+    pass_filenames = false,
+    always_run = true
+  }
+]
