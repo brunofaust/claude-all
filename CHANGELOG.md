@@ -3,6 +3,18 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **ship / ship-pr**: added a hard **full prek gate** — before commit, `prek run --all-files`
+  runs on **both** stages (pre-commit AND `--hook-stage pre-push`) over the **whole repo**, and must
+  be **zero-`Failed`**. **No pre-existing-issue amnesty:** a hook failing on a file outside the diff
+  still blocks the ship — "it was already broken" is not an exception; fix the root cause (never
+  `# noqa` / `SKIP=` / `--no-verify`). Both skills also warn to read per-hook status lines, since a
+  `(no files to check) Skipped` on input a hook should have inspected is a vacuous pass, not green.
+  Closes the recurring "pre-existing issues slipped through" gap: `lint-fixer` only touches changed
+  files and `--all-files` alone runs only the pre-commit stage, so neither guaranteed a whole-repo
+  both-stage green.
+
 ### Added
 
 - **brunofaust-python-style / ship / ship-pr**: the audit generalized into a **skill-audit

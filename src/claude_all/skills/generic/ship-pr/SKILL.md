@@ -38,12 +38,16 @@ first hard failure**.
    rename/format gets a quick pass, feature code gets the full checklist — but is never skipped, and
    never strips a hard rule (a boundary model, an owner class, a docstring stay).
 2. **Gates — run the `/ship` sequence:** `test-coverage gate` → `lint-fixer` → `test-runner` →
-   `verification-loop`. If any hard-fails, stop there (same rules as `/ship`). The **test-coverage
-   gate runs first**, before lint/test: it confirms this change ships the unit tests for its
-   new/changed code AND — where an e2e/integration suite exists — the e2e/integration tests that
-   validate each **business requirement** of the feature (user-observable behaviour, not the
+   **full prek gate** → `verification-loop`. If any hard-fails, stop there (same rules as `/ship`). The
+   **test-coverage gate runs first**, before lint/test: it confirms this change ships the unit tests
+   for its new/changed code AND — where an e2e/integration suite exists — the e2e/integration tests
+   that validate each **business requirement** of the feature (user-observable behaviour, not the
    implementation). A new feature with no business-requirement coverage is a hard stop; offer to write
-   the missing tests before continuing.
+   the missing tests before continuing. The **full prek gate** is non-negotiable: `prek run
+   --all-files` on BOTH stages (`--hook-stage pre-push` too) over the whole repo, **zero `Failed`**,
+   **no pre-existing-issue amnesty** — a hook failing on a file outside the diff still blocks the PR.
+   Read per-hook status lines (a `(no files to check) Skipped` on input it should inspect is a vacuous
+   pass, not green). Fix root cause via `lint-fixer`; never `# noqa` / `SKIP=` / `--no-verify`.
 3. **Code review — `/code-review` skill (gate).** Review the working diff. Treat **Block** findings as
    a hard stop: fix them (loop back through the gates) or surface them for a decision. Warnings are
    reported, not blocking.
@@ -80,6 +84,9 @@ number (someone else's, or a re-review after pushes), use the existing **`review
 
 - **Review once, here — not per commit.** Keep `/ship` cheap; pay the review cost when you're actually
   opening a PR.
+- **Every PR is full green — no pre-existing-issue amnesty.** `prek run --all-files` on BOTH stages
+  (pre-commit + pre-push) over the whole repo must be zero-`Failed` before the PR opens. A hook failing
+  on a file outside your diff still blocks — "pre-existing" is never a pass; fix the root cause.
 - **Block findings are a hard stop.** Never commit/open over an unresolved Block from code or security
   review.
 - **No feature without its tests.** The test-coverage gate runs before the other gates: a new/changed
@@ -99,5 +106,5 @@ number (someone else's, or a re-review after pushes), use the existing **`review
 ## Output
 
 ```
-ship-pr: audit ✓ (py) · coverage ✓ (unit + e2e) · lint ✓ · tests ✓ · verify READY · review ✓ (0 block, 2 warn) · sec ✓ · seo n/a · docs ✓ · commit <sha> · PR #NN
+ship-pr: audit ✓ (py) · coverage ✓ (unit + e2e) · lint ✓ · tests ✓ · prek ✓ (both stages, all-files) · verify READY · review ✓ (0 block, 2 warn) · sec ✓ · seo n/a · docs ✓ · commit <sha> · PR #NN
 ```
