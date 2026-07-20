@@ -3,6 +3,18 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **installer**: `--prune` is now **scope-guarded** — it only ever touches artifacts inside the
+  current install roots (`~/.claude` / `./.claude`). `state.json` records ABSOLUTE paths, so when the
+  state file and `$HOME` disagree (a copied state file, a container, a harness overriding `HOME`) an
+  unguarded prune followed those paths *out of its sandbox*. Found the hard way: a sandboxed test run
+  against a copied `state.json` unlinked three symlinks in the real home. Both `reverse_footprint` and
+  every `undo_artifact` branch (symlink / `CLAUDE.md` block / settings hook entry) now check
+  `in_install_scope` first; an out-of-scope record is reported `state only` and its files are left
+  strictly alone. Covered by three regression tests, and verified end-to-end by re-running the exact
+  scenario that caused the incident.
+
 ### Added
 
 - **tests**: the repo's **first test suite** — `tests/test_dependency_resolution.py` (11 tests) covers

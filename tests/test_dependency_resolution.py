@@ -17,12 +17,16 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from claude_all.cli import (
+    USER_CLAUDE_DIR,
     Item,
     discover,
+    in_install_scope,
     load_requires,
     resolve_closure,
     resource_config_path,
+    reverse_footprint,
     state_key,
+    undo_artifact,
 )
 
 
@@ -175,6 +179,63 @@ class TestLoadRequires:
         src.write_text("# a\n")
         item = make_item("agents", "my-agent", src)
         assert resource_config_path(item).name == "my-agent.claude-all.json"
+
+
+class TestPruneScopeGuard:
+    """Prune only ever touches artifacts inside the CURRENT install scope.
+
+    `state.json` records absolute paths. When the state file and `$HOME` disagree —
+    a copied state file, a container, a test harness overriding HOME — an unguarded
+    prune follows those paths out of its sandbox. This happened for real: a
+    sandboxed run against a copied state file unlinked symlinks in the actual home.
+    """
+
+    def test_out_of_scope_symlink_is_not_unlinked(self, tmp_path: Path) -> None:
+        """A recorded target outside the install roots is left strictly alone.
+
+        Args:
+            tmp_path: pytest's per-test temporary directory.
+        """
+        outsider = tmp_path / "somewhere-else"
+        outsider.mkdir()
+        link = outsider / "victim"
+        link.symlink_to(tmp_path)
+        assert link.is_symlink()
+
+        actions = reverse_footprint({"target": str(link), "artifacts": []})
+
+        assert link.is_symlink(), "prune escaped its scope and unlinked a foreign symlink"
+        assert actions == []
+
+    def test_out_of_scope_artifacts_are_skipped(self, tmp_path: Path) -> None:
+        """A recorded CLAUDE.md / settings artifact outside scope is not rewritten.
+
+        Args:
+            tmp_path: pytest's per-test temporary directory.
+        """
+        foreign_md = tmp_path / "CLAUDE.md"
+        foreign_md.write_text(
+            "<!-- claude-all:skills/x:start -->\nBODY\n<!-- claude-all:skills/x:end -->\n"
+        )
+        before = foreign_md.read_text()
+
+        label = undo_artifact(
+            {
+                "type": "claude_md",
+                "file": str(foreign_md),
+                "start": "<!-- claude-all:skills/x:start -->",
+                "end": "<!-- claude-all:skills/x:end -->",
+            }
+        )
+
+        assert label == ""
+        assert foreign_md.read_text() == before, "prune rewrote a CLAUDE.md outside its scope"
+
+    def test_in_scope_paths_are_recognised(self) -> None:
+        """The real install roots ARE in scope, so normal pruning still works."""
+        assert in_install_scope(USER_CLAUDE_DIR / "skills" / "anything")
+        assert in_install_scope(Path.cwd() / ".claude" / "hooks" / "x.py")
+        assert not in_install_scope(Path("/tmp/elsewhere/x"))
 
 
 class TestShippedManifests:
