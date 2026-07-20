@@ -5,6 +5,35 @@
 
 ### Added
 
+- **installer**: stale-install pruning. The installer records every install in
+  `~/.claude-all/state.json`; when a resource is later removed from the repo (e.g. skills
+  merged/retired) its install lingered in `~/.claude` as a dangling symlink, `CLAUDE.md`
+  block, and settings hook entry. Now **every run prints an advisory notice** listing
+  resources that are installed but no longer shipped, and **`claude-all --prune`** removes
+  them (symlink + `CLAUDE.md` block + settings hook entry + state record, plus companion
+  records), with no confirmation. Three safety guards, each closing a real false-positive
+  found against a live `state.json`: companion sub-records (`<name>.claude_md`) are pruned
+  only *with* their primary (never alone — that would strip an installed resource's block);
+  a kind for which discovery returns **zero** items is never flagged (a missing enumerator,
+  e.g. no `plugins/` dir, would otherwise mark every recorded plugin stale); and the target
+  symlink is unlinked **only when it is actually a symlink**, so a recorded real file is
+  never deleted. **`tools` and `plugins` are never *uninstalled*** — their install is more
+  than a symlink+block+hook (a brew binary, a marketplace entry). But a stale tool/plugin
+  *record* (the resource is gone from the repo) is **forgotten** — `--prune` drops the state
+  record and any `~/.claude` artifact, and leaves the binary exactly in place — so `state.json`
+  stops claiming to manage something no longer shipped without ever running `brew`/`pipx`
+  uninstall. (This cleans e.g. a long-dead `tools/lean-ctx` record without touching a binary.)
+  Each install now records its **full footprint** in `state.json` — an `artifacts` list of
+  every side-effect it created (the `CLAUDE.md` block + tags, each `settings.json` hook
+  command, the hook symlink) — so `--prune` reverses *exactly* what the install did, source-
+  independently, even after the resource is deleted from the repo. This closes the
+  standalone-hook gap (its `<name>.py` symlink + command are recorded, not re-derived from
+  the companion `<kind>-<name>.py` convention that reconstruction would miss). Entries
+  recorded before footprints fall back to `kind/name` reconstruction. Verified end-to-end in
+  an isolated `HOME`: artifact-path removal (hook symlink + block + settings command),
+  legacy fallback, tools/plugins exclusion, and reinstall-resets-footprint all pass;
+  unrelated `CLAUDE.md` content preserved.
+
 - **brunofaust-python-style / ship / ship-pr**: the audit generalized into a **skill-audit
   framework**. New `references/audit.md` — the skill's master *judgment* checklist (minimalism,
   layering, error-handling, async, boundaries, config, tests, ownership), explicitly the layer the

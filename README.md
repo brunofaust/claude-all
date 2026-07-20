@@ -97,9 +97,24 @@ claude-all --list aws       # show AWS items only
 claude-all --all --user agents aws    # all AWS agents → ~/.claude/
 claude-all --all --project skills     # all skills → ./.claude/
 
+# Prune installs no longer shipped by the repo (dangling symlink + CLAUDE.md
+# block + settings hook entry + state record). Every run also prints an advisory
+# notice listing prunable resources; --prune removes them with no confirmation.
+claude-all --prune
+
 # Help
 claude-all --help
 ```
+
+### Stale-install pruning
+
+`claude-all` records every install in `~/.claude-all/state.json`. When a resource is later
+removed from the repo (skills merged, an agent retired), its install lingers in `~/.claude`.
+Every run prints a notice listing such **stale** installs, and `claude-all --prune` removes
+each one's symlink, `CLAUDE.md` block, settings hook entry, and state record (no
+confirmation). Guards prevent false positives: companion records ride their primary, a kind
+with zero discovered items is never flagged, and a recorded target is unlinked only when it
+is actually a symlink (a real file is never deleted).
 
 Install into a project:
 
