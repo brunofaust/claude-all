@@ -1,179 +1,353 @@
 # CHANGELOG
 
 
-## [Unreleased]
+## v0.5.0 (2026-07-20)
 
-### Fixed
+### Bug Fixes
 
-- **installer**: `--prune` is now **scope-guarded** — it only ever touches artifacts inside the
-  current install roots (`~/.claude` / `./.claude`). `state.json` records ABSOLUTE paths, so when the
-  state file and `$HOME` disagree (a copied state file, a container, a harness overriding `HOME`) an
-  unguarded prune followed those paths *out of its sandbox*. Found the hard way: a sandboxed test run
-  against a copied `state.json` unlinked three symlinks in the real home. Both `reverse_footprint` and
-  every `undo_artifact` branch (symlink / `CLAUDE.md` block / settings hook entry) now check
-  `in_install_scope` first; an out-of-scope record is reported `state only` and its files are left
-  strictly alone. Covered by three regression tests, and verified end-to-end by re-running the exact
-  scenario that caused the incident.
+- **installer**: Scope-guard prune so it cannot escape the current install roots
+  ([`c11050c`](https://github.com/brunofaust/claude-all/commit/c11050ce97d584c1921e12a5976a0c5dad816e47))
 
-### Added
+state.json records ABSOLUTE target paths. When the state file and $HOME disagree — a copied state
+  file, a container, a harness overriding HOME — an unguarded prune FOLLOWED those paths out of its
+  sandbox and deleted another installation's artifacts.
 
-- **tests**: the repo's **first test suite** — `tests/test_dependency_resolution.py` (11 tests) covers
-  the installer's dependency resolution: transitive closure, cycle termination, unknown deps reported
-  as external rather than installed, an already-selected dep not double-reported, tolerant manifest
-  reading (missing / malformed / non-list `requires`), the flat-agent `<name>.claude-all.json`
-  convention, and the **real shipped graph** (every `requires` target resolves; installing `ship-pr`
-  pulls its agents) — so a rename that breaks the graph fails here, not at a user's install.
-  `pytest>=8` added to the dev group with `[tool.pytest.ini_options]`.
-- **dependency annotations**: 8 more resources declare their hard deps — `merge-main`,
-  `mock-drift-sweep`, `adversarial-verification`, `verification-loop`, `repo-audit`, `prek`,
-  `python-module-migration`, `brunofaust-python-style`. Every target validated against the installer's
-  own `discover()` before writing, so the graph is correct by construction.
-- **dogfooding**: claude-all now runs **its own checkers on its own source** in `prek.toml`
-  (`module_private`, `junk_drawer`). It shipped these gates without ever applying them to itself —
-  which is exactly how a module-level `_name`, banned by the visibility rule this repo publishes,
-  reached `cli.py`. Both pass clean today; the gate keeps it that way.
+Found the hard way, not hypothetically: testing the installer in an isolated HOME seeded with a COPY
+  of the real state.json, --prune unlinked three real symlinks in the actual ~/.claude (restored
+  immediately; no data lost — state.json and CLAUDE.md were untouched because those writes correctly
+  targeted the sandbox).
 
-### Changed
+in_install_scope() now gates every filesystem reversal: reverse_footprint's target unlink, and all
+  three undo_artifact branches (hook symlink / CLAUDE.md block / settings hook entry). A record
+  whose path lies outside ~/.claude or ./.claude is reported 'state only' and its files are left
+  strictly alone.
 
-- **frontend skills merged into `brunofaust-frontend-style`** — one entry point for React/browser
-  work, the counterpart to `brunofaust-python-style`. 7 skills → 5:
-  - **Folded in as `references/`** (content moved verbatim, frontmatter stripped):
-    `react-correctness`, `react-testing`, `web-security`. Those three skill dirs are **deleted**.
-  - **Referenced in place, NOT copied:** the four vendored skills (`react-best-practices`,
-    `composition-patterns`, `react-view-transitions`, `web-design-guidelines`) stay byte-identical to
-    upstream so `scripts/vendor_sync.py` keeps pulling improvements — folding them would have forked
-    them permanently. Verified post-merge: `vendor_sync.py --check` reports *up to date*.
-  - **Installing the new skill pulls the four in automatically** via its `claude-all.json` `requires`
-    (the dependency mechanism proving itself on its first real use).
-  - **Companions consolidated:** one `claude_md.md` (was 3 separate always-loaded injections) and one
-    reminder hook (was 3), covering source **and** test files — the folded `react-testing` hook's
-    test-file reminder is preserved as an appended line rather than lost.
-  - New `references/audit.md` — the frontend judgment checklist `/ship` and `/ship-pr` now run on
-    every changed `.tsx`/`.jsx`/`.ts`/`.vue`/`.svelte` file (correctness, composition, security, a11y,
-    tests, perf, minimalism), filling the placeholder those pipelines shipped with.
-- **ship / ship-pr**: prek gate hardened, scoped per pipeline, and `/ship-pr` parallelized.
-  - **`/ship-pr` — full prek gate, whole repo, both stages, no amnesty.** `prek run --all-files` on
-    pre-commit AND `--hook-stage pre-push`, **zero `Failed`**; a hook failing on a file *outside* the
-    diff still blocks the PR ("pre-existing" is never a pass). Closes the recurring "pre-existing
-    issues slipped through" gap (`lint-fixer` only touches changed files; `--all-files` alone is
-    pre-commit-only).
-  - **`/ship` — CHANGED files, both stages, fast.** The quick commit loop gates *your* changes (`prek
-    run` + `prek run --hook-stage pre-push --files …`), not the whole repo, so a frequent WIP commit
-    isn't blocked by an unrelated issue elsewhere. The whole-repo no-amnesty gate is `/ship-pr`'s job.
-  - **`/ship-pr` runs in three phases; the review/gate phase is PARALLEL.** Phase 1 (serial, mutating):
-    skill audit + `/simplify` → lint-fixer. Phase 2 (concurrent subagents, read-only): coverage · tests
-    · full prek · code-review · security · seo · architecture. Phase 3 (serial): docs → commit → PR.
-    Fanning out the independent read-only steps is what stops `/ship-pr` being a 30-minute serial crawl;
-    mutators stay serial and first so the parallel readers see final code.
-  - **`/ship-pr` gains scoped structural + infra + migration reviews** in Phase 2, each firing only on
-    its surface: `architecture-decision-guard` when the diff is *structural* (a new boundary/layer/
-    interface/cross-module dep or a repo-wide gate rollout — the cross-file lens vs the per-file yagni
-    audit); an **IaC review** (`cloudformation-reviewer`/`terraform-reviewer` + `aws-architecture` and
-    `aws-cost-optimization` lenses) on `*.tf`/CFN/CDK changes, gating on both architecture fitness AND
-    cost; and `migration-reviewer` on a DB-migration change. Skipped when the diff doesn't touch the
-    surface, so the common case stays fast.
-  - **`/ship-pr` gains a dependency review** when a manifest changes (`pyproject.toml` / `uv.lock` /
-    `requirements*.txt`, or `package.json` / lockfile). For each added/bumped dep: a **CVE scan**
-    (`uv audit` / `pip-audit` / `npm audit`) gates on **high/critical**, and — the advisory part — a
-    **version-currency + maintenance + fit** check via `research-before-build` (+ Context7 for the
-    latest stable) *advises* the user (newer release out? still maintained? even needed vs stdlib?)
-    without blocking. Owns the dependency slice of the supply-chain surface, so `security-review` need
-    not re-scan dep CVEs. Skipped when no manifest changed.
-  - Both skills warn to read per-hook status: a `(no files to check) Skipped` on input a hook should
-    have inspected is a vacuous pass, not green.
+Verified by re-running the EXACT scenario that caused the incident: same sandbox, same copied
+  state.json — the out-of-scope entry now reports 'state only' and the real symlinks survive. Plus
+  three regression tests (out-of-scope symlink not unlinked, out-of-scope CLAUDE.md not rewritten,
+  real install roots still in scope so normal pruning works).
 
-### Added
+### Documentation
 
-- **installer**: per-resource dependency resolution. A resource may ship a `claude-all.json`
-  companion (extensible manifest, first key `requires: ["kind/name", ...]`) beside it — folder
-  resources use `<dir>/claude-all.json`, flat agents `<name>.claude-all.json`, mirroring the
-  hook-companion convention. Installing a resource now pulls in its **transitive, cycle-safe
-  dependency closure** (e.g. installing `skills/ship-pr` also installs `lint-fixer`, `test-runner`,
-  `docs-updater`, `git-committer`, `verification-loop`, `code-review-discipline`), resolved over the
-  UNFILTERED resource set so a dependency excluded by the user's filter is still installed, and
-  reporting what got pulled in. A `requires` entry that resolves to no known resource (a built-in like
-  `/code-review`) is reported as external and skipped, never fails the install. The manifest lives
-  BESIDE the resource so deleting the resource deletes its deps too — no central manifest to drift
-  (the anti-orphan property the prune feature enforces from the other side). `scripts/check_requires.py`
-  is a prek drift-gate: every `requires` entry must resolve to a real resource (it imports the
-  installer's own `discover()`, so "what is a resource" is defined in one place), catching a `requires`
-  left dangling by a rename/deletion.
-- **installer**: stale-install pruning. The installer records every install in
-  `~/.claude-all/state.json`; when a resource is later removed from the repo (e.g. skills
-  merged/retired) its install lingered in `~/.claude` as a dangling symlink, `CLAUDE.md`
-  block, and settings hook entry. Now **every run prints an advisory notice** listing
-  resources that are installed but no longer shipped, and **`claude-all --prune`** removes
-  them (symlink + `CLAUDE.md` block + settings hook entry + state record, plus companion
-  records), with no confirmation. Three safety guards, each closing a real false-positive
-  found against a live `state.json`: companion sub-records (`<name>.claude_md`) are pruned
-  only *with* their primary (never alone — that would strip an installed resource's block);
-  a kind for which discovery returns **zero** items is never flagged (a missing enumerator,
-  e.g. no `plugins/` dir, would otherwise mark every recorded plugin stale); and the target
-  symlink is unlinked **only when it is actually a symlink**, so a recorded real file is
-  never deleted. **`tools` and `plugins` are never *uninstalled*** — their install is more
-  than a symlink+block+hook (a brew binary, a marketplace entry). But a stale tool/plugin
-  *record* (the resource is gone from the repo) is **forgotten** — `--prune` drops the state
-  record and any `~/.claude` artifact, and leaves the binary exactly in place — so `state.json`
-  stops claiming to manage something no longer shipped without ever running `brew`/`pipx`
-  uninstall. (This cleans e.g. a long-dead `tools/lean-ctx` record without touching a binary.)
-  Each install now records its **full footprint** in `state.json` — an `artifacts` list of
-  every side-effect it created (the `CLAUDE.md` block + tags, each `settings.json` hook
-  command, the hook symlink) — so `--prune` reverses *exactly* what the install did, source-
-  independently, even after the resource is deleted from the repo. This closes the
-  standalone-hook gap (its `<name>.py` symlink + command are recorded, not re-derived from
-  the companion `<kind>-<name>.py` convention that reconstruction would miss). Entries
-  recorded before footprints fall back to `kind/name` reconstruction. Verified end-to-end in
-  an isolated `HOME`: artifact-path removal (hook symlink + block + settings command),
-  legacy fallback, tools/plugins exclusion, and reinstall-resets-footprint all pass;
-  unrelated `CLAUDE.md` content preserved.
+- **brunofaust-python-style**: Add YAGNI / minimalism reference
+  ([`7a7cf59`](https://github.com/brunofaust/claude-all/commit/7a7cf59beac43d801ab61387ce4d2d15cc6c33f3))
 
-- **brunofaust-python-style / ship / ship-pr**: the audit generalized into a **skill-audit
-  framework**. New `references/audit.md` — the skill's master *judgment* checklist (minimalism,
-  layering, error-handling, async, boundaries, config, tests, ownership), explicitly the layer the
-  mechanical checkers can't see, so it never restates a checker-gated rule. `/ship` and `/ship-pr` now
-  audit **each changed file against its stack skill's `audit.md`** via a file-type map (`.py` →
-  brunofaust-python-style; frontend → brunofaust-frontend-style when it lands). `/ship-pr` also gains a
-  **surface-scoped SEO review** step (fires when the diff renders crawler-visible HTML — a frontend
-  page OR a server-rendered template OR sitemap/robots, never a pure JSON API) and makes the
-  **security-review** standard-when-a-security-surface-is-touched rather than loose judgment.
-- **ship / ship-pr**: the **simplification audit is now a STANDARD step**, not optional. Both
-  pipelines audit every changed file against `yagni.md`'s new "Audit checklist" (pass-through method
-  chains, one-impl `Protocol`s, a repository wrapping SQLAlchemy, factories a dict replaces, config for
-  one-value options, speculative extension points) before the gates, applying mechanical fixes via
-  `/simplify` and reporting judgment calls. It scales to the diff — a trivial rename gets a quick pass,
-  feature code gets the full list — but is never skipped, and never strips the skill's hard rules.
-- **brunofaust-python-style**: `references/yagni.md` gains the **pass-through-chain** anti-pattern — the
-  single most common over-engineering — with the six-hop `get_by_id → _get_by_id → _get_from_database
-  → _query → _result_as_pydantic` example collapsed to one method (a routine ~30% line reduction), the
-  rule that a private method must do something distinct-and-shared (not just forward), and an **Audit
-  checklist** that `/ship` and `/ship-pr` run against every changed file.
-- **brunofaust-python-style**: `references/yagni.md` — a minimalism / do-not-over-engineer
-  reference, the counterweight to `architecture.md`. Structure is a cost, not a virtue:
-  name a concrete *present* reason for every unit ("might need it later" / "more flexible"
-  / "cleaner" / "separation of concerns" are not reasons). Target shapes (one table = one
-  class + its model; called once → inline; one impl → no `Protocol`; one method → no
-  class), a banned-by-default list (pass-throughs, a "repository" wrapping SQLAlchemy,
-  factories/registries/single-subclass bases, config for one-value options), the cost of
-  the wrong abstraction (duplication is cheaper), when a boundary is *earned* (Rule of
-  Three / a real second impl today / a genuine test seam), the **architectural exception**
-  (foundations that are expensive to reverse — boundary models, schema, security/tenant
-  boundaries, module layout — warrant foresight; YAGNI governs features, not foundations),
-  and a **deletion pass**. Synthesized from the user's minimalism prompt + the lev-os YAGNI
-  skill. `SKILL.md` gets it as architectural rule #1 (the default), and `architecture.md`
-  now carries "these patterns are tools, not defaults" caveats on the Service/Repository/
-  Protocol-DI examples so the skill no longer argues with itself.
-- **hooks / brunofaust-python-style**: four **edit-time guards** — `python-orjson-guard`,
-  `python-structlog-guard`, `python-settings-env-guard`, `python-thread-subprocess-guard`
-  — ported from the source repo's `.claude/hooks/`. They are PreToolUse guards that
-  **block the Write in Claude Code** when an edit introduces stdlib `json`/`logging`,
-  `os.getenv`/`os.environ.get`, or raw `asyncio.create_subprocess`/`to_thread`/
-  `ThreadPoolExecutor` — steering generation toward orjson/structlog/`Settings`/the
-  owner wrappers *before* the bad import lands. The edit-time layer complementing the CI
-  layer (the ruff `banned-api` bans): the guard stops it being written, the ban stops it
-  being merged. Each has a `# guard:allow` comment + per-guard env-var escape hatch for
-  the one owner file that legitimately keeps the stdlib, exempts tests/scripts/migrations,
-  and handles `MultiEdit`'s `edits[]` array (not just `Write`/`Edit`). Installed at user
-  level (`claude-all --all --user`), they apply in every repo.
+Structure is a cost, not a virtue. references/yagni.md makes minimalism the DEFAULT: name a concrete
+  present reason for every function, class, file, and abstraction — 'might need it later' / 'more
+  flexible' / 'cleaner' / 'best practice' / 'separation of concerns' are not reasons.
+
+- target shapes: one table = one class + its Pydantic model; called once -> inline; one
+  implementation -> no interface/Protocol; one method -> no class - banned by default:
+  pass-throughs, a repository wrapping SQLAlchemy,
+  factories/strategies/registries/managers/single-subclass bases, config for one-value options,
+  defensive handling of type-guaranteed inputs - why: the wrong abstraction costs more than the
+  duplication (duplication is easy to see and delete; a bad abstraction is load-bearing) - when a
+  boundary is EARNED: Rule of Three, a real second impl today, a genuine test seam — never
+  speculation - the architectural exception: foundations expensive to reverse (boundary models,
+  schema/DB, security/tenant boundaries, module layout) warrant foresight now. YAGNI governs
+  features, not foundations. - the deletion pass: per unit, name the present need or inline/remove
+
+Synthesized from the user's minimalism prompt + the lev-os YAGNI skill.
+
+Also RECONCILES a self-contradiction: architecture.md promoted Service/ Repository layering and
+  Protocol-DI, which yagni.md's banned-by-default list rejects. architecture.md now frames those as
+  tools for a justified need, not defaults, with 'When to reach for this' caveats. SKILL.md carries
+  YAGNI as architectural rule #1.
+
+### Features
+
+- **frontend**: Merge 7 frontend skills into brunofaust-frontend-style
+  ([`fccd2db`](https://github.com/brunofaust/claude-all/commit/fccd2db74d831b60886ea3be846def8c66b1f45a))
+
+One entry point for React/browser work — the counterpart to brunofaust-python-style. 7 skills -> 5.
+
+FOLDED IN as references/ (content moved verbatim, frontmatter stripped; git records them as
+  renames): react-correctness, react-testing, web-security. Those three skill dirs are deleted.
+
+REFERENCED IN PLACE, not copied: the four vendored skills (react-best-practices,
+  composition-patterns, react-view-transitions, web-design-guidelines) stay byte-identical to
+  upstream so scripts/vendor_sync.py keeps pulling improvements — Vercel actively updates
+  react-best-practices, and folding it would fork it permanently. Verified after the merge:
+  vendor_sync.py --check reports 'up to date'; vendored.json needs no change and has no dangling
+  paths.
+
+Installing the new skill pulls the four in automatically via its claude-all.json requires — the
+  dependency mechanism's first real use, verified (closure = 5).
+
+Companions consolidated: one claude_md.md (was 3 separate always-loaded injections) and one reminder
+  hook (was 3). The hook covers source AND test files, so the folded react-testing hook's test-file
+  reminder is preserved as an appended line rather than lost; once-per-session, skips
+  node_modules/dist/build.
+
+New references/audit.md — the frontend judgment checklist that /ship and /ship-pr now run on every
+  changed .tsx/.jsx/.ts/.vue/.svelte file (correctness, composition, security, a11y, tests, perf,
+  minimalism), filling the placeholder those pipelines shipped with.
+
+- **hooks**: Edit-time guards for the brunofaust stdlib-library rules
+  ([`52e65ad`](https://github.com/brunofaust/claude-all/commit/52e65ada1fac2d86bc0a44749a23e97a56c4f483))
+
+Four PreToolUse guards that BLOCK the Write in Claude Code when an edit introduces a construct the
+  brunofaust-python-style skill bans, so generation is steered toward the preferred library before
+  the bad import lands:
+
+- python-orjson-guard stdlib json -> orjson - python-structlog-guard stdlib logging -> structlog -
+  python-settings-env-guard os.getenv -> the Settings singleton - python-thread-subprocess-guard raw
+  asyncio.create_subprocess / to_thread / ThreadPoolExecutor -> the owner wrappers
+
+Ported from the source repo's .claude/hooks. This is the edit-time layer that complements the
+  skill's CI layer (the ruff banned-api bans added in v0.4.0): the guard stops it being written, the
+  ban stops it being merged. Edit-time guards steer generation better than a review comment after
+  the fact.
+
+Each guard: fires on Edit/Write/MultiEdit of a .py file; exempts tests/scripts/migrations/alembic;
+  escape hatch is a # guard:allow comment or a per-guard env var (the one owner file that
+  legitimately keeps the stdlib adds it); blocks with exit 2 + a stderr message naming the
+  replacement. Handles MultiEdit's edits[] array, not just Write/Edit's new_string/content.
+
+Wired via hooks.json (PreToolUse, Edit|Write|MultiEdit); installed at user level they apply in every
+  repo. enforcement.md documents the two-layer model. Verified: each guard blocks Write+MultiEdit of
+  its banned construct, allows the
+
+preferred library / # guard:allow / env-var / test paths, and no-ops on malformed input.
+
+- **installer**: Annotate dependencies, add first tests, dogfood own checkers
+  ([`d19bf25`](https://github.com/brunofaust/claude-all/commit/d19bf250f89021e1b35334b9b1f0a456f86ee5b5))
+
+Three follow-ups to the dependency-resolution mechanism.
+
+1. ANNOTATIONS — 8 more resources declare their hard deps: merge-main, mock-drift-sweep,
+  adversarial-verification, verification-loop, repo-audit, prek, python-module-migration,
+  brunofaust-python-style. Every target was validated against the installer's own discover() BEFORE
+  writing, so the graph is correct by construction rather than by hope. Surface-conditional
+  reviewers (terraform-reviewer et al) are deliberately NOT requires — they are runtime-
+  conditional, not install-time.
+
+2. TESTS — the repo's first test suite (tests/test_dependency_resolution.py, 11 tests). Covers the
+  resolver contract: transitive closure, cycle termination, unknown deps reported external not
+  installed, already-selected deps not double-reported, tolerant manifest reading
+  (missing/malformed/non-list requires, parametrized), the flat-agent <name>.claude-all.json
+  convention, and the REAL shipped graph (every requires target resolves; ship-pr pulls its agents)
+  — so a rename that breaks the graph fails here, not at a user's install. pytest>=8 in the dev
+  group + [tool.pytest.ini_options].
+
+3. DOGFOODING — claude-all now runs its OWN checkers on its OWN source in prek.toml (module_private,
+  junk_drawer). It shipped these gates without ever applying them to itself, which is exactly how a
+  module-level _name — banned by the visibility rule this repo publishes — reached cli.py. Both pass
+  clean today; the gate keeps it that way.
+
+Also fixes a /ship self-contradiction: its Rules said whole-repo --all-files while its gate step
+  (correctly) scopes the fast loop to the changed set; the whole-repo no-amnesty gate belongs to
+  /ship-pr.
+
+codecongruence excludes tests/** from duplicate_functions: test cases for one function are
+  arrange-act-assert siblings BY DESIGN — deduping them into a shared mega-test would hide which
+  case broke. Genuine setup duplication is still extracted (build_universe).
+
+- **installer**: Forget stale tool/plugin records without uninstalling; fix visibility
+  ([`682ac51`](https://github.com/brunofaust/claude-all/commit/682ac512acc7824a0986fc75e292f96ebda044c9))
+
+Two follow-ups from review:
+
+1. Module-level visibility. The 5 prune helpers were _-prefixed, which violates this repo's own
+  visibility rule (visibility.md: module-level names never start with _ — the prefix blinds
+  dead-code tools; use __all__). cli.py's convention is public names + __all__ = ["main", "run"].
+  Renamed to public names (is_companion_key, infer_level, undo_artifact, strip_claude_md_block,
+  drop_settings_command) — still not exported, per the convention. (It slipped because claude-all
+  does not run its own module_private checker on cli.py — a dogfooding gap worth wiring later.)
+
+2. Stale tool/plugin RECORDS are now forgotten, not left forever. --prune must never uninstall a
+  brew/pipx binary or a marketplace plugin — but a record for a tool/plugin no longer shipped by the
+  repo was lingering in state.json indefinitely (e.g. a dead tools/lean-ctx from June).
+  forget_records drops the record + any ~/.claude artifact and LEAVES THE BINARY IN PLACE, so state
+  stops claiming to manage something it no longer ships without ever running an uninstall. Plugins
+  stay safe via guard 2 (zero discovered -> never flagged).
+
+Refactor: prune_installs and forget_records shared the footprint-reversal loop (codecongruence C003,
+  0.92). Extracted reverse_footprint() as the single owner — symlink-guarded unlink + undo each
+  artifact — used by both (dogfoods the simplification audit; cleared C003 by dedup, not silencing).
+
+Verified in an isolated HOME: artifact prune, legacy reconstruction fallback, tool-record forget
+  (binary untouched), plugin exclusion, CLAUDE.md preservation.
+
+- **installer**: Per-resource dependency resolution via claude-all.json
+  ([`d414d5a`](https://github.com/brunofaust/claude-all/commit/d414d5a2db79bf0f2d218c126c26f3cb8f808331))
+
+A resource may ship a claude-all.json companion beside it — an extensible manifest, first key
+  requires: ['kind/name', ...] (room to grow). Folder resources use <dir>/claude-all.json; flat
+  agents <name>.claude-all.json, mirroring the hook companion convention.
+
+Installing a resource pulls in its transitive, cycle-safe dependency closure: install skills/ship-pr
+  and its delegated agents/skills (lint-fixer, test-runner, docs-updater, git-committer,
+  verification-loop, code-review-discipline) come with it. Resolution runs over the UNFILTERED
+  resource set, so a dependency the user's filter would exclude is still installed; the installer
+  reports what it pulled in. A requires entry that resolves to no installable resource (a built-in
+  like /code-review) is reported as external and skipped — never fails the install.
+
+Per-resource, not a central manifest: the deps live WITH the resource, so deleting it deletes its
+  deps — no central file to orphan (the anti-drift property the prune feature enforces from the
+  other direction; central requires.json would reintroduce exactly the stale-record class prune
+  exists to kill).
+
+scripts/check_requires.py is the drift gate (wired in prek): every requires entry must resolve to a
+  real resource. It imports the installer's own discover()/state_key, so 'what is a resource' is
+  defined in ONE place — a rename in cli.py that invalidates a requires fails the check. Proven:
+  passes clean on the 2 seeded manifests (ship-pr, ship); bites on an injected dangling dep.
+
+Resolver verified: closure + dedup (ship-pr -> 7), cascade (dep-of-dep), cycle termination
+  (ship<->ship-pr), external/unknown deps reported not crashed.
+
+NOTE: prune (PR #91) should consult this graph — never prune a still-required resource. That guard
+  lands once #91 is on main (its prune functions don't exist here yet); tracked as the follow-up.
+
+- **installer**: Prune stale installs no longer shipped by the repo
+  ([`b8d89da`](https://github.com/brunofaust/claude-all/commit/b8d89daabbb1853f37ae6a4d6ab98da562843811))
+
+The installer records every install in ~/.claude-all/state.json, but nothing removed an install when
+  its resource was later deleted from the repo — a skill merged/retired left a dangling symlink,
+  CLAUDE.md block, and settings hook entry in ~/.claude forever.
+
+Now every run prints an advisory notice listing installed-but-no-longer-shipped resources, and
+  `claude-all --prune` removes each one (symlink + CLAUDE.md block + settings hook entry + state
+  record, plus companion records) with no confirmation.
+
+A naive 'recorded minus discovered' diff is UNSAFE — tested against a live state.json it would have
+  deleted real data. Three guards, each closing a verified false-positive: 1. Companion sub-records
+  (<name>.claude_md) are pruned only WITH their primary; alone they'd strip an installed resource's
+  CLAUDE.md block. 2. A kind for which discover() returns ZERO items is never flagged — a missing
+  enumerator (no plugins/ dir in the package) would else mark every recorded plugin stale. 3. The
+  recorded target symlink is unlinked ONLY when it is actually a symlink, so a recorded real file
+  (e.g. a CLAUDE.md path) is never deleted.
+
+Reuses the existing idempotent remove_claude_md / remove_hook. Verified end-to-end in an isolated
+  HOME: prune removes symlink + companion hook + CLAUDE.md block + settings entry + state (primary
+  and companion), and preserves unrelated CLAUDE.md content. This is the prerequisite for retiring
+  the 7 frontend skills into brunofaust-frontend-style — the delete now propagates to existing
+  installs.
+
+- **installer**: Record install footprint + exclude tools/plugins from prune
+  ([`a8b2e59`](https://github.com/brunofaust/claude-all/commit/a8b2e59825c0aaabfb46efde4a5746032086d312))
+
+Two refinements to stale-pruning:
+
+1. Never prune tools/plugins. Their install is more than a symlink+block+hook (a brew binary, a
+  plugin-marketplace entry), so removing only our recorded artifacts would leave the real thing
+  half-installed. Excluded from staleness.
+
+2. Record each install's full FOOTPRINT in state.json. record_artifact appends an 'artifacts' list
+  per install — the CLAUDE.md block (+ its tags), each settings.json hook command, the hook symlink
+  — captured where each side-effect is created (inject_claude_md / inject_hook /
+  install_standalone_hook). --prune now reverses EXACTLY what an install did, source-independently,
+  even after the resource is deleted from the repo and we've lost its hook.json/claude_md.md.
+
+This closes a real gap the reconstruction approach had: a standalone hook's settings entry + symlink
+  use <name>.py, but reconstruction derived the companion <kind>-<name>.py path and would miss them.
+  Recording the actual command/path fixes it. Entries recorded before footprints fall back to
+  kind/name reconstruction.
+
+Dedup: remove_hook's settings-entry stripping and the new artifact reversal are the same operation,
+  so remove_hook now delegates to _drop_settings_command — one owner for 'strip this command from
+  settings.json' (dogfoods the simplification audit; cleared the codecongruence C003 by dedup, not
+  by silencing).
+
+Verified in an isolated HOME: artifact-path removal (hook symlink + block + settings command + real
+  content preserved), legacy reconstruction fallback, tools/plugins exclusion, and
+  reinstall-resets-footprint all pass.
+
+- **ship**: Hard full-prek gate on both stages — no pre-existing-issue amnesty
+  ([`c08bb95`](https://github.com/brunofaust/claude-all/commit/c08bb95bce4de23839acd76396e8f4f21032d543))
+
+Every ship must be full green across the WHOLE repo, not just the diff. Adds a non-negotiable gate
+  to /ship and /ship-pr: before commit, run
+
+prek run --all-files # pre-commit stage prek run --all-files --hook-stage pre-push # pre-push stage
+
+over the entire repo, and require zero Failed on BOTH.
+
+NO pre-existing-issue amnesty: a hook failing on a file OUTSIDE the current diff still blocks the
+  ship. 'It was already broken' is not an exception — fix the root cause (route to lint-fixer; never
+  # noqa / SKIP= / --no-verify / config-loosen), then re-run both stages until green.
+
+This closes the recurring 'pre-existing issues slipped through' gap: lint-fixer only touches changed
+  files, and prek run --all-files alone runs only the pre-commit stage — so neither guaranteed a
+  whole-repo both-stage green. Both skills also warn to read per-hook status lines: a '(no files to
+  check) Skipped' on input a hook should have inspected is a vacuous pass, not green (per the prek
+  skill's vacuous-PASS section).
+
+- **ship**: Skill-audit framework — audit each changed file vs its stack skill
+  ([`c3ee324`](https://github.com/brunofaust/claude-all/commit/c3ee32464866b81ebb16086014e35b4d7c44bd39))
+
+Generalizes the standard audit step in /ship and /ship-pr from 'against yagni.md' to 'against the
+  stack skill's audit.md', via a file-type map: *.py -> brunofaust-python-style/references/audit.md
+  *.tsx/*.jsx/*.ts -> brunofaust-frontend-style/references/audit.md (pending)
+
+New references/audit.md is the skill's master JUDGMENT checklist — minimalism, layering,
+  error-handling, async, boundaries, config, tests, ownership — and is explicitly the layer the
+  mechanical checkers cannot see. It never restates a checker-gated rule (no-typeddict,
+  extra-forbid, masking-default, ...); it catches the judgment calls: pass-through chains,
+  speculative abstractions, I/O mixed with logic, a swallowed except, a fixture that restates the
+  code, os.getenv outside Settings. Scales to the diff, never strips a hard rule.
+
+/ship-pr also gains: - a surface-scoped SEO review step: fires when the diff renders crawler-visible
+  HTML (a frontend page OR a server-rendered template OR sitemap/robots), never a pure JSON API.
+  Scoped by surface, not stack — a Django SSR page counts. - security-review promoted from loose
+  judgment to standard-when-a-security-surface -is-touched
+  (auth/secrets/input/IaC/IAM/shell/tenant). web-security (frontend XSS/CSP) rides the frontend
+  skill audit; this step is the cross-stack audit.
+
+Kept /ship and /ship-pr separate on purpose: /ship-pr adds three real layers (code-review, security,
+  docs) beyond /ship+PR, and /ship's lightness is what makes commit-early-commit-often work — they
+  compose (ship-pr reuses ship's gates), not duplicate.
+
+- **ship-pr**: Scope /ship to changed files; parallel Phase 2 with IaC, migration, dependency
+  reviews
+  ([`0adb981`](https://github.com/brunofaust/claude-all/commit/0adb981c8a60d01b6aed67b0111fcd49d77d9c7a))
+
+Refines the ship pipelines per review:
+
+/ship — gate the CHANGED files (both stages), not the whole repo. It is the fast commit loop, so it
+  gates your changes (prek run + prek --hook-stage pre-push --files ...) and does not block a quick
+  WIP commit on an unrelated pre-existing issue elsewhere. The whole-repo, no-pre-existing-amnesty
+  full gate stays /ship-pr's job (the outward-facing boundary where shared code must be fully
+  green).
+
+/ship-pr — three phases, Phase 2 runs in PARALLEL. Phase 1 (serial, mutating): skill audit +
+  /simplify -> lint-fixer. Phase 2 (concurrent subagents, read-only over final code): coverage,
+  tests, full prek (--all-files both stages), code-review, and the surface-scoped reviews. Phase 3
+  (serial): docs -> commit -> PR. Fanning out the independent reads is what stops ship-pr being a
+  30-minute serial crawl; mutators stay serial and first so readers see final code.
+
+Surface-scoped Phase-2 reviews, each firing only on its surface: - architecture-decision-guard —
+  structural change (new boundary/layer/interface) - IaC review — *.tf / CloudFormation / CDK:
+  cloudformation-reviewer / terraform-reviewer + aws-architecture and aws-cost-optimization lenses
+  (arch fitness AND cost) - migration-reviewer — a DB migration file - dependency review —
+  pyproject/uv.lock/requirements or package.json/lock: CVE scan gates high/critical;
+  version-currency + maintenance + fit (research-before-build + Context7) ADVISES the user without
+  blocking. Owns the dep slice of the supply-chain surface.
+
+Skipped when the diff doesn't touch the surface, so the common case stays fast.
+
+- **yagni**: Pass-through-chain anti-pattern + standard simplification audit in ship/ship-pr
+  ([`0a298a6`](https://github.com/brunofaust/claude-all/commit/0a298a67472f94c822e64d09da94ae96686dfa63))
+
+Refines the YAGNI reference with the single most common over-engineering — one operation smeared
+  across a chain of forwarding methods:
+
+get_by_id -> _get_by_id -> _get_from_database -> _query -> _result_as_pydantic
+
+collapsed to the one method it should be:
+
+get_by_id -> db.fetchrow(...) -> Model.model_validate(...)
+
+A routine ~30% line reduction with zero behaviour change. The rule: a private method must do
+  something genuinely distinct AND shared (2+ callers) — a helper with one caller that only forwards
+  gets inlined; the whole operation should read top to bottom in one method. Private methods are
+  fine; a chain of forwarders is not.
+
+Adds a yagni.md 'Audit checklist' and makes the simplification audit a STANDARD (no longer optional)
+  step in BOTH /ship and /ship-pr: every changed file is audited against the checklist before the
+  gates, mechanical fixes applied via /simplify, judgment calls reported. It scales to the diff
+  (trivial rename -> quick pass; feature code -> full list) but is never skipped, and never strips
+  the skill's hard rules (a boundary model / owner class / docstring stay).
 
 
 ## v0.4.0 (2026-07-16)
