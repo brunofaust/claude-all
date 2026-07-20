@@ -140,7 +140,7 @@ def is_companion_key(name: str) -> bool:
     return name.endswith(COMPANION_SUFFIX)
 
 
-def infer_level(target: str | None) -> str:
+def infer_scope(target: str | None) -> str:
     """Infer the install scope from a recorded target path.
 
     Args:
@@ -215,10 +215,10 @@ def prune_installs(entries: list[dict]) -> list[str]:
         if not (entry.get("artifacts") or []):
             # Legacy entry (recorded before footprints): reconstruct from kind/name.
             item = Item(kind=kind, subcategory="", name=name, src=Path("."))
-            level = infer_level(entry.get("target"))
-            if remove_claude_md(item, level):
+            scope = infer_scope(entry.get("target"))
+            if remove_claude_md(item, scope):
                 actions.append("CLAUDE.md block")
-            if remove_hook(item, level):
+            if remove_hook(item, scope):
                 actions.append("hook")
         installs.pop(state_key(kind, name), None)
         installs.pop(state_key(kind, name + COMPANION_SUFFIX), None)
@@ -423,7 +423,7 @@ def install_root_of(path: Path) -> str:
     return text.split(marker)[0] if marker in text else ""
 
 
-def check_links(level: str) -> list[dict]:
+def check_links(scope: str) -> list[dict]:
     """Report symlinks that dangle, or a MIXED install spanning several roots.
 
     "Outdated" is not "differs from the CLI I'm running" — running a dev build to
@@ -433,13 +433,13 @@ def check_links(level: str) -> list[dict]:
     another, so upgrading one leaves the others stale.
 
     Args:
-        level: Install scope — ``'user'`` or ``'project'``.
+        scope: Install scope — ``'user'`` or ``'project'``.
 
     Returns:
         One finding per dangling link, plus one summary finding per minority root
         when the install is mixed.
     """
-    base = USER_CLAUDE_DIR if level == "user" else Path.cwd() / ".claude"
+    base = USER_CLAUDE_DIR if scope == "user" else Path.cwd() / ".claude"
     findings: list[dict] = []
     roots: dict[str, list[str]] = {}
     for sub in LINK_DIRS:
@@ -479,16 +479,16 @@ def check_links(level: str) -> list[dict]:
     return findings
 
 
-def check_settings_hooks(level: str) -> list[dict]:
+def check_settings_hooks(scope: str) -> list[dict]:
     """Report settings.json hook entries that are broken or double-wired.
 
     Args:
-        level: Install scope — ``'user'`` or ``'project'``.
+        scope: Install scope — ``'user'`` or ``'project'``.
 
     Returns:
         One finding string per problem entry.
     """
-    settings_file = settings_path(level)
+    settings_file = settings_path(scope)
     if not settings_file.exists():
         return []
     try:
@@ -538,16 +538,16 @@ def check_settings_hooks(level: str) -> list[dict]:
     return findings
 
 
-def check_claude_md(level: str) -> list[dict]:
+def check_claude_md(scope: str) -> list[dict]:
     """Report CLAUDE.md blocks that are malformed or have no install record.
 
     Args:
-        level: Install scope — ``'user'`` or ``'project'``.
+        scope: Install scope — ``'user'`` or ``'project'``.
 
     Returns:
         One finding string per problem block.
     """
-    target = claude_md_target(level)
+    target = claude_md_target(scope)
     if not target.exists():
         return []
     text = target.read_text()
@@ -585,18 +585,18 @@ def check_claude_md(level: str) -> list[dict]:
     return findings
 
 
-def scan_leftovers(level: str) -> tuple[list[dict], list[dict]]:
+def scan_leftovers(scope: str) -> tuple[list[dict], list[dict]]:
     """Find broken install artifacts, split into removable and advisory.
 
     Args:
-        level: Install scope — ``'user'`` or ``'project'``.
+        scope: Install scope — ``'user'`` or ``'project'``.
 
     Returns:
         ``(removable, advisory)`` — removable findings carry an ``artifact`` dict
         that ``undo_artifact`` can reverse; advisory ones are fixed by re-running
         the installer or a hand-edit, so ``--prune`` reports without touching them.
     """
-    findings = check_links(level) + check_settings_hooks(level) + check_claude_md(level)
+    findings = check_links(scope) + check_settings_hooks(scope) + check_claude_md(scope)
     removable = [f for f in findings if f.get("artifact")]
     advisory = [f for f in findings if not f.get("artifact")]
     return removable, advisory
@@ -618,7 +618,7 @@ def remove_leftovers(findings: list[dict]) -> list[str]:
     return removed
 
 
-def notify_stale(level: str = "user") -> None:
+def notify_stale(scope: str = "user") -> None:
     """Print the end-of-run notice: everything `--prune` would clean up.
 
     Covers both kinds of leftover — a resource the repo no longer ships, and an
@@ -627,11 +627,11 @@ def notify_stale(level: str = "user") -> None:
     reinstall or a hand-edit fixes.
 
     Args:
-        level: Install scope the run targeted — ``'user'`` or ``'project'``.
+        scope: Install scope the run targeted — ``'user'`` or ``'project'``.
     """
     stale = stale_installs()
     records = stale_records()
-    removable, advisory = scan_leftovers(level)
+    removable, advisory = scan_leftovers(scope)
     if not (stale or records or removable or advisory):
         return
     count = len(stale) + len(records) + len(removable)
@@ -1068,7 +1068,7 @@ def shell_quote(s: str) -> str:
     return "'" + s.replace("'", "'\\''") + "'"
 
 
-def install_mcp(item: Item, level: str) -> str:
+def install_mcp(item: Item, scope: str) -> str:
     """Install MCP via `claude mcp add`.
 
     Secrets stay in macOS keychain. Any `keychain:NAME` in env or args is
@@ -1078,7 +1078,7 @@ def install_mcp(item: Item, level: str) -> str:
 
     Args:
         item: The MCP item to install (reads mcp.json for name, command, args, env).
-        level: Installation scope — ``'user'`` or ``'project'``.
+        scope: Installation scope — ``'user'`` or ``'project'``.
     """
     meta = json.loads(item.src.read_text())
     name = meta.get("name") or item.name
@@ -1096,7 +1096,7 @@ def install_mcp(item: Item, level: str) -> str:
         isinstance(v, str) and v.startswith("keychain:") for v in raw_env.values()
     ) or any(isinstance(a, str) and a.startswith("keychain:") for a in raw_args)
 
-    scope = "user" if level == "user" else "project"
+    scope = "user" if scope == "user" else "project"
     cmd = ["claude", "mcp", "add", name, "--scope", scope]
     if transport and transport != "stdio":
         cmd += ["--transport", transport]
@@ -1165,7 +1165,7 @@ def install_tool(item: Item) -> str:
     """Install a CLI tool. Dispatches on tool.json `type` (brew, uv_tool, etc.).
 
     Tools are GLOBAL (user-machine-wide) — `--user` vs `--project` doesn't apply.
-    The optional `claude_md.md` snippet still gets injected at the level the
+    The optional `claude_md.md` snippet still gets injected at the scope the
     caller chose, so anti-pattern rules can be per-user or per-project.
 
     Args:
@@ -1279,21 +1279,21 @@ def hook_files(item: Item) -> tuple[Path, Path] | None:
     return None
 
 
-def settings_path(level: str) -> Path:
-    if level == "user":
+def settings_path(scope: str) -> Path:
+    if scope == "user":
         return Path.home() / ".claude" / "settings.json"
     return Path.cwd() / ".claude" / "settings.json"
 
 
-def hook_symlink_dest(level: str, item: Item) -> Path:
-    if level == "user":
+def hook_symlink_dest(scope: str, item: Item) -> Path:
+    if scope == "user":
         base = Path.home() / ".claude" / "hooks"
     else:
         base = Path.cwd() / ".claude" / "hooks"
     return base / f"{item.kind}-{item.name}.py"
 
 
-def inject_hook(item: Item, level: str) -> str | None:
+def inject_hook(item: Item, scope: str) -> str | None:
     """Install hook: symlink script to .claude/hooks/, merge into settings.json.
 
     Idempotent — re-install sweeps ALL events for entries whose command basename
@@ -1302,7 +1302,7 @@ def inject_hook(item: Item, level: str) -> str | None:
 
     Args:
         item: The resource item whose hook files to install.
-        level: Installation scope — ``'user'`` or ``'project'``.
+        scope: Installation scope — ``'user'`` or ``'project'``.
     """
     files = hook_files(item)
     if files is None:
@@ -1319,7 +1319,7 @@ def inject_hook(item: Item, level: str) -> str | None:
     timeout = int(hook_meta.get("timeout", 2000))
 
     # Symlink hook script
-    dest = hook_symlink_dest(level, item)
+    dest = hook_symlink_dest(scope, item)
     dest.parent.mkdir(parents=True, exist_ok=True)
     if dest.is_symlink() or dest.exists():
         dest.unlink()
@@ -1332,7 +1332,7 @@ def inject_hook(item: Item, level: str) -> str | None:
     py_path.chmod(mode | 0o111)
 
     # Merge into settings.json
-    settings_file = settings_path(level)
+    settings_file = settings_path(scope)
     settings_file.parent.mkdir(parents=True, exist_ok=True)
     if settings_file.exists():
         try:
@@ -1380,18 +1380,18 @@ def inject_hook(item: Item, level: str) -> str | None:
     return f"hook installed → {dest}, registered in {settings_file}"
 
 
-def remove_hook(item: Item, level: str) -> str | None:
+def remove_hook(item: Item, scope: str) -> str | None:
     """Remove hook entry from settings.json + delete symlink. Idempotent.
 
     Args:
         item: The resource item whose hook to remove.
-        level: Installation scope — ``'user'`` or ``'project'``.
+        scope: Installation scope — ``'user'`` or ``'project'``.
     """
-    dest = hook_symlink_dest(level, item)
+    dest = hook_symlink_dest(scope, item)
     # The settings-entry removal IS `drop_settings_command` — one owner for
     # "strip this command from settings.json", used by both remove_hook and the
     # artifact-based prune path.
-    removed_any = bool(drop_settings_command(settings_path(level), str(dest)))
+    removed_any = bool(drop_settings_command(settings_path(scope), str(dest)))
 
     if dest.is_symlink() or dest.exists():
         dest.unlink()
@@ -1421,8 +1421,8 @@ def claude_md_snippet_path(item: Item) -> Path | None:
     return candidate if candidate.exists() else None
 
 
-def claude_md_target(level: str) -> Path:
-    if level == "user":
+def claude_md_target(scope: str) -> Path:
+    if scope == "user":
         return Path.home() / ".claude" / "CLAUDE.md"
     return Path.cwd() / "CLAUDE.md"
 
@@ -1435,7 +1435,7 @@ def snippet_tags(item: Item) -> tuple[str, str]:
     )
 
 
-def inject_claude_md(item: Item, level: str) -> str | None:
+def inject_claude_md(item: Item, scope: str) -> str | None:
     """Inject the resource's claude_md.md snippet into the target CLAUDE.md.
 
     Idempotent: re-install replaces the existing tagged block.
@@ -1443,13 +1443,13 @@ def inject_claude_md(item: Item, level: str) -> str | None:
 
     Args:
         item: The resource item whose claude_md snippet to inject.
-        level: Target CLAUDE.md scope — ``'user'`` or ``'project'``.
+        scope: Target CLAUDE.md scope — ``'user'`` or ``'project'``.
     """
     snippet_path = claude_md_snippet_path(item)
     if snippet_path is None:
         return None
 
-    target = claude_md_target(level)
+    target = claude_md_target(scope)
     target.parent.mkdir(parents=True, exist_ok=True)
 
     start_tag, end_tag = snippet_tags(item)
@@ -1477,14 +1477,14 @@ def inject_claude_md(item: Item, level: str) -> str | None:
     return f"CLAUDE.md {action} ({target})"
 
 
-def remove_claude_md(item: Item, level: str) -> str | None:
+def remove_claude_md(item: Item, scope: str) -> str | None:
     """Strip the resource's tagged block from the target CLAUDE.md.
 
     Args:
         item: The resource item whose tagged block to remove.
-        level: Target CLAUDE.md scope — ``'user'`` or ``'project'``.
+        scope: Target CLAUDE.md scope — ``'user'`` or ``'project'``.
     """
-    target = claude_md_target(level)
+    target = claude_md_target(scope)
     if not target.exists():
         return None
     start_tag, end_tag = snippet_tags(item)
@@ -1572,7 +1572,7 @@ def purge_hook_entries(settings: dict, target_basename: str) -> None:
             del hooks[ev]
 
 
-def install_standalone_hook(item: Item, level: str) -> str:
+def install_standalone_hook(item: Item, scope: str) -> str:
     """Install a standalone ``hooks/`` script: symlink + wire into settings.json.
 
     Metadata (event / matcher / timeout) comes from ``hooks/hooks.json``. The
@@ -1583,7 +1583,7 @@ def install_standalone_hook(item: Item, level: str) -> str:
 
     Args:
         item: The hook item (``kind="hooks"``).
-        level: Installation scope — ``'user'`` or ``'project'``.
+        scope: Installation scope — ``'user'`` or ``'project'``.
     """
     try:
         manifest = json.loads((REPO_ROOT / "hooks" / "hooks.json").read_text())
@@ -1594,7 +1594,7 @@ def install_standalone_hook(item: Item, level: str) -> str:
     matcher = meta.get("matcher", "Edit|Write")
     timeout = int(meta.get("timeout", 2000))
 
-    base = (USER_CLAUDE_DIR if level == "user" else Path.cwd() / ".claude") / "hooks"
+    base = (USER_CLAUDE_DIR if scope == "user" else Path.cwd() / ".claude") / "hooks"
     base.mkdir(parents=True, exist_ok=True)
     dest = base / f"{item.name}.py"
     if dest.is_symlink() or dest.exists():
@@ -1610,7 +1610,7 @@ def install_standalone_hook(item: Item, level: str) -> str:
     cmd_str = str(dest)
     target_basename = f"{item.name}.py"
 
-    settings_file = settings_path(level)
+    settings_file = settings_path(scope)
     settings_file.parent.mkdir(parents=True, exist_ok=True)
     settings: dict = {}
     if settings_file.exists():
@@ -1644,34 +1644,34 @@ def install_standalone_hook(item: Item, level: str) -> str:
 
 
 def install_item(item: Item, target_root: Path) -> str:
-    level = "user" if target_root == USER_CLAUDE_DIR else "project"
+    scope = "user" if target_root == USER_CLAUDE_DIR else "project"
 
     if item.kind == "hooks":
-        return install_standalone_hook(item, level)
+        return install_standalone_hook(item, scope)
 
     if item.kind == "instructions":
         # Snippet-only resource: inject the tagged block, nothing to symlink.
-        md = inject_claude_md(item, level)
-        record_install(item.kind, item.name, claude_md_target(level))
+        md = inject_claude_md(item, scope)
+        record_install(item.kind, item.name, claude_md_target(scope))
         return md or f"instructions/{item.name}: no snippet found"
 
     if item.kind == "plugins":
         result = install_plugin(item)
-        md = inject_claude_md(item, level)
+        md = inject_claude_md(item, scope)
         if md:
             print(f"  ↳ {md}")
         return result
 
     if item.kind == "mcps":
-        result = install_mcp(item, level)
-        md = inject_claude_md(item, level)
+        result = install_mcp(item, scope)
+        md = inject_claude_md(item, scope)
         if md:
             print(f"  ↳ {md}")
         return result
 
     if item.kind == "tools":
         result = install_tool(item)
-        md = inject_claude_md(item, level)
+        md = inject_claude_md(item, scope)
         if md:
             print(f"  ↳ {md}")
         return result
@@ -1700,10 +1700,10 @@ def install_item(item: Item, target_root: Path) -> str:
     os.symlink(src, target_path)
     record_install(item.kind, item.name, target_path)
 
-    md = inject_claude_md(item, level)
+    md = inject_claude_md(item, scope)
     if md:
         print(f"  ↳ {md}")
-    hk = inject_hook(item, level)
+    hk = inject_hook(item, scope)
     if hk:
         print(f"  ↳ {hk}")
 
@@ -1790,8 +1790,8 @@ def update_item(kind: str, name: str, install_record: dict, all_items: list[Item
         # No symlink — re-inject the snippet. Infer scope from the recorded
         # CLAUDE.md target path (falls back to user).
         recorded = install_record.get("target") or ""
-        level = "project" if recorded.startswith(str(Path.cwd())) else "user"
-        md = inject_claude_md(match, level)
+        scope = "project" if recorded.startswith(str(Path.cwd())) else "user"
+        md = inject_claude_md(match, scope)
         return f"  ✓ refreshed instructions/{name}" + (f"\n    ↳ {md}" if md else "")
 
     # agents / skills — re-create symlink at recorded target
@@ -1814,14 +1814,14 @@ def update_item(kind: str, name: str, install_record: dict, all_items: list[Item
     # Refresh timestamp
     record_install(kind, name, target_path)
 
-    # Infer level from target path so claude_md + hook re-injection lands in the right scope
-    level = "user" if str(target_path).startswith(str(USER_CLAUDE_DIR)) else "project"
+    # Infer scope from target path so claude_md + hook re-injection lands in the right scope
+    scope = "user" if str(target_path).startswith(str(USER_CLAUDE_DIR)) else "project"
 
     extras = []
-    md = inject_claude_md(match, level)
+    md = inject_claude_md(match, scope)
     if md:
         extras.append(md)
-    hk = inject_hook(match, level)
+    hk = inject_hook(match, scope)
     if hk:
         extras.append(hk)
 
@@ -2024,13 +2024,13 @@ def tui_select(items: list[Item]) -> str:
     return curses.wrapper(tui_select_loop, items)
 
 
-def choose_level_tui() -> str | None:
+def choose_scope_tui() -> str | None:
     def _run(stdscr):
         curses.curs_set(0)
         stdscr.keypad(True)
         choices = [
-            ("user", f"User level    →  {USER_CLAUDE_DIR}"),
-            ("project", f"Project level →  {Path.cwd() / '.claude'}"),
+            ("user", f"User scope    →  {USER_CLAUDE_DIR}"),
+            ("project", f"Project scope →  {Path.cwd() / '.claude'}"),
         ]
         cursor = 0
         while True:
@@ -2082,11 +2082,11 @@ def main(argv: list[str]) -> int:
     )
     ap.add_argument("--list", action="store_true", help="List items without installing")
     ap.add_argument("--all", action="store_true", help="Select everything (skip TUI)")
-    ap.add_argument("--user", action="store_true", help="Install to ~/.claude (skip level prompt)")
+    ap.add_argument("--user", action="store_true", help="Install to ~/.claude (skip scope prompt)")
     ap.add_argument(
         "--project",
         action="store_true",
-        help="Install to ./.claude (skip level prompt)",
+        help="Install to ./.claude (skip scope prompt)",
     )
     ap.add_argument(
         "--prune",
@@ -2097,10 +2097,10 @@ def main(argv: list[str]) -> int:
     args = ap.parse_args(argv)
 
     if args.prune:
-        prune_level = "project" if args.project else "user"
+        prune_scope = "project" if args.project else "user"
         removed = prune_installs(stale_installs())
         forgotten = forget_records(stale_records())
-        leftovers, advisory = scan_leftovers(prune_level)
+        leftovers, advisory = scan_leftovers(prune_scope)
         cleaned = remove_leftovers(leftovers)
         if removed:
             print(f"Pruned {len(removed)} stale install(s):")
@@ -2175,18 +2175,18 @@ def main(argv: list[str]) -> int:
             file=sys.stderr,
         )
 
-    level: str | None
+    scope: str | None
     if args.user:
-        level = "user"
+        scope = "user"
     elif args.project:
-        level = "project"
+        scope = "project"
     else:
-        level = choose_level_tui()
-        if level is None:
+        scope = choose_scope_tui()
+        if scope is None:
             print("Cancelled.")
             return 0
 
-    target_root = USER_CLAUDE_DIR if level == "user" else (Path.cwd() / ".claude")
+    target_root = USER_CLAUDE_DIR if scope == "user" else (Path.cwd() / ".claude")
 
     print(f"\nInstalling {len(chosen)} item(s) → {target_root}\n")
     failures = 0
@@ -2206,10 +2206,10 @@ def main(argv: list[str]) -> int:
 
     if failures:
         print(f"\nDone with {failures} failure(s) — see errors above.", file=sys.stderr)
-        notify_stale(level)
+        notify_stale(scope)
         return 1
     print("\nDone. Symlinks → edits in repo propagate to install location.")
-    notify_stale(level)
+    notify_stale(scope)
     return 0
 
 

@@ -21,6 +21,13 @@
   a perfectly healthy install.
   10 tests, each asserting the check actually **bites** on a specific defect (a check that can only
   report "clean" is the vacuous pass this repo keeps hunting), plus no-false-positive cases.
+- **installer**: renamed the internal `level` parameter to **`scope`** (78 sites, `cli.py` only).
+  `level` didn't say what it was a level *of* — it reads like a verbosity or log level, when it
+  actually means *where things install*: `~/.claude` (user) vs `./.claude` (project), which is how the
+  README and `--help` already describe it. Also `infer_level`→`infer_scope`,
+  `choose_level_tui`→`choose_scope_tui`. Pure rename — 78 insertions / 78 deletions, no behaviour
+  change, no public API affected (`__all__` is just `main`/`run`); verified by mypy, 24 tests, and an
+  end-to-end run of both scopes.
 - **research-before-build**: gains a `claude_md.md` so the rule is always loaded, not only when the
   skill is invoked. Step 0 of any non-trivial build is a search — and the cheapest, most-missed check
   is the local one: grep THIS repo before adding a command, flag, helper or skill that may already
