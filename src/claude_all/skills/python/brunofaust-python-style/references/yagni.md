@@ -44,6 +44,56 @@ There is no `CustomerRepository(Protocol)`, no `CustomerService` forwarding to i
 no `AbstractStore` base class. When a second reader or a real test-seam appears,
 add exactly that — not before.
 
+## Pass-through chains — the most common over-engineering
+
+The single most frequent way simple code turns complex: **one operation smeared
+across a chain of methods that each only forward to the next.** A plain "select a
+row, return the model" becomes six hops:
+
+```python
+# BAD: six methods to run one query. Each hop only forwards.
+class CustomerStore:
+    async def get_by_id(self, id: str) -> Customer | None:
+        return await self._get_by_id(id)
+
+    async def _get_by_id(self, id: str) -> Customer | None:
+        return await self._get_from_database(id)
+
+    async def _get_from_database(self, id: str) -> Customer | None:
+        row = await self._query(id)
+        return self._result_as_pydantic(row)
+
+    async def _query(self, id: str):
+        return await self._db.fetchrow("SELECT ... WHERE id = $1", id)
+
+    def _result_as_pydantic(self, row) -> Customer | None:
+        return Customer.model_validate(dict(row)) if row else None
+```
+
+```python
+# GOOD: one method. Read it top to bottom.
+class CustomerStore:
+    async def get_by_id(self, id: str) -> Customer | None:
+        """Return the customer, or None."""
+        row = await self._db.fetchrow("SELECT id, name FROM customers WHERE id = $1", id)
+        return Customer.model_validate(dict(row)) if row else None
+```
+
+Every private method in the bad version has **exactly one caller** and does nothing
+but hand off — `_get_by_id` → `_get_from_database` → `_query` → `_result_as_pydantic`.
+That is not "separation of concerns"; it is one concern chopped into pieces you now
+have to reassemble in your head. Collapsing it is a routine **~30% line reduction**
+with zero behaviour change.
+
+**Private methods are fine — a chain of forwarders is not.** The test for keeping a
+private method: does it do something *genuinely distinct and reused*, or does it
+just pass its arguments along? A private helper called from **one** place that only
+forwards → inline it. A private helper that does a real, separable step called from
+**two or more** methods → keep it. The smell is the *chain*: A calls B calls C calls
+D and each has a single caller. The whole operation should be readable in one
+method top to bottom; reach for a private helper only when a step is both distinct
+and shared.
+
 ## Banned by default — stop and write down the need before adding one
 
 - **Pass-through functions** that only forward their arguments to one other call.
@@ -156,6 +206,31 @@ Deletion-pass questions, per unit:
   - What input does this defensive branch actually catch that the types allow?
     (none → delete the branch)
 ```
+
+## Audit checklist — run on every changed file
+
+`/ship` and `/ship-pr` audit each changed file against this list as a **standard
+step**. For each changed file, flag and fix:
+
+- [ ] **Pass-through chain** — a method calls a private method that calls another
+      that only forwards (each with one caller). Collapse to one method.
+- [ ] **Pass-through function** — forwards its args to one other call and adds
+      nothing. Inline it at the call site.
+- [ ] **`Protocol` / ABC / base class with one implementation.** Use the concrete type.
+- [ ] **A "repository"/"client"/"manager"/"wrapper" over a library that is already
+      an abstraction (SQLAlchemy, httpx, a dict)** and adds no real logic. Inline it.
+- [ ] **Factory / strategy / registry** where a dict literal or a function does it.
+- [ ] **A parameter/config option with exactly one value** ever passed. Make it a constant.
+- [ ] **A defensive branch on an input the types/callers already guarantee.** Delete it.
+- [ ] **Speculative extension point** ("might need it later") with no present caller.
+- [ ] **Many tiny functions** where fewer, longer, obvious ones would read better —
+      "how many files/hops to understand this?" is the metric, not lines-per-function.
+
+For each flag: either name the concrete *present* need it serves, or simplify.
+Mechanical simplifications go through `/simplify`; judgment calls are reported.
+Trivial diffs (rename/format/one-liner) get a quick pass; feature code gets the
+full list. This audit does **not** touch the skill's hard rules — a boundary model,
+a docstring, an owner class stay (see below).
 
 ## Interaction with the rest of this skill
 

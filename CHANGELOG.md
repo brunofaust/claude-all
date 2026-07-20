@@ -5,6 +5,17 @@
 
 ### Added
 
+- **ship / ship-pr**: the **simplification audit is now a STANDARD step**, not optional. Both
+  pipelines audit every changed file against `yagni.md`'s new "Audit checklist" (pass-through method
+  chains, one-impl `Protocol`s, a repository wrapping SQLAlchemy, factories a dict replaces, config for
+  one-value options, speculative extension points) before the gates, applying mechanical fixes via
+  `/simplify` and reporting judgment calls. It scales to the diff — a trivial rename gets a quick pass,
+  feature code gets the full list — but is never skipped, and never strips the skill's hard rules.
+- **brunofaust-python-style**: `references/yagni.md` gains the **pass-through-chain** anti-pattern — the
+  single most common over-engineering — with the six-hop `get_by_id → _get_by_id → _get_from_database
+  → _query → _result_as_pydantic` example collapsed to one method (a routine ~30% line reduction), the
+  rule that a private method must do something distinct-and-shared (not just forward), and an **Audit
+  checklist** that `/ship` and `/ship-pr` run against every changed file.
 - **brunofaust-python-style**: `references/yagni.md` — a minimalism / do-not-over-engineer
   reference, the counterweight to `architecture.md`. Structure is a cost, not a virtue:
   name a concrete *present* reason for every unit ("might need it later" / "more flexible"

@@ -2,8 +2,8 @@
 name: ship
 description: >-
   Lightweight pre-commit pipeline — run the quality gates and commit, in order, stopping on the first
-  hard failure. Sequence: test-coverage gate → lint-fixer → test-runner → verification-loop →
-  (confirm) → git-committer.
+  hard failure. Sequence: simplification audit (vs yagni.md) → test-coverage gate → lint-fixer →
+  test-runner → verification-loop → (confirm) → git-committer.
   Use when: "ship this", "run the gates and commit", finishing a small change and wanting it linted +
   tested + committed without a full PR ceremony. This is the LIGHT flow — no code review, no PR. For
   the heavier review + draft-PR flow use `/ship-pr`. Orchestrator only: it sequences existing agents
@@ -12,7 +12,7 @@ disable-model-invocation: true
 user-invocable: true
 ---
 
-# /ship — lint → test → verify → commit
+# /ship — audit → lint → test → verify → commit
 
 A thin orchestrator for the common "I'm done with this change, get it clean and committed" loop. It
 **delegates each step to the focused agent/skill** (keeping this session's context clean) and **stops
@@ -26,7 +26,17 @@ git status --short && git diff --stat
 ```
 If the working tree is clean, stop: "nothing to ship".
 
-1. **Test-coverage gate — confirm the change ships its tests (BEFORE lint/test run).** Inspect the
+1. **Simplification audit (STANDARD) — audit every changed file for over-engineering.** Runs first so
+   any edits flow through the gates below. Audit each changed file against the `brunofaust-python-style`
+   skill's `references/yagni.md` "Audit checklist" (for Python): pass-through method chains (`get()` →
+   `_get()` → `_query()` → `_to_model()` where each hop only forwards — collapse to one method),
+   one-implementation `Protocol`s, a "repository"/"client"/"wrapper" over SQLAlchemy/httpx that adds
+   nothing, factories a dict replaces, config for one-value options, defensive branches on
+   type-guaranteed inputs, speculative extension points. For non-Python, audit for the same shape.
+   Apply mechanical fixes via `/simplify`; report judgment calls. It **scales to the diff** — a trivial
+   rename/format/one-liner gets a quick pass, feature code gets the full checklist — but is never
+   skipped. Do NOT strip the skill's hard rules (a boundary model, an owner class, a docstring stay).
+2. **Test-coverage gate — confirm the change ships its tests (BEFORE lint/test run).** Inspect the
    working diff and split it into *behavior* changes (a new feature, endpoint, business rule, bug fix)
    vs. pure refactor/rename/format/docs/config. For every behavior change:
    - **Unit tests** — confirm the diff also adds/updates/deletes the unit tests covering the
@@ -46,17 +56,17 @@ If the working tree is clean, stop: "nothing to ship".
    **STOP**: report exactly which requirements/code paths lack tests and offer to write them
    (`test-author` for unit gaps; author the e2e/integration tests against the business requirements)
    before continuing. Skip the gate only for diffs with no behavior change — and say so explicitly.
-2. **Lint — `lint-fixer` agent.** Dispatch it on the changed files to clear mechanical findings
+3. **Lint — `lint-fixer` agent.** Dispatch it on the changed files to clear mechanical findings
    (`ruff --fix`/format, eslint --fix) and fix judgment findings (types, complexity) at the ROOT CAUSE
    — no `# noqa` / `# type: ignore` / config-loosening. If it can't fix something cleanly, stop and
    surface it.
-3. **Tests — `test-runner` agent.** Run the affected tests. If anything is red, **stop** and report
+4. **Tests — `test-runner` agent.** Run the affected tests. If anything is red, **stop** and report
    the failures verbatim (do not "fix" by deleting/skipping tests). Hand off to `debugger` only if the
    user asks.
-4. **Verify — `verification-loop` skill.** Run the pre-commit gate table (lint/format → types → tests
+5. **Verify — `verification-loop` skill.** Run the pre-commit gate table (lint/format → types → tests
    → coverage → security/secrets → diff review) to a single READY / NOT READY verdict. If NOT READY,
    stop with the failing gates.
-5. **Commit — `git-committer` agent (after confirm).** Only when every gate is green: show the diff
+6. **Commit — `git-committer` agent (after confirm).** Only when every gate is green: show the diff
    summary and the proposed Conventional Commits message, get a one-word confirm, then commit to the
    **current branch**. Never branch/push/PR here — that's `/ship-pr`.
 
@@ -77,5 +87,5 @@ If the working tree is clean, stop: "nothing to ship".
 
 A PASS/FAIL line per step, then the commit SHA (or the reason the pipeline stopped):
 ```
-ship: coverage ✓ (unit + e2e) · lint ✓ · tests ✓ (42 passed) · verify READY · commit <sha>
+ship: audit ✓ (yagni) · coverage ✓ (unit + e2e) · lint ✓ · tests ✓ (42 passed) · verify READY · commit <sha>
 ```
