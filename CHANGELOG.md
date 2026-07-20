@@ -3,6 +3,24 @@
 
 ## [Unreleased]
 
+### Added
+
+- **tests**: the repo's **first test suite** — `tests/test_dependency_resolution.py` (11 tests) covers
+  the installer's dependency resolution: transitive closure, cycle termination, unknown deps reported
+  as external rather than installed, an already-selected dep not double-reported, tolerant manifest
+  reading (missing / malformed / non-list `requires`), the flat-agent `<name>.claude-all.json`
+  convention, and the **real shipped graph** (every `requires` target resolves; installing `ship-pr`
+  pulls its agents) — so a rename that breaks the graph fails here, not at a user's install.
+  `pytest>=8` added to the dev group with `[tool.pytest.ini_options]`.
+- **dependency annotations**: 8 more resources declare their hard deps — `merge-main`,
+  `mock-drift-sweep`, `adversarial-verification`, `verification-loop`, `repo-audit`, `prek`,
+  `python-module-migration`, `brunofaust-python-style`. Every target validated against the installer's
+  own `discover()` before writing, so the graph is correct by construction.
+- **dogfooding**: claude-all now runs **its own checkers on its own source** in `prek.toml`
+  (`module_private`, `junk_drawer`). It shipped these gates without ever applying them to itself —
+  which is exactly how a module-level `_name`, banned by the visibility rule this repo publishes,
+  reached `cli.py`. Both pass clean today; the gate keeps it that way.
+
 ### Changed
 
 - **ship / ship-pr**: prek gate hardened, scoped per pipeline, and `/ship-pr` parallelized.

@@ -1,0 +1,6 @@
+{
+  "requires": [
+    "agents/python-module-migrator",
+    "agents/test-runner"
+  ]
+}

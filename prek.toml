@@ -280,5 +280,24 @@ hooks = [
     language = "system",
     pass_filenames = false,
     always_run = true
+  },
+  # Dogfooding: claude-all SHIPS these checkers but never ran them on itself — which
+  # is exactly how a module-level `_name` (banned by the visibility rule this repo
+  # publishes) slipped into cli.py. Run our own gates on our own source.
+  {
+    id = "self-module-private",
+    name = "🐍 self · No module-level _names (own checker)",
+    entry = "python3 src/claude_all/skills/generic/regression-gates/checkers/module_private.py src/claude_all/cli.py scripts",
+    language = "system",
+    pass_filenames = false,
+    always_run = true
+  },
+  {
+    id = "self-junk-drawer",
+    name = "🐍 self · No junk-drawer modules (own checker)",
+    entry = "python3 src/claude_all/skills/generic/regression-gates/checkers/junk_drawer.py src/claude_all",
+    language = "system",
+    pass_filenames = false,
+    always_run = true
   }
 ]

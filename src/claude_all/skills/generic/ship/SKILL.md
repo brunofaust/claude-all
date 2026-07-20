@@ -90,9 +90,10 @@ If the working tree is clean, stop: "nothing to ship".
 
 ## Rules
 
-- **Every ship is full green — no pre-existing-issue amnesty.** `prek run --all-files` on BOTH stages
-  (pre-commit + pre-push) over the whole repo must be zero-`Failed` before commit. A hook failing on a
-  file you didn't touch still blocks the ship; "pre-existing" is never a pass. Fix the root cause.
+- **Your changes ship full green — both stages.** `prek` must be zero-`Failed` on the CHANGED set,
+  pre-commit AND pre-push, before commit. `/ship` is the fast loop, so it does not gate the whole repo:
+  a pre-existing failure in a file you didn't touch won't block a quick commit. The whole-repo,
+  no-pre-existing-amnesty `--all-files` gate belongs to `/ship-pr`, before anything goes out.
 - **Stop-on-hard-fail.** A missing-test gap (a behavior change with no unit and/or e2e/integration
   coverage), a red test, an unfixable lint finding, a red `prek` stage, or a NOT-READY verdict halts
   the pipeline — report and let the user decide. Don't paper over a gate to keep moving.
