@@ -5,6 +5,21 @@
 
 ### Added
 
+- **brunofaust-python-style**: `references/yagni.md` — a minimalism / do-not-over-engineer
+  reference, the counterweight to `architecture.md`. Structure is a cost, not a virtue:
+  name a concrete *present* reason for every unit ("might need it later" / "more flexible"
+  / "cleaner" / "separation of concerns" are not reasons). Target shapes (one table = one
+  class + its model; called once → inline; one impl → no `Protocol`; one method → no
+  class), a banned-by-default list (pass-throughs, a "repository" wrapping SQLAlchemy,
+  factories/registries/single-subclass bases, config for one-value options), the cost of
+  the wrong abstraction (duplication is cheaper), when a boundary is *earned* (Rule of
+  Three / a real second impl today / a genuine test seam), the **architectural exception**
+  (foundations that are expensive to reverse — boundary models, schema, security/tenant
+  boundaries, module layout — warrant foresight; YAGNI governs features, not foundations),
+  and a **deletion pass**. Synthesized from the user's minimalism prompt + the lev-os YAGNI
+  skill. `SKILL.md` gets it as architectural rule #1 (the default), and `architecture.md`
+  now carries "these patterns are tools, not defaults" caveats on the Service/Repository/
+  Protocol-DI examples so the skill no longer argues with itself.
 - **hooks / brunofaust-python-style**: four **edit-time guards** — `python-orjson-guard`,
   `python-structlog-guard`, `python-settings-env-guard`, `python-thread-subprocess-guard`
   — ported from the source repo's `.claude/hooks/`. They are PreToolUse guards that
