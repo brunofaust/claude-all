@@ -1,88 +1,188 @@
 # CHANGELOG
 
 
-## [Unreleased]
+## v0.6.0 (2026-07-20)
 
-### Added
+### Bug Fixes
 
-- **docs**: every resource row in `README.md` now **links to its source file** — 117 rows across
-  agents, skills, hooks, MCPs, tools and instructions — so a reader can click a name and land on the
-  `SKILL.md` / `agent.md` / hook script instead of hunting the tree. The mapping came from the
-  installer's own `discover()`, not a hand-written path list, so a rename can't leave a stale link
-  behind.
-- **gate**: `check-md-links` (prek) — **relative markdown links must resolve, and every discovered
-  resource must be linked from the README**. Both halves are things this repo already got wrong:
-  four cross-skill links shipped one `../` short (one of them in an already-merged PR), and
-  CLAUDE.md's "a PR without a README update is incomplete" was prose, so nothing enforced it. Linking
-  every row makes "is it documented?" a question a checker can answer.
-  Vendored files are exempt — they're kept byte-identical to upstream, so *their* relative links
-  legitimately don't resolve here; `local_only` files in the same directory are ours and stay checked.
-  The first version reported **18 findings, all false positives** (fenced code blocks, inline code
-  spans like `` `def first[T](...)` ``, site-absolute llms.txt paths, and `vendor_mode: "dir"` entries
-  that list no individual files) — each one is now a named test, alongside negative tests proving the
-  gate still bites on a genuinely broken link and on an undocumented resource.
+- **brunofaust-python-style**: Replace split-by-domain with one-module-one-secret
+  ([`4124b4c`](https://github.com/brunofaust/claude-all/commit/4124b4c04c7f5d06b65bf842b4c77d10ecf54d49))
 
-- **installer**: `--prune` now also clears **leftover artifacts** — things broken on their own terms,
-  typically created by an *older* claude-all that linked or wired something this version doesn't.
-  Stale-resource detection structurally cannot see these, because a healthy still-shipped resource is
-  never "stale": five dangling companion symlinks pointing at a long-dead checkout survived every
-  prune and had to be removed by hand. Now cleaned automatically — `dangling link` (target gone),
-  `orphan hook` (a `settings.json` entry whose script is missing), `orphan block` (a tagged
-  `CLAUDE.md` block with no install record) — reusing the existing scope-guarded `undo_artifact`
-  path rather than adding a second way to delete things. Reported-but-not-touched (a reinstall or a
-  hand-edit fixes them): `mixed install` (links split across **two** claude-all roots), `double-wired`
-  (one hook script under several events), `unclosed`/`duplicate block`.
-  **All of it is listed at the end of every install run**, so leftovers surface without being asked
-  for. The mixed-install check compares links against *each other*, not against the CLI you happen to
-  be running — an earlier draft used the latter baseline and produced **115 false positives** against
-  a perfectly healthy install.
-  10 tests, each asserting the check actually **bites** on a specific defect (a check that can only
-  report "clean" is the vacuous pass this repo keeps hunting), plus no-false-positive cases.
-- **ship / ship-pr + brunofaust-frontend-style**: the *one module, one secret* seam test is now
-  audited on **frontend** files too, not just Python — the rule is language-agnostic (a 1,000-line
-  component holding orchestration + fetching + formatting + a widget's config is four secrets in one
-  file). Both pipelines' coverage summaries now name **module seams** explicitly, so a reader can see
-  it is checked; and `/ship-pr`'s architecture step applies the seam test from the other side (Phase 1
-  asks *"does this file hold two secrets?"*, the architecture review asks *"is the new boundary in the
-  right place?"*).
-- **docs**: fixed 4 broken cross-skill links — a repo-wide sweep found the frontend `audit.md`'s two
-  `../../python/…` references and `e2e-testing.md`'s two `../../generic/…` references were each one
-  `../` short of resolving (the pre-existing `yagni.md` link shipped broken in the frontend merge).
-  Vendored files' own upstream-relative links are deliberately left alone to preserve byte-identity.
-- **installer**: renamed the internal `level` parameter to **`scope`** (78 sites, `cli.py` only).
-  `level` didn't say what it was a level *of* — it reads like a verbosity or log level, when it
-  actually means *where things install*: `~/.claude` (user) vs `./.claude` (project), which is how the
-  README and `--help` already describe it. Also `infer_level`→`infer_scope`,
-  `choose_level_tui`→`choose_scope_tui`. Pure rename — 78 insertions / 78 deletions, no behaviour
-  change, no public API affected (`__all__` is just `main`/`run`); verified by mypy, 24 tests, and an
-  end-to-end run of both scopes.
-- **research-before-build**: gains a `claude_md.md` so the rule is always loaded, not only when the
-  skill is invoked. Step 0 of any non-trivial build is a search — and the cheapest, most-missed check
-  is the local one: grep THIS repo before adding a command, flag, helper or skill that may already
-  ship here. Written because that exact miss happened: a `--doctor` flag was built without first
-  checking whether an equivalent existed (it didn't — but that was luck, not discipline).
+The old rule was 'one file per domain concept — the single home for EVERYTHING about that domain'.
+  Domain is too coarse an axis: 'AI models' is one domain, so the rule actively instructed you to
+  pile orchestration, billing policy, vendor routing and request shapes into one file. A 1,300-line
+  module was the rule working as designed, not a violation of it.
 
-### Changed
+Domain tells you which FOLDER. It does not tell you where the seams are.
 
-- **brunofaust-python-style**: replaced the module-splitting rule. The old rule — *"one file per
-  domain concept, the single home for **everything** about that domain"* — is **too coarse an axis**:
-  "AI models" is one domain, so the rule actively instructed you to pile orchestration, billing policy,
-  vendor routing and request shapes into one file, and a 1,300-line module was the rule working as
-  designed. **Domain tells you which FOLDER; it does not tell you where the seams are.**
-  The new axis is **reason to change**, subordinate to **dependency ownership**: *a module hides ONE
-  SECRET* — one design decision that can change independently. Five operational tests: split when two
-  chunks change for different reasons / rates / owners (*would they ever share a PR for the same
-  reason?*); keep together when they always change together (**fat is fine given one reason to
-  change**); place by dependency ownership (code whose only real dep is a vendor SDK belongs in that
-  vendor's owner module); the **false-seam test** (if splitting forces exposing internals, the cohesion
-  is real — don't split, which is what stops it degenerating into the linter's "just split it"); and
-  **LOC is a smell, never a criterion**. A coordinator/facade may legitimately be large — it is too big
-  only when it smuggles in a *different* secret. Includes a worked 4-secret example. Wired into the
-  `audit.md` checklist so `/ship` and `/ship-pr` apply it per changed file.
-- **code-review-discipline**: reconciled with the above — the **file-length 800-line hard BLOCK is now
-  a smell, not a criterion**. A long file prompts the one-secret question; it is a finding only when the
-  seam test says so. (A 200-line file holding two unrelated secrets is the real defect; a cohesive
-  1,000-line coordinator is not.) Never demand a split to hit a line target.
+New axis — reason to change, subordinate to dependency ownership:
+
+A module hides ONE SECRET — one design decision that can change independently.
+
+Five operational tests: - Split when two chunks change for different reasons, at different rates, or
+  have different owners. Sharp form: would they EVER share a PR for the same reason? - Keep together
+  when they always change together. Fat is fine if the whole file has one reason to change. - Place
+  by dependency ownership: code whose only real dependency is a vendor SDK belongs in that vendor's
+  owner module — which is why vendor request-shape helpers feel wrong in a coordinator.
+  (external-system-ownership, stated precisely.) - False-seam test: if splitting forces exposing
+  internals across the new boundary (shared mutable state, private helpers now imported), the
+  cohesion is REAL — don't split. This is what stops the rule degenerating into 'just split it'. -
+  LOC is a smell, never a criterion. Never split to hit a line target, never merge to hit one
+  either.
+
+A coordinator/facade may legitimately be large — one reason to change ('how we orchestrate a call').
+  It is too big only when it smuggles in a DIFFERENT secret.
+
+Includes a worked example (a model coordinator holding four secrets, and the split that follows from
+  the tests). Wired into audit.md so /ship and /ship-pr apply it per changed file.
+
+Also reconciles code-review-discipline, which contradicted this: its 800-line file-length HARD BLOCK
+  is now a smell, not a criterion. A long file prompts the one-secret question; it is a finding only
+  when the seam test says so. A 200-line file holding two unrelated secrets is the real defect; a
+  cohesive 1,000-line coordinator is not.
+
+- **ship**: Audit module seams on frontend too; repair broken cross-skill links
+  ([`84edfe8`](https://github.com/brunofaust/claude-all/commit/84edfe8c985322092a2ca79c9955970863192d27))
+
+Answering "does ship-pr audit the one-module-one-secret rule?" — it did for Python, but two gaps
+  made that incomplete:
+
+1. The FRONTEND audit.md had no seam check at all. The rule is language-agnostic: a 1,000-line
+  component holding orchestration + data fetching + formatting + a third-party widget's config is
+  four secrets in one file, exactly like its backend equivalent. Added the same five checks, framed
+  for components.
+
+2. Both pipelines' coverage summaries listed what the audits cover and omitted module seams — so a
+  reader could not tell it was checked. Now named explicitly in the ship-pr routing table for both
+  stacks.
+
+Also ties the two halves together: Phase 1's per-file audit asks "does this file hold two secrets?",
+  while Phase 2's architecture-decision-guard now applies the seam test from the other side — "is
+  the new boundary in the right place, and does the moved code live where its dependency is owned?"
+
+Repairs 4 broken cross-skill links found by a repo-wide sweep, all the same off-by-one: the frontend
+  audit's two ../../python/... references and e2e-testing.md's two ../../generic/... references were
+  each one ../ short of resolving. The yagni.md one shipped broken in the frontend merge. Vendored
+  files' own upstream-relative links are deliberately left alone to preserve byte-identity with
+  upstream.
+
+### Documentation
+
+- **readme**: Link every resource row to its source, and gate it
+  ([`5fcccbf`](https://github.com/brunofaust/claude-all/commit/5fcccbf1f6afce187c8878860304c61887cc3969))
+
+Answers "can we href the files so it's easy to read the resource?" — yes, all 117 rows across
+  agents, skills, hooks, MCPs, tools and instructions now link the name to its SKILL.md / agent.md /
+  hook script.
+
+The mapping came from the installer's own discover(), not a hand-written path list, so a rename
+  cannot leave a stale path behind. That also surfaced the shape of the tables: hook rows carry a
+  .py extension and the frontend skill row is bold rather than backticked, so the rewrite preserves
+  each row's existing emphasis.
+
+Adds check-md-links, because 100+ hand-added links rot. It gates two things this repo has already
+  gotten wrong:
+
+- relative links must resolve. Four cross-skill links shipped one ../ short, one of them in an
+  already-merged PR, because nothing checked them. - every discovered resource must be linked from
+  the README. CLAUDE.md has always said "a PR without a README update is incomplete", but prose does
+  not enforce itself. Now that each row links its source file, "is it documented?" is a question a
+  checker can actually answer.
+
+Vendored files are exempt from the link half: they are kept byte-identical to upstream, so their
+  relative links point into a tree we deliberately did not copy. Files listed as local_only sit in
+  the same directory but are ours, so they stay checked.
+
+The first version of the checker reported 18 findings and every one was wrong — fenced code blocks,
+  inline code spans (`def first[T](...)` reads as a link), site-absolute paths in the SEO skill's
+  llms.txt examples, and vendor_mode "dir" entries that list no individual files. Each of those is
+  now a named test, next to negative tests proving the gate still bites on a genuinely broken link
+  and on an undocumented resource. A gate that can only report "clean" is the vacuous pass this repo
+  keeps hunting.
+
+### Features
+
+- **installer**: Add --doctor install health check
+  ([`568d968`](https://github.com/brunofaust/claude-all/commit/568d9681e9577a644c5d5fe3a9e85c2e9deca416))
+
+--prune answers 'this resource is no longer shipped'. --doctor answers a different question: 'is
+  this install internally consistent?' — defects prune STRUCTURALLY cannot see, because a healthy,
+  still-shipped resource is never stale. That gap is real: five dangling companion symlinks pointing
+  at a dead checkout survived every prune and had to be removed by hand.
+
+Detects (read-only, each finding names its remedy): dangling-link target gone — e.g. companion
+  symlinks an older claude-all created that this version no longer does mixed-install links split
+  across TWO claude-all roots — a partial install, so upgrading one leaves the rest stale
+  orphan-hook a settings.json entry whose script no longer exists double-wired one hook script
+  registered under several events (fires twice) orphan-block a tagged CLAUDE.md block with no
+  install record unclosed-block / duplicate-block malformed or repeated CLAUDE.md blocks
+
+Deliberately does NOT flag 'points somewhere other than the CLI I'm running from'. Running a dev
+  build to inspect a uv-tool install is normal, and that baseline produced 115 FALSE POSITIVES
+  against a healthy install — caught by running it for real before shipping. The genuine signal is
+  links disagreeing with EACH OTHER.
+
+Placement: beside install/prune in cli.py, not a new module. All three share ONE
+
+secret — the artifact model (what an install owns: symlink, settings entry, CLAUDE.md block, state
+  record). Splitting doctor out would force exposing that model across a boundary (in_install_scope,
+  drop_settings_command, strip_claude_md_block, load_state) — the false-seam test says the cohesion
+  is real. Applying the one-module-one-secret rule to its own author.
+
+9 tests, each asserting the check BITES on a specific defect — a health check that can only ever
+  report 'healthy' is exactly the vacuous pass this repo keeps hunting — plus explicit
+  no-false-positive cases.
+
+### Refactoring
+
+- **installer**: Fold --doctor into --prune; surface leftovers after install
+  ([`c225393`](https://github.com/brunofaust/claude-all/commit/c22539353293017de8b9cbfbd1f8d54e74a9881b))
+
+Two commands for 'clean up my install' was one too many. --doctor is removed; everything it found
+  now flows through --prune, and the notice prints at the end of every install run rather than
+  waiting to be asked for.
+
+--prune now clears LEFTOVER ARTIFACTS alongside stale resources — things broken on their own terms,
+  typically created by an OLDER claude-all that linked or wired something this version doesn't.
+  Stale-resource detection structurally cannot see them (a healthy, still-shipped resource is never
+  'stale'), which is why five dangling companion symlinks pointing at a long-dead checkout survived
+  every prune and had to be removed by hand:
+
+cleaned dangling link · orphan hook (settings entry, script gone) · orphan block (CLAUDE.md block
+  with no install record) reported mixed install (links split across two claude-all roots) ·
+  double-wired (one script under several events) · unclosed / duplicate block
+
+Reuse over new machinery: each removable finding carries an artifact dict in exactly the shape
+  undo_artifact already accepts, so removal goes through the existing scope-guarded path instead of
+  a second way to delete things. Advisory findings carry artifact=None — a reinstall or a human call
+  fixes those, and --prune never touches a file it could not parse.
+
+Also adds a claude_md.md for research-before-build, so the rule is always loaded instead of only
+  when the skill is invoked: step 0 of any non-trivial build is a search, and the cheapest,
+  most-missed check is the LOCAL one — grep this repo before adding a command/flag/helper that may
+  already ship here. Written because that exact miss happened one commit ago.
+
+24 tests (renamed test_doctor -> test_leftovers), each asserting the check bites on a specific
+  defect, plus no-false-positive cases and a new test that removable findings are reversed while
+  advisory ones are left untouched.
+
+- **installer**: Rename the `level` parameter to `scope`
+  ([`d55b030`](https://github.com/brunofaust/claude-all/commit/d55b030e2333c23198b212a7a5a7a549d37efd6a))
+
+`level` did not say what it was a level OF — it reads like a verbosity or a log level, when it
+  actually means WHERE things install: `~/.claude` (user) vs `./.claude` (project). That is already
+  how the README and `--help` describe it, so the code now matches the vocabulary users see.
+
+Also `infer_level` -> `infer_scope`, `choose_level_tui` -> `choose_scope_tui`.
+
+Pure rename: 78 insertions / 78 deletions in cli.py only, no behaviour change and no public API
+  affected (`__all__` is just main/run — `scope` is an internal parameter name throughout).
+  "top-level" prose in scripts/vendor_sync.py was deliberately left alone; the rename used a
+  word-boundary match so it could not touch it.
+
+Verified: mypy clean, 24 tests pass, and an end-to-end run of BOTH scopes — a user-scope install
+  shows the leftover notice and `--prune` clears it, a project-scope `--prune` correctly targets
+  ./.claude.
 
 
 ## v0.5.0 (2026-07-20)
