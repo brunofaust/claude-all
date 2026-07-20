@@ -17,9 +17,12 @@
   a kind for which discovery returns **zero** items is never flagged (a missing enumerator,
   e.g. no `plugins/` dir, would otherwise mark every recorded plugin stale); and the target
   symlink is unlinked **only when it is actually a symlink**, so a recorded real file is
-  never deleted. **`tools` and `plugins` are never pruned** — their install is more than a
-  symlink+block+hook (a brew binary, a marketplace entry), so removing only our artifacts
-  would leave the real thing half-installed.
+  never deleted. **`tools` and `plugins` are never *uninstalled*** — their install is more
+  than a symlink+block+hook (a brew binary, a marketplace entry). But a stale tool/plugin
+  *record* (the resource is gone from the repo) is **forgotten** — `--prune` drops the state
+  record and any `~/.claude` artifact, and leaves the binary exactly in place — so `state.json`
+  stops claiming to manage something no longer shipped without ever running `brew`/`pipx`
+  uninstall. (This cleans e.g. a long-dead `tools/lean-ctx` record without touching a binary.)
   Each install now records its **full footprint** in `state.json` — an `artifacts` list of
   every side-effect it created (the `CLAUDE.md` block + tags, each `settings.json` hook
   command, the hook symlink) — so `--prune` reverses *exactly* what the install did, source-

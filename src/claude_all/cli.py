@@ -134,12 +134,12 @@ COMPANION_SUFFIX = ".claude_md"
 PRUNE_EXCLUDED_KINDS = frozenset({"tools", "plugins"})
 
 
-def _is_companion_key(name: str) -> bool:
+def is_companion_key(name: str) -> bool:
     """True when a state name is a companion sub-record, not a primary resource."""
     return name.endswith(COMPANION_SUFFIX)
 
 
-def _infer_level(target: str | None) -> str:
+def infer_level(target: str | None) -> str:
     """Infer the install scope from a recorded target path.
 
     Args:
@@ -154,28 +154,41 @@ def _infer_level(target: str | None) -> str:
     return "user"
 
 
-def stale_installs() -> list[dict]:
-    """Return recorded installs that are no longer shipped by the repo.
+def scan_stale() -> list[dict]:
+    """Every genuinely-stale PRIMARY install — recorded but no longer shipped.
 
-    Applies the safety guards above: companion sub-records and kinds with zero
-    currently-discovered items are never reported. Each returned dict is a
-    primary state entry (``kind`` / ``name`` / ``target`` / ``installed_at``).
+    Applies guard 1 (companion sub-records are skipped — they ride their primary)
+    and guard 2 (a kind with zero currently-discovered items is skipped, so a
+    missing enumerator can't mark everything of that kind stale — this also means
+    a ``plugins`` record is never flagged while the package ships no ``plugins/``
+    dir). Callers partition the result by kind.
     """
     discovered = discover([])
     shippable = {state_key(it.kind, it.name) for it in discovered}
-    kinds_present = {it.kind for it in discovered}  # guard 2: skip empty enumerators
+    kinds_present = {it.kind for it in discovered}
     stale: list[dict] = []
     for key, entry in load_state().get("installs", {}).items():
-        name = entry.get("name", "")
-        if _is_companion_key(name):  # guard 1: companions ride their primary
+        if is_companion_key(entry.get("name", "")):  # guard 1
             continue
-        if entry.get("kind") in PRUNE_EXCLUDED_KINDS:  # tools/plugins: never prune
-            continue
-        if entry.get("kind") not in kinds_present:  # guard 2: skip empty enumerators
+        if entry.get("kind") not in kinds_present:  # guard 2
             continue
         if key not in shippable:
             stale.append(entry)
     return stale
+
+
+def stale_installs() -> list[dict]:
+    """Stale installs of PRUNABLE kinds — ``--prune`` fully reverses their footprint."""
+    return [e for e in scan_stale() if e.get("kind") not in PRUNE_EXCLUDED_KINDS]
+
+
+def stale_records() -> list[dict]:
+    """Stale RECORDS of tools/plugins — the resource is gone from the repo, but its
+    real install (a brew/pipx binary, a marketplace entry) must NOT be uninstalled.
+    ``--prune`` forgets the record (and any ``~/.claude`` artifact) and leaves the
+    binary in place.
+    """
+    return [e for e in scan_stale() if e.get("kind") in PRUNE_EXCLUDED_KINDS]
 
 
 def prune_installs(entries: list[dict]) -> list[str]:
@@ -197,38 +210,47 @@ def prune_installs(entries: list[dict]) -> list[str]:
     removed: list[str] = []
     for entry in entries:
         kind, name = entry["kind"], entry["name"]
-        actions: list[str] = []
-
-        # The resource symlink (recorded as `target`), symlink-guarded so a
-        # recorded real file is never deleted.
-        target = entry.get("target")
-        if target and Path(target).is_symlink():
-            Path(target).unlink()
-            actions.append("symlink")
-
-        artifacts = entry.get("artifacts") or []
-        if artifacts:
-            # Precise, source-independent: reverse exactly what the install did.
-            actions.extend(_undo_artifact(a) for a in artifacts)
-        else:
+        actions = reverse_footprint(entry)
+        if not (entry.get("artifacts") or []):
             # Legacy entry (recorded before footprints): reconstruct from kind/name.
             item = Item(kind=kind, subcategory="", name=name, src=Path("."))
-            level = _infer_level(target)
+            level = infer_level(entry.get("target"))
             if remove_claude_md(item, level):
                 actions.append("CLAUDE.md block")
             if remove_hook(item, level):
                 actions.append("hook")
-
         installs.pop(state_key(kind, name), None)
         installs.pop(state_key(kind, name + COMPANION_SUFFIX), None)
-        done = [a for a in actions if a]
-        removed.append(f"{kind}/{name} ({', '.join(done) or 'state only'})")
+        removed.append(f"{kind}/{name} ({', '.join(actions) or 'state only'})")
 
     save_state(state)
     return removed
 
 
-def _undo_artifact(artifact: dict) -> str:
+def reverse_footprint(entry: dict) -> list[str]:
+    """Undo a record's ``~/.claude`` artifacts (symlink-guarded); return action labels.
+
+    The shared core of :func:`prune_installs` and :func:`forget_records`: unlink the
+    recorded resource symlink (only when it IS a symlink — a recorded real file is
+    never deleted) and reverse each recorded artifact. Touches the filesystem only;
+    does not mutate state or uninstall any binary.
+
+    Args:
+        entry: A primary state record.
+
+    Returns:
+        Non-empty action labels for the reversed artifacts.
+    """
+    actions: list[str] = []
+    target = entry.get("target")
+    if target and Path(target).is_symlink():
+        Path(target).unlink()
+        actions.append("symlink")
+    actions.extend(a for a in (undo_artifact(x) for x in entry.get("artifacts") or []) if a)
+    return actions
+
+
+def undo_artifact(artifact: dict) -> str:
     """Reverse one recorded install artifact. Returns a short label (or "").
 
     Args:
@@ -242,13 +264,13 @@ def _undo_artifact(artifact: dict) -> str:
             return "hook symlink"
         return ""
     if kind == "claude_md":
-        return _strip_block(Path(artifact["file"]), artifact["start"], artifact["end"])
+        return strip_claude_md_block(Path(artifact["file"]), artifact["start"], artifact["end"])
     if kind == "settings_hook":
-        return _drop_settings_command(Path(artifact["file"]), artifact["command"])
+        return drop_settings_command(Path(artifact["file"]), artifact["command"])
     return ""
 
 
-def _strip_block(target: Path, start_tag: str, end_tag: str) -> str:
+def strip_claude_md_block(target: Path, start_tag: str, end_tag: str) -> str:
     """Remove the tagged block between *start_tag* and *end_tag* from *target*.
 
     Args:
@@ -270,7 +292,7 @@ def _strip_block(target: Path, start_tag: str, end_tag: str) -> str:
     return "CLAUDE.md block"
 
 
-def _drop_settings_command(settings_file: Path, command: str) -> str:
+def drop_settings_command(settings_file: Path, command: str) -> str:
     """Remove every hook entry whose ``command`` equals *command* from *settings_file*.
 
     Args:
@@ -304,18 +326,52 @@ def _drop_settings_command(settings_file: Path, command: str) -> str:
     return ""
 
 
+def forget_records(entries: list[dict]) -> list[str]:
+    """Forget stale tool/plugin RECORDS without uninstalling the real binary.
+
+    Removes any ``~/.claude`` artifact the record created (symlink-guarded) and
+    drops the state record, but NEVER runs ``brew``/``pipx`` uninstall — the
+    resource is no longer shipped by claude-all, so state stops claiming to manage
+    it, while its binary is left exactly as the user installed it.
+
+    Args:
+        entries: Stale tool/plugin records (from :func:`stale_records`).
+
+    Returns:
+        One human-readable line per forgotten record.
+    """
+    state = load_state()
+    installs = state.get("installs", {})
+    forgotten: list[str] = []
+    for entry in entries:
+        kind, name = entry["kind"], entry["name"]
+        reverse_footprint(entry)  # remove any ~/.claude artifact; never the binary
+        installs.pop(state_key(kind, name), None)
+        installs.pop(state_key(kind, name + COMPANION_SUFFIX), None)
+        forgotten.append(f"{kind}/{name} (record forgotten; binary left in place)")
+    save_state(state)
+    return forgotten
+
+
 def notify_stale() -> None:
-    """Print an advisory notice (to stderr) listing prunable stale installs, if any."""
+    """Print an advisory notice (to stderr) listing prunable installs + stale records."""
     stale = stale_installs()
-    if not stale:
+    records = stale_records()
+    if not stale and not records:
         return
+    total = len(stale) + len(records)
     print(
-        f"\n⚠  You have {len(stale)} installed resource(s) that are stale and can be "
+        f"\n⚠  You have {total} installed resource(s) that are stale and can be "
         "deleted. Run `claude-all --prune`:",
         file=sys.stderr,
     )
     for entry in stale:
         print(f"     - {entry['kind']}/{entry['name']}", file=sys.stderr)
+    for entry in records:
+        print(
+            f"     - {entry['kind']}/{entry['name']}  (stale record; binary left in place)",
+            file=sys.stderr,
+        )
 
 
 # ---------------------- item model ----------------------
@@ -954,10 +1010,10 @@ def remove_hook(item: Item, level: str) -> str | None:
         level: Installation scope — ``'user'`` or ``'project'``.
     """
     dest = hook_symlink_dest(level, item)
-    # The settings-entry removal IS `_drop_settings_command` — one owner for
+    # The settings-entry removal IS `drop_settings_command` — one owner for
     # "strip this command from settings.json", used by both remove_hook and the
     # artifact-based prune path.
-    removed_any = bool(_drop_settings_command(settings_path(level), str(dest)))
+    removed_any = bool(drop_settings_command(settings_path(level), str(dest)))
 
     if dest.is_symlink() or dest.exists():
         dest.unlink()
@@ -1664,11 +1720,16 @@ def main(argv: list[str]) -> int:
 
     if args.prune:
         removed = prune_installs(stale_installs())
+        forgotten = forget_records(stale_records())
         if removed:
             print(f"Pruned {len(removed)} stale install(s):")
             for line in removed:
                 print(f"  ✓ {line}")
-        else:
+        if forgotten:
+            print(f"Forgot {len(forgotten)} stale record(s) (binary left in place):")
+            for line in forgotten:
+                print(f"  ✓ {line}")
+        if not removed and not forgotten:
             print("Nothing to prune — no stale installs.")
         return 0
 
