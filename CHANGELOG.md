@@ -5,21 +5,27 @@
 
 ### Added
 
-- **installer**: `claude-all --doctor` — a read-only install health check. `--prune` answers *"this
-  resource is no longer shipped"*; `--doctor` answers *"is this install internally consistent?"* —
-  defects prune structurally cannot see, because a healthy still-shipped resource is never stale.
-  Detects: `dangling-link` (target gone — e.g. companion symlinks an older claude-all created that
-  this version doesn't), `mixed-install` (links split across **two** claude-all roots, so upgrading
-  one leaves the rest stale), `orphan-hook` (a `settings.json` entry whose script is missing),
-  `double-wired` (one hook script registered under several events — may fire twice), and
-  `orphan-block` / `unclosed-block` / `duplicate-block` in `CLAUDE.md`. Each finding names its remedy.
-  Every one of these classes actually occurred in practice and had to be fixed by hand — that is what
-  the check automates.
-  It deliberately does **not** flag "points somewhere other than the CLI I'm running from": running a
-  dev build to inspect a `uv tool` install is normal, and that baseline produced **115 false
-  positives** in testing. The real signal is links disagreeing with *each other*.
-  9 tests, each asserting the check actually **bites** on a specific defect (a health check that can
-  only report "healthy" is the vacuous pass this repo keeps hunting), plus no-false-positive cases.
+- **installer**: `--prune` now also clears **leftover artifacts** — things broken on their own terms,
+  typically created by an *older* claude-all that linked or wired something this version doesn't.
+  Stale-resource detection structurally cannot see these, because a healthy still-shipped resource is
+  never "stale": five dangling companion symlinks pointing at a long-dead checkout survived every
+  prune and had to be removed by hand. Now cleaned automatically — `dangling link` (target gone),
+  `orphan hook` (a `settings.json` entry whose script is missing), `orphan block` (a tagged
+  `CLAUDE.md` block with no install record) — reusing the existing scope-guarded `undo_artifact`
+  path rather than adding a second way to delete things. Reported-but-not-touched (a reinstall or a
+  hand-edit fixes them): `mixed install` (links split across **two** claude-all roots), `double-wired`
+  (one hook script under several events), `unclosed`/`duplicate block`.
+  **All of it is listed at the end of every install run**, so leftovers surface without being asked
+  for. The mixed-install check compares links against *each other*, not against the CLI you happen to
+  be running — an earlier draft used the latter baseline and produced **115 false positives** against
+  a perfectly healthy install.
+  10 tests, each asserting the check actually **bites** on a specific defect (a check that can only
+  report "clean" is the vacuous pass this repo keeps hunting), plus no-false-positive cases.
+- **research-before-build**: gains a `claude_md.md` so the rule is always loaded, not only when the
+  skill is invoked. Step 0 of any non-trivial build is a search — and the cheapest, most-missed check
+  is the local one: grep THIS repo before adding a command, flag, helper or skill that may already
+  ship here. Written because that exact miss happened: a `--doctor` flag was built without first
+  checking whether an equivalent existed (it didn't — but that was luck, not discipline).
 
 ### Changed
 

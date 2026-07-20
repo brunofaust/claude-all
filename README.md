@@ -102,33 +102,10 @@ claude-all --all --project skills     # all skills → ./.claude/
 # notice listing prunable resources; --prune removes them with no confirmation.
 claude-all --prune
 
-# Health-check the install (read-only): dangling symlinks, a mixed install
-# spanning two claude-all roots, settings hooks pointing at missing scripts or
-# wired twice, orphaned/unclosed/duplicate CLAUDE.md blocks.
-claude-all --doctor
 
 # Help
 claude-all --help
 ```
-
-### Install health check — `--doctor`
-
-`--prune` answers *"this resource is no longer shipped"*. `--doctor` answers a different question:
-*"is this install internally consistent?"* — problems `--prune` structurally cannot see, because a
-healthy, still-shipped resource is never "stale". Read-only; each finding names its remedy.
-
-| Finding | Means |
-| --- | --- |
-| `dangling-link` | a symlink whose target is gone (typically from an older claude-all that linked things this version doesn't) |
-| `mixed-install` | links pointing at **two different** claude-all roots — a partial install, so upgrading one leaves the rest stale |
-| `orphan-hook` | a `settings.json` hook entry whose script no longer exists |
-| `double-wired` | the same hook script registered under multiple events — it may fire twice |
-| `orphan-block` | a tagged `CLAUDE.md` block with no matching install record |
-| `unclosed-block` / `duplicate-block` | a malformed or repeated `CLAUDE.md` block |
-
-Note it deliberately does **not** flag "points somewhere other than the CLI I'm running from" —
-running a dev build to inspect a `uv tool` install is normal, and that comparison flags every link.
-The real defect is links disagreeing with **each other**.
 
 ### Stale-install pruning
 
@@ -139,6 +116,26 @@ each one's symlink, `CLAUDE.md` block, settings hook entry, and state record (no
 confirmation). Guards prevent false positives: companion records ride their primary, a kind
 with zero discovered items is never flagged, and a recorded target is unlinked only when it
 is actually a symlink (a real file is never deleted).
+
+`--prune` also clears **leftover artifacts** — things broken on their own terms, typically created by
+an *older* claude-all that linked or wired something this version doesn't. Stale-resource detection
+structurally cannot see these (a healthy, still-shipped resource is never "stale"):
+
+| Cleaned by `--prune` | |
+| --- | --- |
+| `dangling link` | a symlink whose target is gone |
+| `orphan hook` | a `settings.json` hook entry whose script no longer exists |
+| `orphan block` | a tagged `CLAUDE.md` block with no matching install record |
+
+| Reported only (a reinstall or hand-edit fixes it) | |
+| --- | --- |
+| `mixed install` | links split across **two** claude-all roots — a partial install, so upgrading one leaves the rest stale |
+| `double-wired` | one hook script registered under several events — may fire twice; re-running the installer sweeps it |
+| `unclosed` / `duplicate block` | a malformed or repeated `CLAUDE.md` block — which copy is authoritative is a human call |
+
+Everything above is listed **at the end of every install run**, so you see it without asking. Note the
+mixed-install check compares links against *each other*, not against the CLI you happen to be running —
+running a dev build to inspect a `uv tool` install is normal, and that baseline flags every link.
 
 Install into a project:
 

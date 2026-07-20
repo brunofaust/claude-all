@@ -387,20 +387,22 @@ def forget_records(entries: list[dict]) -> list[str]:
     return forgotten
 
 
-# ---------------------- install health check (doctor) ----------------------
+# ---------------------- leftover-artifact detection ----------------------
 #
-# Lives here, beside install/prune, because all three share ONE secret: the
-# artifact model — what an install owns (a symlink, a settings.json hook entry, a
-# tagged CLAUDE.md block, a state record). Install creates them, prune removes
-# them when a resource stops shipping, doctor reports when they go *inconsistent*.
-# Splitting doctor out would force exposing that model across a boundary
-# (in_install_scope, drop_settings_command, strip_claude_md_block, load_state) —
-# the false-seam test says the cohesion is real. → project-structure.md.
+# Part of the same secret as install/prune: the artifact model — what an install
+# owns (a symlink, a settings.json hook entry, a tagged CLAUDE.md block, a state
+# record). Install creates them; prune removes them.
 #
-# Distinct from --prune: prune answers "this resource is no longer shipped".
-# Doctor answers "this install is broken" — a dangling link whose resource still
-# ships, a settings entry pointing at a deleted script, a CLAUDE.md block with no
-# owner. Prune structurally cannot see those (a healthy primary is never stale).
+# `stale_installs` finds artifacts whose RESOURCE stopped shipping. The checks
+# here find artifacts that are broken on their own terms — a dangling symlink, a
+# settings entry pointing at a deleted script, a CLAUDE.md block with no owner —
+# typically left by an OLDER claude-all that created things this version doesn't.
+# `stale_installs` structurally cannot see those: a healthy, still-shipped
+# resource is never "stale". Both feed one `--prune`.
+#
+# Each removable finding carries an `artifact` dict in exactly the shape
+# `undo_artifact` already accepts, so removal reuses that scope-guarded path
+# rather than adding a second way to delete things.
 
 #: Directories holding installed resource symlinks.
 LINK_DIRS = ("skills", "agents", "hooks")
@@ -421,7 +423,7 @@ def install_root_of(path: Path) -> str:
     return text.split(marker)[0] if marker in text else ""
 
 
-def check_links(level: str) -> list[str]:
+def check_links(level: str) -> list[dict]:
     """Report symlinks that dangle, or a MIXED install spanning several roots.
 
     "Outdated" is not "differs from the CLI I'm running" — running a dev build to
@@ -438,7 +440,7 @@ def check_links(level: str) -> list[str]:
         when the install is mixed.
     """
     base = USER_CLAUDE_DIR if level == "user" else Path.cwd() / ".claude"
-    findings: list[str] = []
+    findings: list[dict] = []
     roots: dict[str, list[str]] = {}
     for sub in LINK_DIRS:
         directory = base / sub
@@ -448,7 +450,12 @@ def check_links(level: str) -> list[str]:
             if not link.is_symlink():
                 continue
             if not link.exists():
-                findings.append(f"dangling-link   {sub}/{link.name} -> {os.readlink(link)}")
+                findings.append(
+                    {
+                        "label": f"dangling link  {sub}/{link.name} -> {os.readlink(link)}",
+                        "artifact": {"type": "symlink", "path": str(link)},
+                    }
+                )
                 continue
             root = install_root_of(Path(os.readlink(link)))
             if root:
@@ -460,13 +467,19 @@ def check_links(level: str) -> list[str]:
                 continue
             sample = ", ".join(names[:3]) + (" …" if len(names) > 3 else "")
             findings.append(
-                f"mixed-install   {len(names)} link(s) point at {root} "
-                f"while {len(roots[main_root])} point at {main_root} ({sample})"
+                {
+                    "label": (
+                        f"mixed install  {len(names)} link(s) point at {root} while "
+                        f"{len(roots[main_root])} point elsewhere ({sample}) "
+                        "— re-run the installer for this scope"
+                    ),
+                    "artifact": None,  # advisory: a reinstall fixes it, deleting does not
+                }
             )
     return findings
 
 
-def check_settings_hooks(level: str) -> list[str]:
+def check_settings_hooks(level: str) -> list[dict]:
     """Report settings.json hook entries that are broken or double-wired.
 
     Args:
@@ -483,8 +496,13 @@ def check_settings_hooks(level: str) -> list[str]:
         # so orjson is not available here; stdlib json is mandatory, not a choice.
         settings = json.loads(settings_file.read_text())
     except json.JSONDecodeError:
-        return [f"unreadable      {settings_file} is not valid JSON"]
-    findings: list[str] = []
+        return [
+            {
+                "label": f"unreadable     {settings_file} is not valid JSON — hand-edit it",
+                "artifact": None,  # advisory: never rewrite a file we could not parse
+            }
+        ]
+    findings: list[dict] = []
     seen: dict[str, int] = {}
     for event, blocks in settings.get("hooks", {}).items():
         for block in blocks:
@@ -498,16 +516,29 @@ def check_settings_hooks(level: str) -> list[str]:
                     (p for p in command.replace('"', " ").split() if p.endswith(".py")), ""
                 )
                 if script and not Path(script).exists():
-                    findings.append(f"orphan-hook     {event}: {basename} — script not found")
+                    findings.append(
+                        {
+                            "label": f"orphan hook    {event}: {basename} — script not found",
+                            "artifact": {
+                                "type": "settings_hook",
+                                "file": str(settings_file),
+                                "command": command,
+                            },
+                        }
+                    )
     findings += [
-        f"double-wired    {name} appears in {count} hook entries (may fire twice)"
+        {
+            "label": f"double-wired   {name} in {count} hook entries (may fire twice) "
+            "— re-run the installer, it sweeps prior entries",
+            "artifact": None,  # advisory: which entry to keep is the installer's call
+        }
         for name, count in sorted(seen.items())
         if count > 1
     ]
     return findings
 
 
-def check_claude_md(level: str) -> list[str]:
+def check_claude_md(level: str) -> list[dict]:
     """Report CLAUDE.md blocks that are malformed or have no install record.
 
     Args:
@@ -523,71 +554,109 @@ def check_claude_md(level: str) -> list[str]:
     starts = re.findall(r"<!-- claude-all:([^:]+):start -->", text)
     ends = set(re.findall(r"<!-- claude-all:([^:]+):end -->", text))
     installs = load_state().get("installs", {})
-    findings = [
-        f"unclosed-block  {k} has a start tag but no end tag" for k in starts if k not in ends
+    findings: list[dict] = [
+        {
+            "label": f"unclosed block {k} has a start tag but no end — hand-edit CLAUDE.md",
+            "artifact": None,  # advisory: no end tag means no safe slice to remove
+        }
+        for k in starts
+        if k not in ends
     ]
     findings += [
-        f"orphan-block    {k} — block present but no install record"
+        {
+            "label": f"orphan block   {k} — block present but no install record",
+            "artifact": {
+                "type": "claude_md",
+                "file": str(target),
+                "start": f"<!-- claude-all:{k}:start -->",
+                "end": f"<!-- claude-all:{k}:end -->",
+            },
+        }
         for k in sorted(set(starts))
-        if k not in installs
+        if k not in installs and k in ends
     ]
     findings += [
-        f"duplicate-block {k} appears {starts.count(k)} times"
+        {
+            "label": f"duplicate block {k} appears {starts.count(k)} times — hand-edit CLAUDE.md",
+            "artifact": None,  # advisory: which copy is authoritative is a human call
+        }
         for k in sorted({k for k in starts if starts.count(k) > 1})
     ]
     return findings
 
 
-def run_doctor(level: str) -> int:
-    """Report install-health problems across links, hook entries and CLAUDE.md.
-
-    Report-only — it never modifies anything; each finding names its remedy.
+def scan_leftovers(level: str) -> tuple[list[dict], list[dict]]:
+    """Find broken install artifacts, split into removable and advisory.
 
     Args:
         level: Install scope — ``'user'`` or ``'project'``.
 
     Returns:
-        0 when healthy, 1 when any finding was reported.
+        ``(removable, advisory)`` — removable findings carry an ``artifact`` dict
+        that ``undo_artifact`` can reverse; advisory ones are fixed by re-running
+        the installer or a hand-edit, so ``--prune`` reports without touching them.
     """
     findings = check_links(level) + check_settings_hooks(level) + check_claude_md(level)
-    scope = USER_CLAUDE_DIR if level == "user" else Path.cwd() / ".claude"
-    if not findings:
-        print(f"✓ install looks healthy ({scope})")
-        return 0
-    print(f"Found {len(findings)} issue(s) in {scope}:\n")
+    removable = [f for f in findings if f.get("artifact")]
+    advisory = [f for f in findings if not f.get("artifact")]
+    return removable, advisory
+
+
+def remove_leftovers(findings: list[dict]) -> list[str]:
+    """Reverse each removable leftover artifact.
+
+    Args:
+        findings: Removable findings from :func:`scan_leftovers`.
+
+    Returns:
+        One human-readable line per artifact actually removed.
+    """
+    removed: list[str] = []
     for finding in findings:
-        print(f"  ⚠ {finding}")
-    print(
-        "\nRemedies:"
-        "\n  dangling-link / orphan-hook / orphan-block — leftovers from an older claude-all."
-        "\n      Re-run the installer, then `claude-all --prune`. Anything still listed is an"
-        "\n      artifact this version no longer creates and is safe to delete by hand."
-        "\n  foreign-link  — points at a different/older claude-all; re-run the installer."
-        "\n  double-wired  — re-run the installer; it sweeps prior entries for the same script."
-        "\n  unclosed/duplicate-block — hand-edit CLAUDE.md between the claude-all markers."
-    )
-    return 1
+        if undo_artifact(finding["artifact"]):
+            removed.append(finding["label"])
+    return removed
 
 
-def notify_stale() -> None:
-    """Print an advisory notice (to stderr) listing prunable installs + stale records."""
+def notify_stale(level: str = "user") -> None:
+    """Print the end-of-run notice: everything `--prune` would clean up.
+
+    Covers both kinds of leftover — a resource the repo no longer ships, and an
+    artifact that is broken on its own terms (a dangling link, a hook entry whose
+    script is gone, an unowned CLAUDE.md block) — plus advisory findings that a
+    reinstall or a hand-edit fixes.
+
+    Args:
+        level: Install scope the run targeted — ``'user'`` or ``'project'``.
+    """
     stale = stale_installs()
     records = stale_records()
-    if not stale and not records:
+    removable, advisory = scan_leftovers(level)
+    if not (stale or records or removable or advisory):
         return
-    total = len(stale) + len(records)
-    print(
-        f"\n⚠  You have {total} installed resource(s) that are stale and can be "
-        "deleted. Run `claude-all --prune`:",
-        file=sys.stderr,
-    )
-    for entry in stale:
-        print(f"     - {entry['kind']}/{entry['name']}", file=sys.stderr)
-    for entry in records:
+    count = len(stale) + len(records) + len(removable)
+    if count:
         print(
-            f"     - {entry['kind']}/{entry['name']}  (stale record; binary left in place)",
+            f"\n⚠  {count} leftover(s) from older resources can be deleted — "
+            "run `claude-all --prune`:",
             file=sys.stderr,
         )
+        for entry in stale:
+            print(f"     - {entry['kind']}/{entry['name']}", file=sys.stderr)
+        for entry in records:
+            print(
+                f"     - {entry['kind']}/{entry['name']}  (stale record; binary left in place)",
+                file=sys.stderr,
+            )
+        for finding in removable:
+            print(f"     - {finding['label']}", file=sys.stderr)
+    if advisory:
+        print(
+            f"\nℹ  {len(advisory)} install issue(s) `--prune` cannot fix:",
+            file=sys.stderr,
+        )
+        for finding in advisory:
+            print(f"     - {finding['label']}", file=sys.stderr)
 
 
 # ---------------------- item model ----------------------
@@ -2024,21 +2093,15 @@ def main(argv: list[str]) -> int:
         action="store_true",
         help="Remove installs that are no longer shipped by the repo (no confirmation)",
     )
-    ap.add_argument(
-        "--doctor",
-        action="store_true",
-        help="Report install health — dangling/foreign symlinks, broken or double-wired "
-        "settings hooks, orphaned CLAUDE.md blocks. Read-only.",
-    )
     ap.add_argument("filters", nargs="*", help="Filter tokens (each must appear in path)")
     args = ap.parse_args(argv)
 
-    if args.doctor:
-        return run_doctor("project" if args.project else "user")
-
     if args.prune:
+        prune_level = "project" if args.project else "user"
         removed = prune_installs(stale_installs())
         forgotten = forget_records(stale_records())
+        leftovers, advisory = scan_leftovers(prune_level)
+        cleaned = remove_leftovers(leftovers)
         if removed:
             print(f"Pruned {len(removed)} stale install(s):")
             for line in removed:
@@ -2047,8 +2110,16 @@ def main(argv: list[str]) -> int:
             print(f"Forgot {len(forgotten)} stale record(s) (binary left in place):")
             for line in forgotten:
                 print(f"  ✓ {line}")
-        if not removed and not forgotten:
-            print("Nothing to prune — no stale installs.")
+        if cleaned:
+            print(f"Removed {len(cleaned)} leftover artifact(s) from an older claude-all:")
+            for line in cleaned:
+                print(f"  ✓ {line}")
+        if not (removed or forgotten or cleaned):
+            print("Nothing to prune — no stale installs or leftover artifacts.")
+        if advisory:
+            print(f"\nℹ  {len(advisory)} issue(s) --prune cannot fix:")
+            for finding in advisory:
+                print(f"  - {finding['label']}")
         return 0
 
     items = discover(args.filters)
@@ -2061,7 +2132,7 @@ def main(argv: list[str]) -> int:
 
     if args.list:
         cmd_list(items)
-        notify_stale()
+        notify_stale("project" if args.project else "user")
         return 0
 
     # Selection
@@ -2135,10 +2206,10 @@ def main(argv: list[str]) -> int:
 
     if failures:
         print(f"\nDone with {failures} failure(s) — see errors above.", file=sys.stderr)
-        notify_stale()
+        notify_stale(level)
         return 1
     print("\nDone. Symlinks → edits in repo propagate to install location.")
-    notify_stale()
+    notify_stale(level)
     return 0
 
 
