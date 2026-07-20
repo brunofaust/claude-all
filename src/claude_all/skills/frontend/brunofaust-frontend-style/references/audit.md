@@ -21,6 +21,18 @@ gets the whole list.
 - [ ] **No stale closure** — an effect/callback capturing a value it should read fresh (deps complete, or a ref where genuinely needed).
 - [ ] **No memoization without a measured reason** — React 19's compiler handles the common case; `useMemo`/`useCallback`/`memo` added "to be safe" is noise.
 
+## Module seams — one module, one secret → [`project-structure.md`](../../../python/brunofaust-python-style/references/project-structure.md)
+
+The rule is language-agnostic: a 1,000-line component holding orchestration *and*
+data fetching *and* formatting *and* a third-party widget's config is four secrets
+in one file, exactly like its backend equivalent.
+
+- [ ] **The file hides ONE secret** — one design decision that can change independently. Rendering, data fetching, business rules and a vendor widget's shape each change for their own reason.
+- [ ] **Seam test on anything long:** would these chunks ever appear in the same PR, for the same reason? Different reasons / rates / owners ⇒ split. Always change together ⇒ keep together (**a big component with one reason to change is fine**).
+- [ ] **Placed by dependency ownership** — code whose only real dependency is a third-party SDK/widget belongs in that integration's module, not inline in the component that renders it.
+- [ ] **No false seam** — if splitting would force lifting shared state or exporting internals just to satisfy the split, the cohesion is real: don't.
+- [ ] **LOC drove no decision** — length prompted the question, never answered it. (A container/page component may legitimately be large.)
+
 ## Composition & API shape → the `composition-patterns` skill
 
 - [ ] **No boolean-prop proliferation** — a component sprouting `isX`/`hasY`/`showZ` flags wants composition (children/slots/compound components), not another flag.
@@ -54,7 +66,7 @@ gets the whole list.
 - [ ] **Nothing heavy imported eagerly** that a dynamic import would defer (charting, editors, markdown).
 - [ ] **Client bundle isn't carrying server-only code** (Server Components / `server-only` where the framework supports it).
 
-## Minimalism → [`yagni.md`](../../python/brunofaust-python-style/references/yagni.md)
+## Minimalism → [`yagni.md`](../../../python/brunofaust-python-style/references/yagni.md)
 
 - [ ] **Every new component/hook/prop/context serves a concrete PRESENT need** — "might need it later", "more flexible", "cleaner" are not reasons. Run the deletion pass: name the need or delete it.
 

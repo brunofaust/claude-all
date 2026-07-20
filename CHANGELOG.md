@@ -21,6 +21,17 @@
   a perfectly healthy install.
   10 tests, each asserting the check actually **bites** on a specific defect (a check that can only
   report "clean" is the vacuous pass this repo keeps hunting), plus no-false-positive cases.
+- **ship / ship-pr + brunofaust-frontend-style**: the *one module, one secret* seam test is now
+  audited on **frontend** files too, not just Python — the rule is language-agnostic (a 1,000-line
+  component holding orchestration + fetching + formatting + a widget's config is four secrets in one
+  file). Both pipelines' coverage summaries now name **module seams** explicitly, so a reader can see
+  it is checked; and `/ship-pr`'s architecture step applies the seam test from the other side (Phase 1
+  asks *"does this file hold two secrets?"*, the architecture review asks *"is the new boundary in the
+  right place?"*).
+- **docs**: fixed 4 broken cross-skill links — a repo-wide sweep found the frontend `audit.md`'s two
+  `../../python/…` references and `e2e-testing.md`'s two `../../generic/…` references were each one
+  `../` short of resolving (the pre-existing `yagni.md` link shipped broken in the frontend merge).
+  Vendored files' own upstream-relative links are deliberately left alone to preserve byte-identity.
 - **installer**: renamed the internal `level` parameter to **`scope`** (78 sites, `cli.py` only).
   `level` didn't say what it was a level *of* — it reads like a verbosity or log level, when it
   actually means *where things install*: `~/.claude` (user) vs `./.claude` (project), which is how the
