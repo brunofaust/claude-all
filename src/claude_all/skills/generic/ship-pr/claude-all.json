@@ -1,0 +1,10 @@
+{
+  "requires": [
+    "agents/lint-fixer",
+    "agents/test-runner",
+    "agents/docs-updater",
+    "agents/git-committer",
+    "skills/verification-loop",
+    "skills/code-review-discipline"
+  ]
+}

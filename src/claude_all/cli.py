@@ -238,6 +238,99 @@ def annotate_installed(items: list[Item]) -> None:
         it.installed = state_key(it.kind, it.name) in installs
 
 
+# ---------------------- dependency resolution ----------------------
+#
+# A resource may ship a per-resource `claude-all.json` companion — an extensible
+# manifest (today: `{"requires": ["kind/name", ...]}`, room to grow). Installing a
+# resource pulls in its dependency CLOSURE (transitive, cycle-safe), so e.g.
+# installing the ship-pr skill also installs the agents it delegates to. The
+# manifest lives BESIDE the resource (like hook.json / claude_md.md), so deleting
+# the resource deletes its deps too — no central manifest to drift, the same
+# anti-orphan property the prune feature enforces from the other direction.
+
+
+def resource_config_path(item: Item) -> Path:
+    """Return the resource's ``claude-all.json`` companion path (folder or flat).
+
+    Args:
+        item: The resource whose companion manifest to locate.
+
+    Returns:
+        ``<dir>/claude-all.json`` for a folder resource (skill, folder-agent, …),
+        or the flat sibling ``<name>.claude-all.json`` for a flat agent — mirroring
+        the hook-companion naming convention.
+    """
+    if item.kind == "agents" and item.src.name != "agent.md":
+        return item.src.parent / f"{item.name}.claude-all.json"
+    return item.src.parent / "claude-all.json"
+
+
+def load_requires(item: Item) -> list[str]:
+    """Return the ``requires`` list from a resource's ``claude-all.json``, or ``[]``.
+
+    Tolerant: a missing/malformed manifest, or one without a list ``requires``,
+    yields no dependencies rather than raising — a resource without the companion
+    simply has no declared deps.
+
+    Args:
+        item: The resource whose dependencies to read.
+    """
+    path = resource_config_path(item)
+    if not path.exists():
+        return []
+    try:
+        config = json.loads(path.read_text())
+    except (json.JSONDecodeError, OSError):
+        return []
+    requires = config.get("requires", [])
+    if not isinstance(requires, list):
+        return []
+    return [dep for dep in requires if isinstance(dep, str)]
+
+
+def resolve_closure(
+    selected: list[Item], universe: list[Item]
+) -> tuple[list[Item], list[str], list[str]]:
+    """Expand *selected* to its transitive dependency closure over *universe*.
+
+    Cycle-safe (a resource already visited is not re-entered). A ``requires`` entry
+    that resolves to no known resource is returned as *external* (a built-in skill
+    like ``/code-review``, or a typo the drift-checker will catch) and never
+    installed — resolution reports it rather than failing.
+
+    Args:
+        selected: The resources the user chose to install.
+        universe: Every discovered resource (pass ``discover([])`` — the UNFILTERED
+            set, so a dependency excluded by the user's filter is still resolvable).
+
+    Returns:
+        ``(closure, pulled_in, external)`` — the full install list (selected + deps,
+        deduped), the dep keys pulled in that were NOT originally selected, and the
+        unresolved (external/built-in) dep keys.
+    """
+    index = {state_key(it.kind, it.name): it for it in universe}
+    selected_keys = {state_key(it.kind, it.name) for it in selected}
+    closure: dict[str, Item] = {}
+    pulled_in: set[str] = set()
+    external: set[str] = set()
+    stack = list(selected)
+    while stack:
+        item = stack.pop()
+        key = state_key(item.kind, item.name)
+        if key in closure:
+            continue
+        closure[key] = item
+        for dep in load_requires(item):
+            if dep in index:
+                if dep not in selected_keys:
+                    pulled_in.add(dep)
+                if dep not in closure:
+                    stack.append(index[dep])
+            else:
+                external.add(dep)
+    return list(closure.values()), sorted(pulled_in), sorted(external)
+
+
 # ---------------------- install ----------------------
 
 
@@ -1456,6 +1549,18 @@ def main(argv: list[str]) -> int:
     if not chosen:
         print("Nothing selected.")
         return 0
+
+    # Pull in each chosen resource's dependency closure. Resolve over the UNFILTERED
+    # universe so a dependency excluded by the user's filter is still installed.
+    chosen, pulled_in, external = resolve_closure(chosen, discover([]))
+    if pulled_in:
+        print(f"+ pulled in {len(pulled_in)} dependency(ies): {', '.join(pulled_in)}")
+    if external:
+        print(
+            f"  (note: {len(external)} required dep(s) are external/built-in, not installed here: "
+            f"{', '.join(external)})",
+            file=sys.stderr,
+        )
 
     level: str | None
     if args.user:

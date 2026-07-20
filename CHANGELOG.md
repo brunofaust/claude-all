@@ -5,6 +5,21 @@
 
 ### Added
 
+- **installer**: per-resource dependency resolution. A resource may ship a `claude-all.json`
+  companion (extensible manifest, first key `requires: ["kind/name", ...]`) beside it — folder
+  resources use `<dir>/claude-all.json`, flat agents `<name>.claude-all.json`, mirroring the
+  hook-companion convention. Installing a resource now pulls in its **transitive, cycle-safe
+  dependency closure** (e.g. installing `skills/ship-pr` also installs `lint-fixer`, `test-runner`,
+  `docs-updater`, `git-committer`, `verification-loop`, `code-review-discipline`), resolved over the
+  UNFILTERED resource set so a dependency excluded by the user's filter is still installed, and
+  reporting what got pulled in. A `requires` entry that resolves to no known resource (a built-in like
+  `/code-review`) is reported as external and skipped, never fails the install. The manifest lives
+  BESIDE the resource so deleting the resource deletes its deps too — no central manifest to drift
+  (the anti-orphan property the prune feature enforces from the other side). `scripts/check_requires.py`
+  is a prek drift-gate: every `requires` entry must resolve to a real resource (it imports the
+  installer's own `discover()`, so "what is a resource" is defined in one place), catching a `requires`
+  left dangling by a rename/deletion.
+
 - **brunofaust-python-style / ship / ship-pr**: the audit generalized into a **skill-audit
   framework**. New `references/audit.md` — the skill's master *judgment* checklist (minimalism,
   layering, error-handling, async, boundaries, config, tests, ownership), explicitly the layer the

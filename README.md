@@ -168,6 +168,27 @@ Target settings file:
 - `--user` → `~/.claude/settings.json` + `~/.claude/hooks/`
 - `--project` → `./.claude/settings.json` + `./.claude/hooks/`
 
+### Dependency resolution — `claude-all.json`
+
+A resource may ship a **`claude-all.json`** companion beside its main file — an extensible
+per-resource manifest whose first key is `requires`:
+
+```json
+{ "requires": ["agents/lint-fixer", "agents/git-committer", "skills/verification-loop"] }
+```
+
+- Placement mirrors the hook companion: folder resources use `<dir>/claude-all.json`; a flat agent
+  uses the sibling `<name>.claude-all.json`.
+- Installing a resource pulls in its **transitive, cycle-safe dependency closure** — install
+  `skills/ship-pr` and the agents/skills it delegates to come with it. Resolution runs over the full
+  resource set, so a dependency your filter would exclude is still installed; the installer reports
+  what it pulled in.
+- Each entry is a `kind/name` key (as in `state.json`). An entry that names no installable
+  resource — a built-in like `/code-review` — is reported as *external* and skipped, never installed.
+- The manifest lives **with** the resource, so deleting the resource deletes its deps (no central
+  file to drift). `scripts/check_requires.py` gates that every `requires` entry resolves to a real
+  resource; a `requires` left dangling by a rename fails the check.
+
 ## First run — audit & customize per project
 
 After installing claude-all, the **first thing to run in each project** is the customization pass.
