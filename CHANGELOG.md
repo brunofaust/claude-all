@@ -5,15 +5,36 @@
 
 ### Changed
 
-- **ship / ship-pr**: added a hard **full prek gate** — before commit, `prek run --all-files`
-  runs on **both** stages (pre-commit AND `--hook-stage pre-push`) over the **whole repo**, and must
-  be **zero-`Failed`**. **No pre-existing-issue amnesty:** a hook failing on a file outside the diff
-  still blocks the ship — "it was already broken" is not an exception; fix the root cause (never
-  `# noqa` / `SKIP=` / `--no-verify`). Both skills also warn to read per-hook status lines, since a
-  `(no files to check) Skipped` on input a hook should have inspected is a vacuous pass, not green.
-  Closes the recurring "pre-existing issues slipped through" gap: `lint-fixer` only touches changed
-  files and `--all-files` alone runs only the pre-commit stage, so neither guaranteed a whole-repo
-  both-stage green.
+- **ship / ship-pr**: prek gate hardened, scoped per pipeline, and `/ship-pr` parallelized.
+  - **`/ship-pr` — full prek gate, whole repo, both stages, no amnesty.** `prek run --all-files` on
+    pre-commit AND `--hook-stage pre-push`, **zero `Failed`**; a hook failing on a file *outside* the
+    diff still blocks the PR ("pre-existing" is never a pass). Closes the recurring "pre-existing
+    issues slipped through" gap (`lint-fixer` only touches changed files; `--all-files` alone is
+    pre-commit-only).
+  - **`/ship` — CHANGED files, both stages, fast.** The quick commit loop gates *your* changes (`prek
+    run` + `prek run --hook-stage pre-push --files …`), not the whole repo, so a frequent WIP commit
+    isn't blocked by an unrelated issue elsewhere. The whole-repo no-amnesty gate is `/ship-pr`'s job.
+  - **`/ship-pr` runs in three phases; the review/gate phase is PARALLEL.** Phase 1 (serial, mutating):
+    skill audit + `/simplify` → lint-fixer. Phase 2 (concurrent subagents, read-only): coverage · tests
+    · full prek · code-review · security · seo · architecture. Phase 3 (serial): docs → commit → PR.
+    Fanning out the independent read-only steps is what stops `/ship-pr` being a 30-minute serial crawl;
+    mutators stay serial and first so the parallel readers see final code.
+  - **`/ship-pr` gains scoped structural + infra + migration reviews** in Phase 2, each firing only on
+    its surface: `architecture-decision-guard` when the diff is *structural* (a new boundary/layer/
+    interface/cross-module dep or a repo-wide gate rollout — the cross-file lens vs the per-file yagni
+    audit); an **IaC review** (`cloudformation-reviewer`/`terraform-reviewer` + `aws-architecture` and
+    `aws-cost-optimization` lenses) on `*.tf`/CFN/CDK changes, gating on both architecture fitness AND
+    cost; and `migration-reviewer` on a DB-migration change. Skipped when the diff doesn't touch the
+    surface, so the common case stays fast.
+  - **`/ship-pr` gains a dependency review** when a manifest changes (`pyproject.toml` / `uv.lock` /
+    `requirements*.txt`, or `package.json` / lockfile). For each added/bumped dep: a **CVE scan**
+    (`uv audit` / `pip-audit` / `npm audit`) gates on **high/critical**, and — the advisory part — a
+    **version-currency + maintenance + fit** check via `research-before-build` (+ Context7 for the
+    latest stable) *advises* the user (newer release out? still maintained? even needed vs stdlib?)
+    without blocking. Owns the dependency slice of the supply-chain surface, so `security-review` need
+    not re-scan dep CVEs. Skipped when no manifest changed.
+  - Both skills warn to read per-hook status: a `(no files to check) Skipped` on input a hook should
+    have inspected is a vacuous pass, not green.
 
 ### Added
 

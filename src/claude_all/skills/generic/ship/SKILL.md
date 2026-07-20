@@ -68,19 +68,19 @@ If the working tree is clean, stop: "nothing to ship".
 4. **Tests — `test-runner` agent.** Run the affected tests. If anything is red, **stop** and report
    the failures verbatim (do not "fix" by deleting/skipping tests). Hand off to `debugger` only if the
    user asks.
-5. **Full gate — `prek run --all-files`, BOTH stages, whole repo, 100% green.** This is the hard
-   floor and it is non-negotiable. Run, over the ENTIRE repo (not just the diff):
+5. **Gate the CHANGED files — `prek` on both stages, 100% green.** `/ship` is the fast commit loop,
+   so it gates *your* changes (not the whole repo) — on **both** stages so a pre-push hook on your code
+   still runs:
    ```bash
-   prek run --all-files                          # pre-commit stage
-   prek run --all-files --hook-stage pre-push    # pre-push stage
+   git add -A                                              # so prek SEES the new files (untracked = skipped)
+   prek run                                                # pre-commit stage, staged/changed files
+   prek run --hook-stage pre-push --files $(git diff --cached --name-only)
    ```
-   Both must be **fully green — zero `Failed`.** **NO pre-existing-issue amnesty:** a hook that fails
-   on a file *outside* your diff is still a failure that blocks this ship — "it was already broken" is
-   not an exception. If red, **stop and fix the root cause** (route to `lint-fixer`; never `# noqa` /
-   `SKIP=` / `--no-verify` / config-loosening), then re-run both stages until green. Read the per-hook
-   status lines, not just the exit colour — a hook reporting `(no files to check) Skipped` on input it
-   should have inspected is a **vacuous pass**, not a green (→ the `prek` skill's *vacuous PASS*
-   section; `git add` new files first so they are seen). Delegate the run to `code-quality`.
+   Both must be **zero `Failed`** on your changed set. If red, **stop and fix the root cause** (route to
+   `lint-fixer`; never `# noqa` / `SKIP=` / `--no-verify` / config-loosening), then re-run. Read the
+   per-hook status, not the exit colour — a `(no files to check) Skipped` on a file it should inspect
+   is a **vacuous pass**, so `git add` first (→ the `prek` skill's *vacuous PASS* section). The
+   whole-repo, no-pre-existing-amnesty full gate is `/ship-pr`'s job, not this fast loop's.
 6. **Verify — `verification-loop` skill.** Run the pre-commit gate table (lint/format → types → tests
    → coverage → security/secrets → diff review) to a single READY / NOT READY verdict. If NOT READY,
    stop with the failing gates.
