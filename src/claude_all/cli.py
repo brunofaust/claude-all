@@ -66,13 +66,312 @@ def save_state(state: dict) -> None:
 def record_install(kind: str, name: str, target_path: Path | None) -> None:
     state = load_state()
     state.setdefault("installs", {})
-    state["installs"][state_key(kind, name)] = {
+    key = state_key(kind, name)
+    prior = state.get("installs", {}).get(key, {})
+    state["installs"][key] = {
         "kind": kind,
         "name": name,
         "target": str(target_path) if target_path else None,
         "installed_at": datetime.now(UTC).isoformat(),
+        # A re-install replays every artifact-recording call, so start clean each
+        # time rather than accumulating duplicates from the previous install.
+        "artifacts": [],
     }
+    # Preserve nothing from `prior` — record_install runs FIRST in every install
+    # path, then the artifact-creating steps (claude_md / hook) append via
+    # record_artifact. This reset is what keeps the footprint current, not stale.
+    _ = prior
     save_state(state)
+
+
+def record_artifact(kind: str, name: str, artifact: dict) -> None:
+    """Append one concrete side-effect to a resource's recorded footprint.
+
+    The footprint lets ``--prune`` reverse EXACTLY what an install did — a
+    ``CLAUDE.md`` block, a ``settings.json`` hook entry, a hook symlink — even
+    after the resource's source has been deleted from the repo, without
+    re-deriving it from a naming convention that may have drifted.
+
+    Args:
+        kind: Resource kind.
+        name: Resource name.
+        artifact: A ``{"type": ...}`` record. Types: ``"symlink"`` (``path``),
+            ``"claude_md"`` (``file`` / ``start`` / ``end``), ``"settings_hook"``
+            (``file`` / ``command``).
+    """
+    state = load_state()
+    entry = state.setdefault("installs", {}).get(state_key(kind, name))
+    if entry is None:  # record_install always runs first; defensive only
+        return
+    entry.setdefault("artifacts", []).append(artifact)
+    save_state(state)
+
+
+# ---------------------- stale-install pruning ----------------------
+#
+# The installer records every install in state.json. When a resource is later
+# DELETED from the repo (e.g. skills merged/retired), its install lingers in
+# ~/.claude — a dangling symlink, a CLAUDE.md block, a settings hook entry. This
+# detects those and can remove them.
+#
+# Detecting "stale" is "recorded but no longer shipped" — but a naive diff of
+# state vs discover() is UNSAFE and would delete live resources. Three guards,
+# each closing a real false-positive found against a real state.json:
+#   1. Skip companion sub-records (`<name>.claude_md`) — they belong to a PRIMARY
+#      resource and are pruned only WITH it; alone they'd strip an installed
+#      resource's CLAUDE.md block.
+#   2. Never flag a kind for which discover() currently returns ZERO items — a
+#      missing/empty enumerator (e.g. no `plugins/` dir in the package) would
+#      otherwise mark every recorded plugin stale.
+#   3. The candidate list is only ever ADVISORY on a normal run; removal happens
+#      only under an explicit `--prune`. The human sees the list first.
+
+COMPANION_SUFFIX = ".claude_md"
+
+# Kinds excluded from pruning: their install is more than a symlink+block+hook
+# (a brew binary, a plugin-marketplace entry), so removing only our recorded
+# artifacts would leave the real thing half-installed. Prune never touches them.
+PRUNE_EXCLUDED_KINDS = frozenset({"tools", "plugins"})
+
+
+def is_companion_key(name: str) -> bool:
+    """True when a state name is a companion sub-record, not a primary resource."""
+    return name.endswith(COMPANION_SUFFIX)
+
+
+def infer_level(target: str | None) -> str:
+    """Infer the install scope from a recorded target path.
+
+    Args:
+        target: The recorded target path, or ``None``.
+
+    Returns:
+        ``"user"`` when the target is under ``~/.claude`` (or unknown — the
+        common, safe default), else ``"project"``.
+    """
+    if target and str(Path.cwd()) in target and str(Path.home()) not in target:
+        return "project"
+    return "user"
+
+
+def scan_stale() -> list[dict]:
+    """Every genuinely-stale PRIMARY install — recorded but no longer shipped.
+
+    Applies guard 1 (companion sub-records are skipped — they ride their primary)
+    and guard 2 (a kind with zero currently-discovered items is skipped, so a
+    missing enumerator can't mark everything of that kind stale — this also means
+    a ``plugins`` record is never flagged while the package ships no ``plugins/``
+    dir). Callers partition the result by kind.
+    """
+    discovered = discover([])
+    shippable = {state_key(it.kind, it.name) for it in discovered}
+    kinds_present = {it.kind for it in discovered}
+    stale: list[dict] = []
+    for key, entry in load_state().get("installs", {}).items():
+        if is_companion_key(entry.get("name", "")):  # guard 1
+            continue
+        if entry.get("kind") not in kinds_present:  # guard 2
+            continue
+        if key not in shippable:
+            stale.append(entry)
+    return stale
+
+
+def stale_installs() -> list[dict]:
+    """Stale installs of PRUNABLE kinds — ``--prune`` fully reverses their footprint."""
+    return [e for e in scan_stale() if e.get("kind") not in PRUNE_EXCLUDED_KINDS]
+
+
+def stale_records() -> list[dict]:
+    """Stale RECORDS of tools/plugins — the resource is gone from the repo, but its
+    real install (a brew/pipx binary, a marketplace entry) must NOT be uninstalled.
+    ``--prune`` forgets the record (and any ``~/.claude`` artifact) and leaves the
+    binary in place.
+    """
+    return [e for e in scan_stale() if e.get("kind") in PRUNE_EXCLUDED_KINDS]
+
+
+def prune_installs(entries: list[dict]) -> list[str]:
+    """Remove each stale install (symlink + CLAUDE.md block + hook entry) and its companions.
+
+    Symlink-guarded: only unlinks a recorded target when it is actually a symlink,
+    so a recorded real file (e.g. a CLAUDE.md path) is never deleted. Uses the
+    idempotent ``remove_claude_md`` / ``remove_hook`` for the tagged block and the
+    settings hook entry. Drops the primary and its companion records from state.
+
+    Args:
+        entries: Primary state entries to prune (from :func:`stale_installs`).
+
+    Returns:
+        One human-readable line per pruned resource.
+    """
+    state = load_state()
+    installs = state.get("installs", {})
+    removed: list[str] = []
+    for entry in entries:
+        kind, name = entry["kind"], entry["name"]
+        actions = reverse_footprint(entry)
+        if not (entry.get("artifacts") or []):
+            # Legacy entry (recorded before footprints): reconstruct from kind/name.
+            item = Item(kind=kind, subcategory="", name=name, src=Path("."))
+            level = infer_level(entry.get("target"))
+            if remove_claude_md(item, level):
+                actions.append("CLAUDE.md block")
+            if remove_hook(item, level):
+                actions.append("hook")
+        installs.pop(state_key(kind, name), None)
+        installs.pop(state_key(kind, name + COMPANION_SUFFIX), None)
+        removed.append(f"{kind}/{name} ({', '.join(actions) or 'state only'})")
+
+    save_state(state)
+    return removed
+
+
+def reverse_footprint(entry: dict) -> list[str]:
+    """Undo a record's ``~/.claude`` artifacts (symlink-guarded); return action labels.
+
+    The shared core of :func:`prune_installs` and :func:`forget_records`: unlink the
+    recorded resource symlink (only when it IS a symlink — a recorded real file is
+    never deleted) and reverse each recorded artifact. Touches the filesystem only;
+    does not mutate state or uninstall any binary.
+
+    Args:
+        entry: A primary state record.
+
+    Returns:
+        Non-empty action labels for the reversed artifacts.
+    """
+    actions: list[str] = []
+    target = entry.get("target")
+    if target and Path(target).is_symlink():
+        Path(target).unlink()
+        actions.append("symlink")
+    actions.extend(a for a in (undo_artifact(x) for x in entry.get("artifacts") or []) if a)
+    return actions
+
+
+def undo_artifact(artifact: dict) -> str:
+    """Reverse one recorded install artifact. Returns a short label (or "").
+
+    Args:
+        artifact: A footprint record from :func:`record_artifact`.
+    """
+    kind = artifact.get("type")
+    if kind == "symlink":
+        path = Path(artifact["path"])
+        if path.is_symlink():  # guard: only unlink a symlink, never a real file
+            path.unlink()
+            return "hook symlink"
+        return ""
+    if kind == "claude_md":
+        return strip_claude_md_block(Path(artifact["file"]), artifact["start"], artifact["end"])
+    if kind == "settings_hook":
+        return drop_settings_command(Path(artifact["file"]), artifact["command"])
+    return ""
+
+
+def strip_claude_md_block(target: Path, start_tag: str, end_tag: str) -> str:
+    """Remove the tagged block between *start_tag* and *end_tag* from *target*.
+
+    Args:
+        target: The ``CLAUDE.md`` file.
+        start_tag: The block's opening marker.
+        end_tag: The block's closing marker.
+
+    Returns:
+        ``"CLAUDE.md block"`` when a block was removed, else ``""``.
+    """
+    if not target.exists():
+        return ""
+    text = target.read_text()
+    if start_tag not in text or end_tag not in text:
+        return ""
+    before = text.split(start_tag, 1)[0].rstrip()
+    after = text.split(end_tag, 1)[1].lstrip("\n")
+    target.write_text((before + "\n" + after).rstrip() + "\n")
+    return "CLAUDE.md block"
+
+
+def drop_settings_command(settings_file: Path, command: str) -> str:
+    """Remove every hook entry whose ``command`` equals *command* from *settings_file*.
+
+    Args:
+        settings_file: The ``settings.json`` to edit.
+        command: The exact command string the install wired.
+
+    Returns:
+        ``"settings hook"`` when an entry was removed, else ``""``.
+    """
+    if not settings_file.exists():
+        return ""
+    try:
+        settings = json.loads(settings_file.read_text())
+    except json.JSONDecodeError:
+        return ""
+    removed = False
+    for event, blocks in list(settings.get("hooks", {}).items()):
+        for block in blocks:
+            before = len(block.get("hooks", []))
+            block["hooks"] = [h for h in block.get("hooks", []) if h.get("command") != command]
+            if len(block.get("hooks", [])) != before:
+                removed = True
+        settings["hooks"][event] = [b for b in blocks if b.get("hooks")]
+        if not settings["hooks"][event]:
+            del settings["hooks"][event]
+    if not settings.get("hooks"):
+        settings.pop("hooks", None)
+    if removed:
+        settings_file.write_text(json.dumps(settings, indent=2) + "\n")
+        return "settings hook"
+    return ""
+
+
+def forget_records(entries: list[dict]) -> list[str]:
+    """Forget stale tool/plugin RECORDS without uninstalling the real binary.
+
+    Removes any ``~/.claude`` artifact the record created (symlink-guarded) and
+    drops the state record, but NEVER runs ``brew``/``pipx`` uninstall — the
+    resource is no longer shipped by claude-all, so state stops claiming to manage
+    it, while its binary is left exactly as the user installed it.
+
+    Args:
+        entries: Stale tool/plugin records (from :func:`stale_records`).
+
+    Returns:
+        One human-readable line per forgotten record.
+    """
+    state = load_state()
+    installs = state.get("installs", {})
+    forgotten: list[str] = []
+    for entry in entries:
+        kind, name = entry["kind"], entry["name"]
+        reverse_footprint(entry)  # remove any ~/.claude artifact; never the binary
+        installs.pop(state_key(kind, name), None)
+        installs.pop(state_key(kind, name + COMPANION_SUFFIX), None)
+        forgotten.append(f"{kind}/{name} (record forgotten; binary left in place)")
+    save_state(state)
+    return forgotten
+
+
+def notify_stale() -> None:
+    """Print an advisory notice (to stderr) listing prunable installs + stale records."""
+    stale = stale_installs()
+    records = stale_records()
+    if not stale and not records:
+        return
+    total = len(stale) + len(records)
+    print(
+        f"\n⚠  You have {total} installed resource(s) that are stale and can be "
+        "deleted. Run `claude-all --prune`:",
+        file=sys.stderr,
+    )
+    for entry in stale:
+        print(f"     - {entry['kind']}/{entry['name']}", file=sys.stderr)
+    for entry in records:
+        print(
+            f"     - {entry['kind']}/{entry['name']}  (stale record; binary left in place)",
+            file=sys.stderr,
+        )
 
 
 # ---------------------- item model ----------------------
@@ -787,6 +1086,12 @@ def inject_hook(item: Item, level: str) -> str | None:
     )
 
     settings_file.write_text(json.dumps(settings, indent=2) + "\n")
+    record_artifact(item.kind, item.name, {"type": "symlink", "path": str(dest)})
+    record_artifact(
+        item.kind,
+        item.name,
+        {"type": "settings_hook", "file": str(settings_file), "command": cmd_str},
+    )
     return f"hook installed → {dest}, registered in {settings_file}"
 
 
@@ -798,30 +1103,10 @@ def remove_hook(item: Item, level: str) -> str | None:
         level: Installation scope — ``'user'`` or ``'project'``.
     """
     dest = hook_symlink_dest(level, item)
-    settings_file = settings_path(level)
-
-    removed_any = False
-
-    if settings_file.exists():
-        try:
-            settings = json.loads(settings_file.read_text())
-        except json.JSONDecodeError:
-            settings = {}
-        cmd_str = str(dest)
-        for event_blocks in settings.get("hooks", {}).values():
-            for block in event_blocks:
-                before = len(block.get("hooks", []))
-                block["hooks"] = [h for h in block.get("hooks", []) if h.get("command") != cmd_str]
-                if before != len(block.get("hooks", [])):
-                    removed_any = True
-            # Drop empty blocks
-        for ev, blocks in list(settings.get("hooks", {}).items()):
-            settings["hooks"][ev] = [b for b in blocks if b.get("hooks")]
-            if not settings["hooks"][ev]:
-                del settings["hooks"][ev]
-        if not settings.get("hooks"):
-            settings.pop("hooks", None)
-        settings_file.write_text(json.dumps(settings, indent=2) + "\n")
+    # The settings-entry removal IS `drop_settings_command` — one owner for
+    # "strip this command from settings.json", used by both remove_hook and the
+    # artifact-based prune path.
+    removed_any = bool(drop_settings_command(settings_path(level), str(dest)))
 
     if dest.is_symlink() or dest.exists():
         dest.unlink()
@@ -899,6 +1184,11 @@ def inject_claude_md(item: Item, level: str) -> str | None:
         action = "appended"
 
     target.write_text(new_text)
+    record_artifact(
+        item.kind,
+        item.name,
+        {"type": "claude_md", "file": str(target), "start": start_tag, "end": end_tag},
+    )
     return f"CLAUDE.md {action} ({target})"
 
 
@@ -1059,6 +1349,12 @@ def install_standalone_hook(item: Item, level: str) -> str:
 
     settings_file.write_text(json.dumps(settings, indent=2) + "\n")
     record_install(item.kind, item.name, None)
+    record_artifact(item.kind, item.name, {"type": "symlink", "path": str(dest)})
+    record_artifact(
+        item.kind,
+        item.name,
+        {"type": "settings_hook", "file": str(settings_file), "command": cmd_str},
+    )
     return f"installed hook {item.name} → {dest} ({event}/{matcher or '*'})"
 
 
@@ -1507,8 +1803,28 @@ def main(argv: list[str]) -> int:
         action="store_true",
         help="Install to ./.claude (skip level prompt)",
     )
+    ap.add_argument(
+        "--prune",
+        action="store_true",
+        help="Remove installs that are no longer shipped by the repo (no confirmation)",
+    )
     ap.add_argument("filters", nargs="*", help="Filter tokens (each must appear in path)")
     args = ap.parse_args(argv)
+
+    if args.prune:
+        removed = prune_installs(stale_installs())
+        forgotten = forget_records(stale_records())
+        if removed:
+            print(f"Pruned {len(removed)} stale install(s):")
+            for line in removed:
+                print(f"  ✓ {line}")
+        if forgotten:
+            print(f"Forgot {len(forgotten)} stale record(s) (binary left in place):")
+            for line in forgotten:
+                print(f"  ✓ {line}")
+        if not removed and not forgotten:
+            print("Nothing to prune — no stale installs.")
+        return 0
 
     items = discover(args.filters)
     if not items:
@@ -1520,6 +1836,7 @@ def main(argv: list[str]) -> int:
 
     if args.list:
         cmd_list(items)
+        notify_stale()
         return 0
 
     # Selection
@@ -1593,8 +1910,10 @@ def main(argv: list[str]) -> int:
 
     if failures:
         print(f"\nDone with {failures} failure(s) — see errors above.", file=sys.stderr)
+        notify_stale()
         return 1
     print("\nDone. Symlinks → edits in repo propagate to install location.")
+    notify_stale()
     return 0
 
 

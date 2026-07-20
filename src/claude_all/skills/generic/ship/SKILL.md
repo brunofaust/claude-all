@@ -3,7 +3,8 @@ name: ship
 description: >-
   Lightweight pre-commit pipeline — run the quality gates and commit, in order, stopping on the first
   hard failure. Sequence: simplification audit (vs yagni.md) → test-coverage gate → lint-fixer →
-  test-runner → verification-loop → (confirm) → git-committer.
+  test-runner → full prek gate (--all-files, both stages, zero-Failed) → verification-loop →
+  (confirm) → git-committer.
   Use when: "ship this", "run the gates and commit", finishing a small change and wanting it linted +
   tested + committed without a full PR ceremony. This is the LIGHT flow — no code review, no PR. For
   the heavier review + draft-PR flow use `/ship-pr`. Orchestrator only: it sequences existing agents
@@ -67,18 +68,34 @@ If the working tree is clean, stop: "nothing to ship".
 4. **Tests — `test-runner` agent.** Run the affected tests. If anything is red, **stop** and report
    the failures verbatim (do not "fix" by deleting/skipping tests). Hand off to `debugger` only if the
    user asks.
-5. **Verify — `verification-loop` skill.** Run the pre-commit gate table (lint/format → types → tests
+5. **Gate the CHANGED files — `prek` on both stages, 100% green.** `/ship` is the fast commit loop,
+   so it gates *your* changes (not the whole repo) — on **both** stages so a pre-push hook on your code
+   still runs:
+   ```bash
+   git add -A                                              # so prek SEES the new files (untracked = skipped)
+   prek run                                                # pre-commit stage, staged/changed files
+   prek run --hook-stage pre-push --files $(git diff --cached --name-only)
+   ```
+   Both must be **zero `Failed`** on your changed set. If red, **stop and fix the root cause** (route to
+   `lint-fixer`; never `# noqa` / `SKIP=` / `--no-verify` / config-loosening), then re-run. Read the
+   per-hook status, not the exit colour — a `(no files to check) Skipped` on a file it should inspect
+   is a **vacuous pass**, so `git add` first (→ the `prek` skill's *vacuous PASS* section). The
+   whole-repo, no-pre-existing-amnesty full gate is `/ship-pr`'s job, not this fast loop's.
+6. **Verify — `verification-loop` skill.** Run the pre-commit gate table (lint/format → types → tests
    → coverage → security/secrets → diff review) to a single READY / NOT READY verdict. If NOT READY,
    stop with the failing gates.
-6. **Commit — `git-committer` agent (after confirm).** Only when every gate is green: show the diff
+7. **Commit — `git-committer` agent (after confirm).** Only when every gate is green: show the diff
    summary and the proposed Conventional Commits message, get a one-word confirm, then commit to the
    **current branch**. Never branch/push/PR here — that's `/ship-pr`.
 
 ## Rules
 
+- **Every ship is full green — no pre-existing-issue amnesty.** `prek run --all-files` on BOTH stages
+  (pre-commit + pre-push) over the whole repo must be zero-`Failed` before commit. A hook failing on a
+  file you didn't touch still blocks the ship; "pre-existing" is never a pass. Fix the root cause.
 - **Stop-on-hard-fail.** A missing-test gap (a behavior change with no unit and/or e2e/integration
-  coverage), a red test, an unfixable lint finding, or a NOT-READY verdict halts the pipeline — report
-  and let the user decide. Don't paper over a gate to keep moving.
+  coverage), a red test, an unfixable lint finding, a red `prek` stage, or a NOT-READY verdict halts
+  the pipeline — report and let the user decide. Don't paper over a gate to keep moving.
 - **Tests gate the feature, not just the code.** A new/changed feature must ship the e2e/integration
   tests that validate its **business requirements** (where such a suite exists), plus the unit tests
   for the code. Shipping a feature with no business-requirement coverage is a hard gap, not a warning.
@@ -91,5 +108,5 @@ If the working tree is clean, stop: "nothing to ship".
 
 A PASS/FAIL line per step, then the commit SHA (or the reason the pipeline stopped):
 ```
-ship: audit ✓ (py) · coverage ✓ (unit + e2e) · lint ✓ · tests ✓ (42 passed) · verify READY · commit <sha>
+ship: audit ✓ (py) · coverage ✓ (unit + e2e) · lint ✓ · tests ✓ (42 passed) · prek ✓ (pre-commit+pre-push, all-files) · verify READY · commit <sha>
 ```

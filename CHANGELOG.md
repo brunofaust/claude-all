@@ -3,6 +3,39 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **ship / ship-pr**: prek gate hardened, scoped per pipeline, and `/ship-pr` parallelized.
+  - **`/ship-pr` — full prek gate, whole repo, both stages, no amnesty.** `prek run --all-files` on
+    pre-commit AND `--hook-stage pre-push`, **zero `Failed`**; a hook failing on a file *outside* the
+    diff still blocks the PR ("pre-existing" is never a pass). Closes the recurring "pre-existing
+    issues slipped through" gap (`lint-fixer` only touches changed files; `--all-files` alone is
+    pre-commit-only).
+  - **`/ship` — CHANGED files, both stages, fast.** The quick commit loop gates *your* changes (`prek
+    run` + `prek run --hook-stage pre-push --files …`), not the whole repo, so a frequent WIP commit
+    isn't blocked by an unrelated issue elsewhere. The whole-repo no-amnesty gate is `/ship-pr`'s job.
+  - **`/ship-pr` runs in three phases; the review/gate phase is PARALLEL.** Phase 1 (serial, mutating):
+    skill audit + `/simplify` → lint-fixer. Phase 2 (concurrent subagents, read-only): coverage · tests
+    · full prek · code-review · security · seo · architecture. Phase 3 (serial): docs → commit → PR.
+    Fanning out the independent read-only steps is what stops `/ship-pr` being a 30-minute serial crawl;
+    mutators stay serial and first so the parallel readers see final code.
+  - **`/ship-pr` gains scoped structural + infra + migration reviews** in Phase 2, each firing only on
+    its surface: `architecture-decision-guard` when the diff is *structural* (a new boundary/layer/
+    interface/cross-module dep or a repo-wide gate rollout — the cross-file lens vs the per-file yagni
+    audit); an **IaC review** (`cloudformation-reviewer`/`terraform-reviewer` + `aws-architecture` and
+    `aws-cost-optimization` lenses) on `*.tf`/CFN/CDK changes, gating on both architecture fitness AND
+    cost; and `migration-reviewer` on a DB-migration change. Skipped when the diff doesn't touch the
+    surface, so the common case stays fast.
+  - **`/ship-pr` gains a dependency review** when a manifest changes (`pyproject.toml` / `uv.lock` /
+    `requirements*.txt`, or `package.json` / lockfile). For each added/bumped dep: a **CVE scan**
+    (`uv audit` / `pip-audit` / `npm audit`) gates on **high/critical**, and — the advisory part — a
+    **version-currency + maintenance + fit** check via `research-before-build` (+ Context7 for the
+    latest stable) *advises* the user (newer release out? still maintained? even needed vs stdlib?)
+    without blocking. Owns the dependency slice of the supply-chain surface, so `security-review` need
+    not re-scan dep CVEs. Skipped when no manifest changed.
+  - Both skills warn to read per-hook status: a `(no files to check) Skipped` on input a hook should
+    have inspected is a vacuous pass, not green.
+
 ### Added
 
 - **installer**: per-resource dependency resolution. A resource may ship a `claude-all.json`
@@ -19,6 +52,34 @@
   is a prek drift-gate: every `requires` entry must resolve to a real resource (it imports the
   installer's own `discover()`, so "what is a resource" is defined in one place), catching a `requires`
   left dangling by a rename/deletion.
+- **installer**: stale-install pruning. The installer records every install in
+  `~/.claude-all/state.json`; when a resource is later removed from the repo (e.g. skills
+  merged/retired) its install lingered in `~/.claude` as a dangling symlink, `CLAUDE.md`
+  block, and settings hook entry. Now **every run prints an advisory notice** listing
+  resources that are installed but no longer shipped, and **`claude-all --prune`** removes
+  them (symlink + `CLAUDE.md` block + settings hook entry + state record, plus companion
+  records), with no confirmation. Three safety guards, each closing a real false-positive
+  found against a live `state.json`: companion sub-records (`<name>.claude_md`) are pruned
+  only *with* their primary (never alone — that would strip an installed resource's block);
+  a kind for which discovery returns **zero** items is never flagged (a missing enumerator,
+  e.g. no `plugins/` dir, would otherwise mark every recorded plugin stale); and the target
+  symlink is unlinked **only when it is actually a symlink**, so a recorded real file is
+  never deleted. **`tools` and `plugins` are never *uninstalled*** — their install is more
+  than a symlink+block+hook (a brew binary, a marketplace entry). But a stale tool/plugin
+  *record* (the resource is gone from the repo) is **forgotten** — `--prune` drops the state
+  record and any `~/.claude` artifact, and leaves the binary exactly in place — so `state.json`
+  stops claiming to manage something no longer shipped without ever running `brew`/`pipx`
+  uninstall. (This cleans e.g. a long-dead `tools/lean-ctx` record without touching a binary.)
+  Each install now records its **full footprint** in `state.json` — an `artifacts` list of
+  every side-effect it created (the `CLAUDE.md` block + tags, each `settings.json` hook
+  command, the hook symlink) — so `--prune` reverses *exactly* what the install did, source-
+  independently, even after the resource is deleted from the repo. This closes the
+  standalone-hook gap (its `<name>.py` symlink + command are recorded, not re-derived from
+  the companion `<kind>-<name>.py` convention that reconstruction would miss). Entries
+  recorded before footprints fall back to `kind/name` reconstruction. Verified end-to-end in
+  an isolated `HOME`: artifact-path removal (hook symlink + block + settings command),
+  legacy fallback, tools/plugins exclusion, and reinstall-resets-footprint all pass;
+  unrelated `CLAUDE.md` content preserved.
 
 - **brunofaust-python-style / ship / ship-pr**: the audit generalized into a **skill-audit
   framework**. New `references/audit.md` — the skill's master *judgment* checklist (minimalism,
