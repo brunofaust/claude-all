@@ -1,11 +1,11 @@
 ---
 name: ship-pr
 description: >-
-  Heavyweight pre-PR pipeline — the full /ship gate sequence PLUS a standard simplification audit, code
-  review, a docs/CLAUDE.md refresh, and a PR. Sequence: simplification audit (vs yagni.md) → lint-fixer →
-  test-runner → verification-loop → /code-review (gate) → (security-review if the change touches a
-  security surface) → docs-updater (revise CLAUDE.md + docs from the diff) → (confirm) → git-committer
-  → open a PR. Use when: "open a PR for this", "review and ship", finishing a substantive change
+  Heavyweight pre-PR pipeline — the full /ship gate sequence PLUS a standard skill audit, code
+  review, a docs/CLAUDE.md refresh, and a PR. Sequence: skill audit (each changed file vs its stack
+  skill's audit.md) → lint-fixer → test-runner → verification-loop → /code-review (gate) →
+  security-review (if a security surface) → seo review (if the diff renders crawler-visible HTML) →
+  docs-updater (revise CLAUDE.md + docs from the diff) → (confirm) → git-committer → open a PR. Use when: "open a PR for this", "review and ship", finishing a substantive change
   that warrants review before it goes out. For the quick lint+test+commit loop with no review/PR, use
   the lighter `/ship`. Orchestrator only: it sequences existing agents and skills and gates on results.
 disable-model-invocation: false
@@ -21,17 +21,22 @@ first hard failure**.
 
 ## Steps (run in order; STOP and report on any hard failure)
 
-1. **Simplification audit (STANDARD — not optional) — audit every changed file for over-engineering,
-   then `/simplify`.** Run it first so its edits pass through the gates below. **Audit each changed
-   file against the `brunofaust-python-style` skill's `references/yagni.md` "Audit checklist"** (for
-   Python) — pass-through chains (`a()` → `_b()` → `_c()` where each only forwards), one-impl
-   `Protocol`s, a "repository" wrapping SQLAlchemy that adds nothing, factories a dict replaces,
-   config for one-value options, defensive branches on type-guaranteed inputs, speculative extension
-   points. For non-Python, audit for the same shape (reuse, simplification, efficiency, altitude).
-   Apply the mechanical fixes via `/simplify`; report judgment calls. A trivial diff (rename / format /
-   one-liner) gets a quick pass; feature code gets the full checklist. It doesn't hunt bugs — the
-   review gates below do that. It does NOT strip the skill's hard rules (a boundary model, an owner
-   class, a docstring stay).
+1. **Skill audit (STANDARD — not optional) — audit every changed file against its stack skill's
+   `audit.md`, then apply fixes via `/simplify`.** Runs first so edits pass through the gates below.
+   Map each changed file to the skill that governs it and run that skill's judgment-audit checklist:
+
+   | Changed file | Audit against |
+   | --- | --- |
+   | `*.py` | `brunofaust-python-style` → `references/audit.md` (minimalism/yagni, layering, error-handling, async, boundaries, config, tests, ownership) |
+   | `*.tsx` `*.jsx` `*.ts` (frontend) | `brunofaust-frontend-style` → `references/audit.md` *(when that skill lands; until then audit for the same shape)* |
+   | other stacks | the same over-engineering shape — reuse, simplification, efficiency, altitude |
+
+   The audit is the **judgment** layer — the mechanical rules are already gated by the checkers/lint,
+   so it never restates them; it catches pass-through chains, speculative abstractions, I/O mixed with
+   logic, a swallowed `except`, a fixture that restates the code, `os.getenv` outside `Settings`, etc.
+   Apply mechanical fixes via `/simplify`; report judgment calls. **Scales to the diff** — a trivial
+   rename/format gets a quick pass, feature code gets the full checklist — but is never skipped, and
+   never strips a hard rule (a boundary model, an owner class, a docstring stay).
 2. **Gates — run the `/ship` sequence:** `test-coverage gate` → `lint-fixer` → `test-runner` →
    `verification-loop`. If any hard-fails, stop there (same rules as `/ship`). The **test-coverage
    gate runs first**, before lint/test: it confirms this change ships the unit tests for its
@@ -42,17 +47,26 @@ first hard failure**.
 3. **Code review — `/code-review` skill (gate).** Review the working diff. Treat **Block** findings as
    a hard stop: fix them (loop back through the gates) or surface them for a decision. Warnings are
    reported, not blocking.
-4. **Security review — `security-review` skill (conditional).** If the diff touches a security surface
-   (auth, secrets, input handling, IaC/IAM, shelling out, tenant-scoped state), run it and gate on its
-   Block findings too. Skip for changes that clearly don't.
-5. **Docs & CLAUDE.md — `docs-updater` agent.** With the code now final, revise `CLAUDE.md` (and
+4. **Security review — `security-review` skill (surface-scoped, standard).** Run it whenever the diff
+   touches a security surface — auth, secrets, input handling, IaC/IAM, shelling out, tenant-scoped
+   state — and gate on its Block findings. This is not optional judgment: if the diff touches any of
+   those surfaces, the review runs. Skip only when the diff clearly touches none (a docs/test/config
+   tweak). `web-security` (frontend XSS/CSP/tokens) is covered by the frontend skill audit in step 1;
+   this step is the cross-stack `security-audit`.
+5. **SEO review — `seo` skill (surface-scoped).** Run it whenever the diff produces **user-facing
+   HTML/pages** — a frontend component or page route, an SSR template, `<head>`/meta/OpenGraph,
+   JSON-LD, `sitemap.xml`, `robots.txt`, canonicals/hreflang. This is scoped by *surface*, not stack: a
+   server-rendered page (even non-frontend) counts; a pure JSON/data API does not. Gate on Block
+   findings (missing canonical, no `<h1>`, malformed structured data). Skip when the diff renders no
+   crawler-visible HTML.
+6. **Docs & CLAUDE.md — `docs-updater` agent.** With the code now final, revise `CLAUDE.md` (and
    `README` / `ARCHITECTURE` / `CHANGELOG` where affected) to match the diff, so the always-loaded
    guidance never drifts from the code. It proposes diffs — confirm doc changes before they're staged.
    No-op if the diff changes nothing a doc describes.
-6. **Commit — `git-committer` agent (after confirm).** When review is clean and docs are in sync, show
+7. **Commit — `git-committer` agent (after confirm).** When review is clean and docs are in sync, show
    the diff summary + proposed Conventional Commits message, get a one-word confirm, commit to the
    current branch.
-7. **PR — (after confirm).** Push the branch and open a PR (title + body summarizing the change and
+8. **PR — (after confirm).** Push the branch and open a PR (title + body summarizing the change and
    the gate results), ready for review — **not** a draft. Opening a PR is outward-facing — confirm
    before doing it. Do not enable auto-merge.
 
@@ -85,5 +99,5 @@ number (someone else's, or a re-review after pushes), use the existing **`review
 ## Output
 
 ```
-ship-pr: audit ✓ (yagni) · coverage ✓ (unit + e2e) · lint ✓ · tests ✓ · verify READY · review ✓ (0 block, 2 warn) · sec n/a · docs ✓ · commit <sha> · PR #NN
+ship-pr: audit ✓ (py) · coverage ✓ (unit + e2e) · lint ✓ · tests ✓ · verify READY · review ✓ (0 block, 2 warn) · sec ✓ · seo n/a · docs ✓ · commit <sha> · PR #NN
 ```

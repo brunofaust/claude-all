@@ -26,16 +26,20 @@ git status --short && git diff --stat
 ```
 If the working tree is clean, stop: "nothing to ship".
 
-1. **Simplification audit (STANDARD) — audit every changed file for over-engineering.** Runs first so
-   any edits flow through the gates below. Audit each changed file against the `brunofaust-python-style`
-   skill's `references/yagni.md` "Audit checklist" (for Python): pass-through method chains (`get()` →
-   `_get()` → `_query()` → `_to_model()` where each hop only forwards — collapse to one method),
-   one-implementation `Protocol`s, a "repository"/"client"/"wrapper" over SQLAlchemy/httpx that adds
-   nothing, factories a dict replaces, config for one-value options, defensive branches on
-   type-guaranteed inputs, speculative extension points. For non-Python, audit for the same shape.
-   Apply mechanical fixes via `/simplify`; report judgment calls. It **scales to the diff** — a trivial
-   rename/format/one-liner gets a quick pass, feature code gets the full checklist — but is never
-   skipped. Do NOT strip the skill's hard rules (a boundary model, an owner class, a docstring stay).
+1. **Skill audit (STANDARD) — audit every changed file against its stack skill's `audit.md`.** Runs
+   first so any edits flow through the gates below. Map each changed file to the skill that governs it:
+   `*.py` → `brunofaust-python-style` `references/audit.md`; `*.tsx/*.jsx/*.ts` (frontend) →
+   `brunofaust-frontend-style` `references/audit.md` *(when it lands)*; other stacks → the same
+   over-engineering shape. The audit is the **judgment** layer (the mechanical rules are gated by the
+   checkers/lint — it never restates them): pass-through method chains (`get()` → `_get()` → `_query()`
+   → `_to_model()` where each hop only forwards — collapse to one method), speculative abstractions
+   (one-impl `Protocol`, a wrapper over SQLAlchemy/httpx that adds nothing, config for one-value
+   options), I/O mixed with logic, a swallowed `except`, a fixture that restates the code, `os.getenv`
+   outside `Settings`. Apply mechanical fixes via `/simplify`; report judgment calls. It **scales to
+   the diff** — a trivial rename/format/one-liner gets a quick pass, feature code gets the full
+   checklist — but is never skipped, and never strips a hard rule (a boundary model, an owner class, a
+   docstring stay). **Security surface** (secrets, auth, input handling): flag it here for a fuller
+   `security-review` under `/ship-pr` — `/ship` does not run the full review.
 2. **Test-coverage gate — confirm the change ships its tests (BEFORE lint/test run).** Inspect the
    working diff and split it into *behavior* changes (a new feature, endpoint, business rule, bug fix)
    vs. pure refactor/rename/format/docs/config. For every behavior change:
@@ -87,5 +91,5 @@ If the working tree is clean, stop: "nothing to ship".
 
 A PASS/FAIL line per step, then the commit SHA (or the reason the pipeline stopped):
 ```
-ship: audit ✓ (yagni) · coverage ✓ (unit + e2e) · lint ✓ · tests ✓ (42 passed) · verify READY · commit <sha>
+ship: audit ✓ (py) · coverage ✓ (unit + e2e) · lint ✓ · tests ✓ (42 passed) · verify READY · commit <sha>
 ```

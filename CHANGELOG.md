@@ -5,6 +5,15 @@
 
 ### Added
 
+- **brunofaust-python-style / ship / ship-pr**: the audit generalized into a **skill-audit
+  framework**. New `references/audit.md` — the skill's master *judgment* checklist (minimalism,
+  layering, error-handling, async, boundaries, config, tests, ownership), explicitly the layer the
+  mechanical checkers can't see, so it never restates a checker-gated rule. `/ship` and `/ship-pr` now
+  audit **each changed file against its stack skill's `audit.md`** via a file-type map (`.py` →
+  brunofaust-python-style; frontend → brunofaust-frontend-style when it lands). `/ship-pr` also gains a
+  **surface-scoped SEO review** step (fires when the diff renders crawler-visible HTML — a frontend
+  page OR a server-rendered template OR sitemap/robots, never a pure JSON API) and makes the
+  **security-review** standard-when-a-security-surface-is-touched rather than loose judgment.
 - **ship / ship-pr**: the **simplification audit is now a STANDARD step**, not optional. Both
   pipelines audit every changed file against `yagni.md`'s new "Audit checklist" (pass-through method
   chains, one-impl `Protocol`s, a repository wrapping SQLAlchemy, factories a dict replaces, config for
