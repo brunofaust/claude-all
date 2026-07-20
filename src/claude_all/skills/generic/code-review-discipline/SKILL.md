@@ -214,11 +214,19 @@ by how far over). Tune per project, but have explicit numbers:
 | Metric | Soft limit | Hard limit (BLOCK) |
 | --- | --- | --- |
 | Function length | 50 lines | — (refactor) |
-| File length | ~400 lines typical | 800 lines |
+| File length | ~400 lines typical | — **smell, not a BLOCK** (see below) |
 | Nesting depth | 3 | 4 |
 | Function parameters | 4 (pass an object/dataclass beyond) | — |
 | Cyclomatic complexity | per linter (ruff `PLR*` / eslint `complexity`) | — |
 | Test coverage | per-layer table below | project gate (e.g. 80%) |
+
+> **File length is a SMELL, never a criterion.** A long file is a prompt to ask *"does this module hide
+> more than one secret?"* — not an automatic finding. A coordinator/facade with **one** reason to change
+> may legitimately be large; a 200-line file holding two unrelated secrets is the real defect. Report it
+> as a finding only when the seam test says so: the chunks change for **different reasons, at different
+> rates, or under different owners** — i.e. they'd never share a PR for the same reason. Never demand a
+> split to hit a line target, and never merge to hit one. →
+> `brunofaust-python-style` → `references/project-structure.md` (*one module, one secret*).
 
 Per-layer coverage (deeper logic = higher bar):
 

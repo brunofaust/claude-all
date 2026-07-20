@@ -154,35 +154,83 @@ standalone PyPI package shared across services without changing a line.
 - **Infrastructure:** `db/`, `aws_resources/` (deployable units) — project-coupled, cross-cutting
 - **Settings-free building blocks:** `core/` — reusable, project-agnostic, extractable as a library
 
-## Organize by domain concept — never per business requirement
+## Where the seams are — one module, one secret
 
-The single rule that prevents file-explosion: **a file (or folder) maps to a _domain concept_ — an
-external system, a domain area, or a pluggable variant — never to a business _requirement_ (a feature,
-ticket, or behaviour).** A new behaviour joins its existing domain home; it does **not** get a new
-top-level file.
+**Domain tells you which FOLDER. It does not tell you where the seams are.** Grouping by domain is
+necessary and not sufficient: "AI models" is one domain, so a rule that says *"one file per domain,
+the single home for everything about it"* actively instructs you to pile orchestration, billing
+policy, vendor routing and request shapes into one file — and then a 1,300-line module is the rule
+working as designed. That rule is wrong at the file level. The correct axis is **reason to change**,
+subordinate to **dependency ownership**.
 
-The failure mode this prevents: a namespace root (e.g. `core/<app>/`) that accretes 20+ loose modules
-because every change dropped a new file next to the last one (`working_hours.py`, `re_engage.py`,
-`branch_naming.py`, `plan_gate.py`, …). The raw file *count* is rarely the real problem — a broad
-product legitimately has many files — the problem is **scatter**: no grouping principle, plus
-incomplete refactors (a 900-line monolith sitting next to a package that re-imports it) and
-name-collisions (`email/` next to `emails/`). Group by concept and the sprawl resolves.
+### The rule
 
-### One file per domain — a package only when forced
+> **A module hides ONE SECRET** — one design decision that can change independently.
 
-- **Default: one file per domain concept.** `core/<app>/<domain>.py` is the single home for everything
-  about that domain. "One home" means **one import path**, whether that home is a file or a package.
-- **Promote a domain to a _package_** (a directory with a single public `__init__.py` entrypoint)
-  **only when it is genuinely large AND has real internal variant seams** — e.g. pluggable
-  collectors/providers (`abuse/collectors/{jira,github}.py`, `ai/llm/{openai,anthropic}.py`). Decide on
-  the **real, post-deduplication size**, not on today's bloated count and not preemptively. This is
-  *containment over layering* (see the `architecture-decision-guard` skill). Never a speculative
-  `base.py` with a single implementer.
+Billing-account policy is a secret. A vendor SDK's invoke-vs-converse footgun is a secret. A vendor's
+request shape is a secret. How you orchestrate a call is a secret. Each changes for its own reason, on
+its own clock, often with a different owner — so each is its own module.
+
+### The operational tests
+
+1. **Split when two chunks change for different reasons, at different rates, or have different
+   owners.** The sharp form: *would these ever appear in the same PR, for the same reason?* If no,
+   they are separate secrets — split them.
+2. **Keep together when they always change together** — same PR, same reason. **Fat is fine if the
+   whole file has one reason to change.**
+3. **Place by dependency ownership.** Code lives in the module that owns the dependency it touches.
+   Anything whose only real dependency is a vendor SDK belongs in that vendor's owner module, full
+   stop — that is why vendor request-shape helpers feel wrong sitting in a coordinator. (This is the
+   containment rule of `external-system-ownership.md`, stated precisely.)
+4. **False-seam test.** If splitting would force you to expose internals across the new boundary —
+   shared mutable state, private helpers that must now be imported — the cohesion is **real**. Don't
+   split. This is what stops the rule degenerating into the linter's "just split it".
+5. **LOC is a smell, never a criterion.** Never split to hit a line target; never merge to hit one
+   either. A long file is a prompt to *ask* the questions above, not an answer.
+
+**A coordinator / facade is allowed to be large.** Its one reason to change is "how we orchestrate a
+call". It is too big only when it **smuggles in a different secret** — a billing table, a vendor's
+payload shape, a retry policy that belongs to the transport.
+
+### Worked example — a 1,300-line model coordinator
+
+```text
+core/ai/model.py   (1,300 lines)  ← FOUR secrets in one file
+    class Model, ModelConfig                     ← orchestration   (secret 1)
+    resolve_caller_account, resolve_credential   ← billing policy  (secret 2)
+    resolve_bedrock_invocation, TruncatedError   ← Bedrock routing (secret 3)
+    resolve_endpoint_template                    ← vendor shape    (secret 4)
+```
+
+Applying the tests: billing policy changes when Finance changes plans; the Bedrock routing rule changes
+when that SDK changes; the endpoint template changes when the vendor changes its API. None of those
+share a PR or a reason with "how we orchestrate a call". Split:
+
+```text
+core/ai/model.py       orchestration only — may stay large, it has ONE reason to change
+core/ai/billing.py     account/credential policy
+core/aws/bedrock.py    invoke-vs-converse routing  ← dependency ownership: its only dep is the SDK
+core/ai/vendors/<v>.py the vendor's request shape
+```
+
+### Grouping still applies — it just answers a different question
+
+Domain grouping prevents **scatter**: a namespace root that accretes 20+ loose modules because every
+change dropped a new file next to the last one (`working_hours.py`, `re_engage.py`, `branch_naming.py`,
+…). The raw file *count* is rarely the problem — a broad product legitimately has many files — the
+problem is *no grouping principle*, plus incomplete refactors (a 900-line monolith beside a package
+that re-imports it) and name-collisions (`email/` next to `emails/`).
+
+- **A file (or folder) maps to a domain concept — never to a business _requirement_** (a feature,
+  ticket, or behaviour). New behaviour joins an existing home; it does not get a new top-level file.
+  Domain answers *"which folder?"*; reason-to-change answers *"which file inside it?"*.
+- **Promote a domain to a _package_** (a directory with a single public `__init__.py` entrypoint) when
+  it holds several secrets or has real variant seams — pluggable collectors/providers
+  (`abuse/collectors/{jira,github}.py`, `ai/llm/{openai,anthropic}.py`). Decide on the **real,
+  post-deduplication** shape, never preemptively, and never a speculative `base.py` with one
+  implementer. This is *containment over layering* (→ the `architecture-decision-guard` skill).
 - **Cross-cutting single-owner modules** (`secrets.py`, `config.py`) may live at the namespace root —
-  they are not "domains", they are shared utilities with exactly one owner.
-- The one question before creating any file: *"Is this a new **domain / external system**, or new
-  **behaviour on an existing one**?"* → new domain → new home in the right place; new behaviour → into
-  the existing home.
+  they are not domains, they are shared utilities with exactly one owner.
 
 ## Mechanism vs policy — domain code is glue
 

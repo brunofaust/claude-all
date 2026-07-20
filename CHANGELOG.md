@@ -1,6 +1,31 @@
 # CHANGELOG
 
 
+## [Unreleased]
+
+### Changed
+
+- **brunofaust-python-style**: replaced the module-splitting rule. The old rule — *"one file per
+  domain concept, the single home for **everything** about that domain"* — is **too coarse an axis**:
+  "AI models" is one domain, so the rule actively instructed you to pile orchestration, billing policy,
+  vendor routing and request shapes into one file, and a 1,300-line module was the rule working as
+  designed. **Domain tells you which FOLDER; it does not tell you where the seams are.**
+  The new axis is **reason to change**, subordinate to **dependency ownership**: *a module hides ONE
+  SECRET* — one design decision that can change independently. Five operational tests: split when two
+  chunks change for different reasons / rates / owners (*would they ever share a PR for the same
+  reason?*); keep together when they always change together (**fat is fine given one reason to
+  change**); place by dependency ownership (code whose only real dep is a vendor SDK belongs in that
+  vendor's owner module); the **false-seam test** (if splitting forces exposing internals, the cohesion
+  is real — don't split, which is what stops it degenerating into the linter's "just split it"); and
+  **LOC is a smell, never a criterion**. A coordinator/facade may legitimately be large — it is too big
+  only when it smuggles in a *different* secret. Includes a worked 4-secret example. Wired into the
+  `audit.md` checklist so `/ship` and `/ship-pr` apply it per changed file.
+- **code-review-discipline**: reconciled with the above — the **file-length 800-line hard BLOCK is now
+  a smell, not a criterion**. A long file prompts the one-secret question; it is a finding only when the
+  seam test says so. (A 200-line file holding two unrelated secrets is the real defect; a cohesive
+  1,000-line coordinator is not.) Never demand a split to hit a line target.
+
+
 ## v0.5.0 (2026-07-20)
 
 ### Bug Fixes
