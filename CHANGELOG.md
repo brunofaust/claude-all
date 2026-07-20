@@ -1,6 +1,90 @@
 # CHANGELOG
 
 
+## [Unreleased]
+
+### Added
+
+- **docs**: every resource row in `README.md` now **links to its source file** — 117 rows across
+  agents, skills, hooks, MCPs, tools and instructions — so a reader can click a name and land on the
+  `SKILL.md` / `agent.md` / hook script instead of hunting the tree. The mapping came from the
+  installer's own `discover()`, not a hand-written path list, so a rename can't leave a stale link
+  behind.
+- **gate**: `check-md-links` (prek) — **relative markdown links must resolve, and every discovered
+  resource must be linked from the README**. Both halves are things this repo already got wrong:
+  four cross-skill links shipped one `../` short (one of them in an already-merged PR), and
+  CLAUDE.md's "a PR without a README update is incomplete" was prose, so nothing enforced it. Linking
+  every row makes "is it documented?" a question a checker can answer.
+  Vendored files are exempt — they're kept byte-identical to upstream, so *their* relative links
+  legitimately don't resolve here; `local_only` files in the same directory are ours and stay checked.
+  The first version reported **18 findings, all false positives** (fenced code blocks, inline code
+  spans like `` `def first[T](...)` ``, site-absolute llms.txt paths, and `vendor_mode: "dir"` entries
+  that list no individual files) — each one is now a named test, alongside negative tests proving the
+  gate still bites on a genuinely broken link and on an undocumented resource.
+
+- **installer**: `--prune` now also clears **leftover artifacts** — things broken on their own terms,
+  typically created by an *older* claude-all that linked or wired something this version doesn't.
+  Stale-resource detection structurally cannot see these, because a healthy still-shipped resource is
+  never "stale": five dangling companion symlinks pointing at a long-dead checkout survived every
+  prune and had to be removed by hand. Now cleaned automatically — `dangling link` (target gone),
+  `orphan hook` (a `settings.json` entry whose script is missing), `orphan block` (a tagged
+  `CLAUDE.md` block with no install record) — reusing the existing scope-guarded `undo_artifact`
+  path rather than adding a second way to delete things. Reported-but-not-touched (a reinstall or a
+  hand-edit fixes them): `mixed install` (links split across **two** claude-all roots), `double-wired`
+  (one hook script under several events), `unclosed`/`duplicate block`.
+  **All of it is listed at the end of every install run**, so leftovers surface without being asked
+  for. The mixed-install check compares links against *each other*, not against the CLI you happen to
+  be running — an earlier draft used the latter baseline and produced **115 false positives** against
+  a perfectly healthy install.
+  10 tests, each asserting the check actually **bites** on a specific defect (a check that can only
+  report "clean" is the vacuous pass this repo keeps hunting), plus no-false-positive cases.
+- **ship / ship-pr + brunofaust-frontend-style**: the *one module, one secret* seam test is now
+  audited on **frontend** files too, not just Python — the rule is language-agnostic (a 1,000-line
+  component holding orchestration + fetching + formatting + a widget's config is four secrets in one
+  file). Both pipelines' coverage summaries now name **module seams** explicitly, so a reader can see
+  it is checked; and `/ship-pr`'s architecture step applies the seam test from the other side (Phase 1
+  asks *"does this file hold two secrets?"*, the architecture review asks *"is the new boundary in the
+  right place?"*).
+- **docs**: fixed 4 broken cross-skill links — a repo-wide sweep found the frontend `audit.md`'s two
+  `../../python/…` references and `e2e-testing.md`'s two `../../generic/…` references were each one
+  `../` short of resolving (the pre-existing `yagni.md` link shipped broken in the frontend merge).
+  Vendored files' own upstream-relative links are deliberately left alone to preserve byte-identity.
+- **installer**: renamed the internal `level` parameter to **`scope`** (78 sites, `cli.py` only).
+  `level` didn't say what it was a level *of* — it reads like a verbosity or log level, when it
+  actually means *where things install*: `~/.claude` (user) vs `./.claude` (project), which is how the
+  README and `--help` already describe it. Also `infer_level`→`infer_scope`,
+  `choose_level_tui`→`choose_scope_tui`. Pure rename — 78 insertions / 78 deletions, no behaviour
+  change, no public API affected (`__all__` is just `main`/`run`); verified by mypy, 24 tests, and an
+  end-to-end run of both scopes.
+- **research-before-build**: gains a `claude_md.md` so the rule is always loaded, not only when the
+  skill is invoked. Step 0 of any non-trivial build is a search — and the cheapest, most-missed check
+  is the local one: grep THIS repo before adding a command, flag, helper or skill that may already
+  ship here. Written because that exact miss happened: a `--doctor` flag was built without first
+  checking whether an equivalent existed (it didn't — but that was luck, not discipline).
+
+### Changed
+
+- **brunofaust-python-style**: replaced the module-splitting rule. The old rule — *"one file per
+  domain concept, the single home for **everything** about that domain"* — is **too coarse an axis**:
+  "AI models" is one domain, so the rule actively instructed you to pile orchestration, billing policy,
+  vendor routing and request shapes into one file, and a 1,300-line module was the rule working as
+  designed. **Domain tells you which FOLDER; it does not tell you where the seams are.**
+  The new axis is **reason to change**, subordinate to **dependency ownership**: *a module hides ONE
+  SECRET* — one design decision that can change independently. Five operational tests: split when two
+  chunks change for different reasons / rates / owners (*would they ever share a PR for the same
+  reason?*); keep together when they always change together (**fat is fine given one reason to
+  change**); place by dependency ownership (code whose only real dep is a vendor SDK belongs in that
+  vendor's owner module); the **false-seam test** (if splitting forces exposing internals, the cohesion
+  is real — don't split, which is what stops it degenerating into the linter's "just split it"); and
+  **LOC is a smell, never a criterion**. A coordinator/facade may legitimately be large — it is too big
+  only when it smuggles in a *different* secret. Includes a worked 4-secret example. Wired into the
+  `audit.md` checklist so `/ship` and `/ship-pr` apply it per changed file.
+- **code-review-discipline**: reconciled with the above — the **file-length 800-line hard BLOCK is now
+  a smell, not a criterion**. A long file prompts the one-secret question; it is a finding only when the
+  seam test says so. (A 200-line file holding two unrelated secrets is the real defect; a cohesive
+  1,000-line coordinator is not.) Never demand a split to hit a line target.
+
+
 ## v0.5.0 (2026-07-20)
 
 ### Bug Fixes

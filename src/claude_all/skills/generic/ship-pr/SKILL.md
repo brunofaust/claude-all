@@ -35,8 +35,8 @@ and the final commit/PR are serial.
 
    | Changed file | Audit against |
    | --- | --- |
-   | `*.py` | `brunofaust-python-style` → `references/audit.md` (minimalism/yagni, layering, error-handling, async, boundaries, config, tests, ownership) |
-   | `*.tsx` `*.jsx` `*.ts` `*.vue` `*.svelte` | `brunofaust-frontend-style` → `references/audit.md` (correctness, composition, security, a11y, tests, perf, minimalism) |
+   | `*.py` | `brunofaust-python-style` → `references/audit.md` (minimalism/yagni, **module seams — one module, one secret**, layering, error-handling, async, boundaries, config, tests, ownership) |
+   | `*.tsx` `*.jsx` `*.ts` `*.vue` `*.svelte` | `brunofaust-frontend-style` → `references/audit.md` (correctness, **module seams**, composition, security, a11y, tests, perf, minimalism) |
    | other stacks | the same over-engineering shape — reuse, simplification, efficiency, altitude |
 
    Judgment layer only (mechanical rules are checker-gated — never restate them): pass-through chains,
@@ -69,9 +69,12 @@ surface the diff doesn't touch); a skipped review is not a failure.
   skipped. Gate on Block findings.
 - **Architecture review — `architecture-decision-guard` (if the diff is STRUCTURAL** — a new package or
   module boundary, a new layer/tier, a new interface/ABC/Protocol, a new cross-module dependency, or a
-  new lint/complexity gate rolled repo-wide). The cross-file boundary lens (vs the per-file yagni audit
-  in Phase 1): don't add a boundary without a concrete present need; prefer containment over layering;
-  don't ship a commit-blocking gate big-bang. Skip for changes that add no structure.
+  new lint/complexity gate rolled repo-wide). The cross-file boundary lens (vs the per-file audit in
+  Phase 1): don't add a boundary without a concrete present need; prefer containment over layering;
+  don't ship a commit-blocking gate big-bang. When the diff **moves or splits a module**, apply the
+  seam test from the other side: does each resulting module hide ONE secret, and does the moved code
+  live where its dependency is owned? (The Phase-1 audit asks "does this file hold two secrets?"; this
+  asks "is the new boundary in the right place?") Skip for changes that add no structure.
 - **IaC review — `cloudformation-reviewer` / `terraform-reviewer` + the `aws-architecture` and
   `aws-cost-optimization` lenses (if the diff touches infrastructure-as-code** — `*.tf`, a
   CloudFormation template/change-set, a CDK stack). Two lenses, both gating: **architecture fitness**

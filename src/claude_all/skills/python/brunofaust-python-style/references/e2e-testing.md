@@ -274,7 +274,7 @@ randomized ids of § 3 surface this immediately.
   (Lambda event / queue message / service entrypoint env): malformed input
   (`project_key=""`, missing `url`) fails fast with a clear error *at the handler*
   instead of a deep `ForeignKeyViolation` / `KeyError` later. See
-  [`data-modeling.md`](data-modeling.md) and [`mock-drift-sweep`](../../generic/mock-drift-sweep/SKILL.md).
+  [`data-modeling.md`](data-modeling.md) and [`mock-drift-sweep`](../../../generic/mock-drift-sweep/SKILL.md).
 
 ## 11. Verifying a flaky-test fix (method)
 
@@ -289,7 +289,7 @@ A concurrency fix is **not proven by one green run.**
    a log line that never escapes the worker — see § 6).
 3. **Confirm with multiple consecutive green runs, not one.** One pass never proves
    a concurrency fix; loop it (`pytest … ` ×N, or `--count` with `pytest-repeat`)
-   and require *all* green. This is the [`adversarial-verification`](../../generic/adversarial-verification/SKILL.md)
+   and require *all* green. This is the [`adversarial-verification`](../../../generic/adversarial-verification/SKILL.md)
    discipline applied to flakiness: try to *break* the fix, don't just watch it pass once.
 
 ## Checklist

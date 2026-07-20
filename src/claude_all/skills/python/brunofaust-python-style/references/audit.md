@@ -21,6 +21,14 @@ gets the whole list.
 - [ ] **Speculative abstraction** — a `Protocol`/ABC/base with one impl, a factory a dict replaces, a "repository" wrapping SQLAlchemy that adds nothing, config for a one-value option. Name a present need or delete it.
 - [ ] **Deletion pass done** — every new function/class/file/param serves a concrete *present* reason, else inlined/removed.
 
+## Module seams — one module, one secret → [`project-structure.md`](project-structure.md)
+
+- [ ] **The file hides ONE secret** — one design decision that can change independently. A module holding orchestration *and* billing policy *and* a vendor's request shape is three secrets in one file.
+- [ ] **Seam test on anything long:** would these chunks ever appear in the same PR, for the same reason? Different reasons / rates / owners ⇒ split. Always change together ⇒ keep together (**fat is fine when there's one reason to change**).
+- [ ] **Placed by dependency ownership** — code whose only real dependency is a vendor SDK lives in that vendor's owner module, not in a coordinator that happens to call it.
+- [ ] **No false seam** — if splitting would force exposing internals (shared mutable state, private helpers imported across the new boundary), the cohesion is real: don't split.
+- [ ] **LOC drove no decision** — length prompted the question, it never answered it. (A coordinator with one reason to change may legitimately be large.)
+
 ## Layering & responsibility → [`architecture.md`](architecture.md)
 
 - [ ] **I/O not mixed with business logic** — SQL / HTTP / SDK calls don't sit inside a pure calculation. The layer boundary, if any, carries *real distinct* logic (not a forwarder).
