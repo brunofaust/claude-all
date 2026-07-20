@@ -1,0 +1,6 @@
+{
+  "requires": [
+    "agents/lint-fixer",
+    "agents/test-runner"
+  ]
+}

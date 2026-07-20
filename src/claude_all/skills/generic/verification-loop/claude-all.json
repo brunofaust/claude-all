@@ -1,0 +1,6 @@
+{
+  "requires": [
+    "agents/code-quality",
+    "agents/test-runner"
+  ]
+}

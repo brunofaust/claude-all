@@ -1,0 +1,8 @@
+{
+  "requires": [
+    "agents/code-quality",
+    "agents/lint-fixer",
+    "agents/test-author",
+    "agents/test-runner"
+  ]
+}

@@ -227,13 +227,35 @@ def prune_installs(entries: list[dict]) -> list[str]:
     return removed
 
 
+def in_install_scope(path: str | Path) -> bool:
+    """True when *path* lies inside an install root this invocation owns.
+
+    ``state.json`` records ABSOLUTE target paths. If the state file and ``$HOME``
+    ever disagree — a copied state file, a container, a test harness that overrides
+    ``HOME`` — an unguarded prune would follow those paths and delete artifacts
+    belonging to a DIFFERENT installation. (Observed: a sandboxed prune run against
+    a copied ``state.json`` unlinked symlinks in the real home.) Prune only ever
+    touches what the current scope owns: ``~/.claude`` or ``./.claude``.
+
+    Args:
+        path: The recorded artifact path to check.
+
+    Returns:
+        True when the path is under the user or project install root.
+    """
+    candidate = Path(path).expanduser()
+    roots = (USER_CLAUDE_DIR, Path.cwd() / ".claude", claude_md_target("user"))
+    return any(candidate == root or root in candidate.parents for root in roots)
+
+
 def reverse_footprint(entry: dict) -> list[str]:
     """Undo a record's ``~/.claude`` artifacts (symlink-guarded); return action labels.
 
     The shared core of :func:`prune_installs` and :func:`forget_records`: unlink the
     recorded resource symlink (only when it IS a symlink — a recorded real file is
-    never deleted) and reverse each recorded artifact. Touches the filesystem only;
-    does not mutate state or uninstall any binary.
+    never deleted, and only when it is inside this invocation's install scope) and
+    reverse each recorded artifact. Touches the filesystem only; does not mutate
+    state or uninstall any binary.
 
     Args:
         entry: A primary state record.
@@ -243,7 +265,7 @@ def reverse_footprint(entry: dict) -> list[str]:
     """
     actions: list[str] = []
     target = entry.get("target")
-    if target and Path(target).is_symlink():
+    if target and in_install_scope(target) and Path(target).is_symlink():
         Path(target).unlink()
         actions.append("symlink")
     actions.extend(a for a in (undo_artifact(x) for x in entry.get("artifacts") or []) if a)
@@ -253,20 +275,31 @@ def reverse_footprint(entry: dict) -> list[str]:
 def undo_artifact(artifact: dict) -> str:
     """Reverse one recorded install artifact. Returns a short label (or "").
 
+    Every branch is scope-guarded via :func:`in_install_scope` — a recorded path
+    outside this invocation's install roots belongs to a different installation and
+    is left strictly alone.
+
     Args:
         artifact: A footprint record from :func:`record_artifact`.
     """
     kind = artifact.get("type")
     if kind == "symlink":
         path = Path(artifact["path"])
-        if path.is_symlink():  # guard: only unlink a symlink, never a real file
+        # Only unlink a symlink (never a real file), and only inside our own scope.
+        if in_install_scope(path) and path.is_symlink():
             path.unlink()
             return "hook symlink"
         return ""
     if kind == "claude_md":
-        return strip_claude_md_block(Path(artifact["file"]), artifact["start"], artifact["end"])
+        target = Path(artifact["file"])
+        if not in_install_scope(target):
+            return ""
+        return strip_claude_md_block(target, artifact["start"], artifact["end"])
     if kind == "settings_hook":
-        return drop_settings_command(Path(artifact["file"]), artifact["command"])
+        settings_file = Path(artifact["file"])
+        if not in_install_scope(settings_file):
+            return ""
+        return drop_settings_command(settings_file, artifact["command"])
     return ""
 
 

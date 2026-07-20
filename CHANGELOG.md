@@ -3,6 +3,36 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **installer**: `--prune` is now **scope-guarded** — it only ever touches artifacts inside the
+  current install roots (`~/.claude` / `./.claude`). `state.json` records ABSOLUTE paths, so when the
+  state file and `$HOME` disagree (a copied state file, a container, a harness overriding `HOME`) an
+  unguarded prune followed those paths *out of its sandbox*. Found the hard way: a sandboxed test run
+  against a copied `state.json` unlinked three symlinks in the real home. Both `reverse_footprint` and
+  every `undo_artifact` branch (symlink / `CLAUDE.md` block / settings hook entry) now check
+  `in_install_scope` first; an out-of-scope record is reported `state only` and its files are left
+  strictly alone. Covered by three regression tests, and verified end-to-end by re-running the exact
+  scenario that caused the incident.
+
+### Added
+
+- **tests**: the repo's **first test suite** — `tests/test_dependency_resolution.py` (11 tests) covers
+  the installer's dependency resolution: transitive closure, cycle termination, unknown deps reported
+  as external rather than installed, an already-selected dep not double-reported, tolerant manifest
+  reading (missing / malformed / non-list `requires`), the flat-agent `<name>.claude-all.json`
+  convention, and the **real shipped graph** (every `requires` target resolves; installing `ship-pr`
+  pulls its agents) — so a rename that breaks the graph fails here, not at a user's install.
+  `pytest>=8` added to the dev group with `[tool.pytest.ini_options]`.
+- **dependency annotations**: 8 more resources declare their hard deps — `merge-main`,
+  `mock-drift-sweep`, `adversarial-verification`, `verification-loop`, `repo-audit`, `prek`,
+  `python-module-migration`, `brunofaust-python-style`. Every target validated against the installer's
+  own `discover()` before writing, so the graph is correct by construction.
+- **dogfooding**: claude-all now runs **its own checkers on its own source** in `prek.toml`
+  (`module_private`, `junk_drawer`). It shipped these gates without ever applying them to itself —
+  which is exactly how a module-level `_name`, banned by the visibility rule this repo publishes,
+  reached `cli.py`. Both pass clean today; the gate keeps it that way.
+
 ### Changed
 
 - **frontend skills merged into `brunofaust-frontend-style`** — one entry point for React/browser

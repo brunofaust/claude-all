@@ -27,7 +27,12 @@ scripts.claude-all = "claude_all.cli:run"
 [dependency-groups]
 dev = [
   "prek>=0.4.1",
+  "pytest>=8",
 ]
+
+[tool.pytest.ini_options]
+testpaths = [ "tests" ]
+addopts = "-q"
 
 [build-system]
 build-backend = "hatchling.build"

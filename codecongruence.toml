@@ -22,4 +22,10 @@ exclude = [
   # new checker added to any skill is covered automatically without re-baselining.
   "src/claude_all/skills/**/checkers/**",
   "src/claude_all/skills/**/scripts/**",
+  # Tests. Cases for one function are arrange-act-assert siblings by design — they
+  # differ only in the input and the expected result, which is what makes them
+  # readable. Deduping them (a shared parametrized mega-test) would HIDE which case
+  # broke. Genuine setup duplication is still extracted into fixtures/helpers, which
+  # is where the real dedup belongs.
+  "tests/**",
 ]
