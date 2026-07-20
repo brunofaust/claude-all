@@ -1,0 +1,8 @@
+{
+  "requires": [
+    "skills/react-best-practices",
+    "skills/composition-patterns",
+    "skills/react-view-transitions",
+    "skills/web-design-guidelines"
+  ]
+}

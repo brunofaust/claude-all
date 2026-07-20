@@ -1,19 +1,3 @@
----
-name: web-security
-description: >-
-  Frontend / web-app security review + hardening for React, Next.js, Remix, Vite, and any
-  browser-delivered app. Use when: writing or reviewing components that render user/HTML content,
-  building Server Actions / API routes / route handlers, handling auth tokens or sessions in the
-  browser, wiring env vars into client code, setting a Content-Security-Policy, embedding third-party
-  scripts, or doing a pre-deploy security pass on frontend code. Covers XSS (dangerouslySetInnerHTML,
-  unsafe URL schemes, target=_blank), the per-framework public-env-var leak table, Server-Actions-as-
-  public-API input validation, httpOnly cookie sessions (never localStorage), CSP + nonces, prototype
-  pollution, SSR injection, third-party SRI, and source-map exposure. Pairs with seo-reviewer (static
-  page review) and code-review-discipline (output shape).
-disable-model-invocation: false
-user-invocable: true
----
-
 # Web / Frontend Security
 
 App-level security for code that runs in (or renders to) the browser. This is **not** HTTP-header

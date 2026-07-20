@@ -36,7 +36,7 @@ and the final commit/PR are serial.
    | Changed file | Audit against |
    | --- | --- |
    | `*.py` | `brunofaust-python-style` → `references/audit.md` (minimalism/yagni, layering, error-handling, async, boundaries, config, tests, ownership) |
-   | `*.tsx` `*.jsx` `*.ts` (frontend) | `brunofaust-frontend-style` → `references/audit.md` *(when that skill lands; until then the same shape)* |
+   | `*.tsx` `*.jsx` `*.ts` `*.vue` `*.svelte` | `brunofaust-frontend-style` → `references/audit.md` (correctness, composition, security, a11y, tests, perf, minimalism) |
    | other stacks | the same over-engineering shape — reuse, simplification, efficiency, altitude |
 
    Judgment layer only (mechanical rules are checker-gated — never restate them): pass-through chains,

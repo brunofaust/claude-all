@@ -1,18 +1,3 @@
----
-name: react-testing
-description: >-
-  Testing React / frontend components, hooks, and flows with React Testing Library (RTL), Vitest or
-  Jest, MSW, and Playwright component/E2E. Use when: writing or reviewing frontend tests, deciding
-  what to test (behavior vs implementation), picking queries (getByRole vs testid), mocking the
-  network, testing custom hooks, adding accessibility assertions, or setting frontend coverage gates.
-  Covers query priority, userEvent over fireEvent, async assertions, MSW at the network layer, the
-  anti-snapshot stance, custom render/provider helpers, renderHook, axe a11y, Playwright component
-  testing, a per-layer coverage table, and the common anti-patterns. The frontend counterpart to
-  test-author (Python). Pairs with test-runner (runs the suite) and web-design-guidelines (a11y).
-disable-model-invocation: false
-user-invocable: true
----
-
 # React / Frontend Testing
 
 Test **behavior the user observes**, not implementation detail. A test that breaks when you refactor
