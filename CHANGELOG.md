@@ -5,6 +5,22 @@
 
 ### Changed
 
+- **frontend skills merged into `brunofaust-frontend-style`** — one entry point for React/browser
+  work, the counterpart to `brunofaust-python-style`. 7 skills → 5:
+  - **Folded in as `references/`** (content moved verbatim, frontmatter stripped):
+    `react-correctness`, `react-testing`, `web-security`. Those three skill dirs are **deleted**.
+  - **Referenced in place, NOT copied:** the four vendored skills (`react-best-practices`,
+    `composition-patterns`, `react-view-transitions`, `web-design-guidelines`) stay byte-identical to
+    upstream so `scripts/vendor_sync.py` keeps pulling improvements — folding them would have forked
+    them permanently. Verified post-merge: `vendor_sync.py --check` reports *up to date*.
+  - **Installing the new skill pulls the four in automatically** via its `claude-all.json` `requires`
+    (the dependency mechanism proving itself on its first real use).
+  - **Companions consolidated:** one `claude_md.md` (was 3 separate always-loaded injections) and one
+    reminder hook (was 3), covering source **and** test files — the folded `react-testing` hook's
+    test-file reminder is preserved as an appended line rather than lost.
+  - New `references/audit.md` — the frontend judgment checklist `/ship` and `/ship-pr` now run on
+    every changed `.tsx`/`.jsx`/`.ts`/`.vue`/`.svelte` file (correctness, composition, security, a11y,
+    tests, perf, minimalism), filling the placeholder those pipelines shipped with.
 - **ship / ship-pr**: prek gate hardened, scoped per pipeline, and `/ship-pr` parallelized.
   - **`/ship-pr` — full prek gate, whole repo, both stages, no amnesty.** `prek run --all-files` on
     pre-commit AND `--hook-stage pre-push`, **zero `Failed`**; a hook failing on a file *outside* the

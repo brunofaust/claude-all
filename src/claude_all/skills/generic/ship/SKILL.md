@@ -30,7 +30,7 @@ If the working tree is clean, stop: "nothing to ship".
 1. **Skill audit (STANDARD) — audit every changed file against its stack skill's `audit.md`.** Runs
    first so any edits flow through the gates below. Map each changed file to the skill that governs it:
    `*.py` → `brunofaust-python-style` `references/audit.md`; `*.tsx/*.jsx/*.ts` (frontend) →
-   `brunofaust-frontend-style` `references/audit.md` *(when it lands)*; other stacks → the same
+   `brunofaust-frontend-style` `references/audit.md`; other stacks → the same
    over-engineering shape. The audit is the **judgment** layer (the mechanical rules are gated by the
    checkers/lint — it never restates them): pass-through method chains (`get()` → `_get()` → `_query()`
    → `_to_model()` where each hop only forwards — collapse to one method), speculative abstractions

@@ -1,18 +1,3 @@
----
-name: react-correctness
-description: >-
-  React component & hook correctness — the architecture/logic patterns that prevent bugs (distinct
-  from the react-best-practices skill, which is about performance). Use when: writing or
-  reviewing components/hooks, reaching for useEffect, deciding where state should live, using React 19
-  features (use, useOptimistic, useActionState, ref-as-prop), choosing memoization, or structuring
-  container vs presentational components. Covers "useEffect — when NOT to use it", the state-location
-  decision tree, derived-state vs effects, the stale-closure trap, keys for dynamic lists, the
-  default-don't-memoize stance, and React 19 hooks. Pairs with react-best-practices (perf),
-  react-testing (verify), and web-security (safe rendering).
-disable-model-invocation: false
-user-invocable: true
----
-
 # React Correctness
 
 Most React bugs come from misusing `useEffect`, putting state in the wrong place, or stale closures.
