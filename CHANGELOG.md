@@ -1,6 +1,27 @@
 # CHANGELOG
 
 
+## [Unreleased]
+
+### Features
+
+- **execution-trace-audit**: New generic skill — a debugger-style flow-level audit of a service's
+  entrypoints (lambdas, ECS/K8s tasks, CLI commands, HTTP/queue handlers). Trace each entrypoint
+  hop-by-hop counting DB/network round-trips, interrogate each hop with the YAGNI questions, produce a
+  risk-rated simplification table + do-not-cut list, and keep a separate bug ledger. Surfaces flow-dead
+  code and producer/consumer drift that file-level review misses; states honestly that LOC savings are
+  single-digit % and the real wins are round-trips saved + the bug harvest.
+
+- **brunofaust-python-style**: New `checkers/async_mock_target.py` — flags a `patch()`/`patch.object`
+  whose target resolves to an `async def` in the scanned tree but supplies no async-aware double
+  (`AsyncMock` / `autospec=True` / `new_callable=AsyncMock`); resolution is conservative (unresolvable
+  targets stay silent, no false positives). Adds four reference lessons: "a MagicMock on an async
+  target is a green light over a broken await" and "tests are not callers" (`testing.md`), the
+  lock-ordering / lock-order-inversion rule (`async-patterns.md`), and the twin-implementations rule
+  (`architecture.md`). Enforcement matrix gains rows for the new checker and the src-dead/test-alive
+  grep recipe.
+
+
 ## v0.6.0 (2026-07-20)
 
 ### Bug Fixes

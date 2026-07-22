@@ -265,6 +265,32 @@ def process_returns(returns: Sequence[Return]) -> Sequence[Result]:
 # But even then, sometimes explicit is better than abstract
 ```
 
+### Twin implementations — the same rule in two languages/layers is a bug farm
+
+The Rule of Three tolerates duplication *within one language* until a pattern proves itself. It does
+**not** license the same business rule living in **two languages or layers at once** — a validation in
+Python **and** in SQL, a computation in the app **and** in a stored procedure, a limit in code **and**
+in a config schema. Two twins that must agree by hand drift the moment one is edited and the other
+isn't, and the drift is silent: each twin looks correct in its own file.
+
+Real incident: a "within working hours" window existed twice — a Python twin that correctly handled
+an **overnight** range (e.g. 22:00–06:00, where `start > end`) and a SQL twin written as
+`WHERE hour BETWEEN start AND end`, which **silently never matched** the overnight case. Both passed
+their own tests; the composite behavior was wrong for every overnight window.
+
+Two rules:
+
+1. **Duplication across languages/layers is a bug farm — eliminate one twin when you can.** Compute
+   the rule in *one* place and have the other layer consume the result (a single query the app calls,
+   or a value the app writes that SQL reads), rather than re-expressing the same logic in both
+   dialects where the dialects have different edge-case semantics (`BETWEEN` vs a Python comparison,
+   NULL handling, integer division, timezone math).
+2. **When you DELETE one twin, port its boundary tests to the survivor in the same change.** The
+   deleted twin's tests — the overnight-window case, the empty-set case, the off-by-one boundary —
+   were often the *only* thing pinning the correct behavior. Drop them and the survivor is now
+   unprotected at exactly the edges that broke before. Move the boundary assertions onto the survivor
+   before the twin's tests disappear with it.
+
 ### Pattern 6: Function Size Guidelines
 
 Keep functions focused. Extract when a function:

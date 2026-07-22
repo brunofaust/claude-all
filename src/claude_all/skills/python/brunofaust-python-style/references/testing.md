@@ -51,6 +51,59 @@ has a specific replacement — use it.
 | Running the suite single-process (`-n0`) as the default       | `-n auto --dist worksteal` is the default; `-n0` only to debug                           | xdist is the isolation/concurrency **validator**, not just a speed-up         |
 | `@pytest.mark.xdist_group(...)` to pin co-dependent tests together | Make each test self-contained so worksteal can scatter it anywhere                   | Grouping hides a test-depends-on-test bug instead of fixing it (rare exception — ask first) |
 
+### A `MagicMock` on an async target is a green light over a broken await
+
+A plain `MagicMock` / `Mock` is never awaited and never fails — so a test that patches an **`async
+def`** with one *passes whether or not the code under test actually awaits it*. That is a test that
+proves nothing about the seam it exists to protect.
+
+Real incident: a sync `def` factory was fed into an `async with`. Every test used a bare `MagicMock`
+for that factory, so nothing ever exercised `__aenter__`/`__aexit__` — the tests were green, and the
+broken async context manager shipped to production, where the first real `async with` blew up.
+
+The rules:
+
+- **Patching an `async def` target requires an async-aware double** — `AsyncMock`, `autospec=True`
+  (autospec infers async from the real object), or `new_callable=AsyncMock`. A bare `MagicMock` on an
+  async target is a false green. (Enforced by `checkers/async_mock_target.py` — it flags a
+  `patch("dotted.path")` / `patch.object(...)` whose resolved target is an `async def` and that uses
+  none of those three signals.)
+- **A fixture that would pass whether or not the code awaits is not a test.** If swapping the double
+  for a no-op wouldn't change the result, the double is validating nothing.
+- **Pair every async context-manager seam with one real-invocation test** — one test that actually
+  `async with`-es the real object (or a real fake that implements `__aenter__`/`__aexit__`), so the
+  await path is exercised at least once. Mocks make the other cases fast; the one real invocation is
+  what catches a sync-fed-to-`async with` bug the mocks can't see.
+
+### Tests are not callers — a `src`-dead, test-alive function is a finding
+
+Dead-code detection (vulture, a `grep` for call sites) counts a call **from a test** as a use. So a
+function whose **only** remaining callers live in `tests/` looks *alive* while production has silently
+lost its caller — the tests keep it green, the tool keeps it "used", and nobody notices the wiring
+broke.
+
+Real incident: a send-to-queue helper lost its production caller in a refactor. Its unit tests still
+called it directly, so vulture reported it live and every test passed — meanwhile the consumer Lambda
+drained an empty queue for weeks, because nothing was enqueuing anymore.
+
+The rule: **when auditing liveness, exclude tests from the search.**
+
+```bash
+# Callers in PRODUCTION only — a hit here means the function is genuinely wired in.
+grep -rn "send_to_queue" src/ --include='*.py'
+# If src/ is empty but tests/ calls it, that is the finding:
+grep -rn "send_to_queue" tests/ --include='*.py'
+```
+
+A function that is **src-dead but test-alive** is one of two things, and both need action:
+
+1. **The production caller was lost — a bug.** Restore the wiring (and add a test that asserts the
+   *caller* path, not just the helper in isolation, so the regression can't recur silently).
+2. **The code is genuinely dead** — then delete it *and its tests together*. Leaving the tests keeps
+   the corpse warm and re-arms the same false-alive signal for the next audit.
+
+Either way, `grep src/ excluding tests/` is the liveness check; a whole-tree grep is not.
+
 ### Test data isolation — the flaky-test root cause
 
 > These rules came out of a real debugging marathon: hours lost to "flaky" tests
