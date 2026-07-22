@@ -816,3 +816,33 @@ async with storage_client() as client:
 | API key validation         | 10    | Balance speed vs. throttling |
 | Test resource creation     | 20    | Fast but safe for LocalStack  |
 | General external API calls | 10    | Conservative default         |
+
+### Lock ordering — one global acquisition order, always
+
+Any transaction that takes locks on **more than one** row/table/resource — `SELECT ... FOR UPDATE`
+across two tables, an advisory lock plus a row lock, two named advisory locks — must acquire them in a
+**single documented global order**, and every path in the system must follow it. Two paths that lock
+the same pair in *opposite* orders — one takes A then B, the other takes B then A — are a **lock-order
+inversion**: path 1 holds A and waits for B, path 2 holds B and waits for A, and both block until a
+timeout fires.
+
+This is a production deadlock, not a theoretical one. Real incident: a **reserve** path locked the
+wallet row then the ledger row, while a **settlement** path locked the ledger row then the wallet row.
+Each worked in isolation and in every unit test; under concurrent load they deadlocked and stalled the
+queue.
+
+- **Pick one order and write it down** — e.g. "always lock `accounts` before `ledger_entries`;
+  advisory locks by ascending key". Put it where the lock code lives.
+- **Order is by a stable key, not by arrival.** When locking N rows of one table, `ORDER BY id` in
+  the `SELECT ... FOR UPDATE` so concurrent transactions grab them in the same sequence.
+- **Set a `lock_timeout`** so a mistake surfaces as a fast, logged error instead of an indefinite
+  hang — a deadlock you can see beats one that just looks like "the queue is slow".
+
+**The review question** — ask it of every multi-lock transaction:
+
+> List every `FOR UPDATE` (and every advisory lock) in this transaction, in acquisition order. Does
+> any *other* transaction take an overlapping set of the same locks in a **different** order?
+
+If the answer is yes, that pair is a latent deadlock — reorder one path to match the global order.
+There is no `async` escape from this: `asyncio` interleaves the two coroutines exactly the way two
+threads or two connections would, so the ordering discipline is identical.
