@@ -1,25 +1,31 @@
 # CHANGELOG
 
 
-## [Unreleased]
+## v0.7.0 (2026-07-22)
 
 ### Features
 
-- **execution-trace-audit**: New generic skill — a debugger-style flow-level audit of a service's
-  entrypoints (lambdas, ECS/K8s tasks, CLI commands, HTTP/queue handlers). Trace each entrypoint
-  hop-by-hop counting DB/network round-trips, interrogate each hop with the YAGNI questions, produce a
-  risk-rated simplification table + do-not-cut list, and keep a separate bug ledger. Surfaces flow-dead
-  code and producer/consumer drift that file-level review misses; states honestly that LOC savings are
-  single-digit % and the real wins are round-trips saved + the bug harvest.
+- **skills**: Execution-trace-audit skill + async-mock checker + audit lessons
+  ([`c50e342`](https://github.com/brunofaust/claude-all/commit/c50e342d263a6704fe89474969f87ce074d8eba8))
 
-- **brunofaust-python-style**: New `checkers/async_mock_target.py` — flags a `patch()`/`patch.object`
-  whose target resolves to an `async def` in the scanned tree but supplies no async-aware double
-  (`AsyncMock` / `autospec=True` / `new_callable=AsyncMock`); resolution is conservative (unresolvable
-  targets stay silent, no false positives). Adds four reference lessons: "a MagicMock on an async
-  target is a green light over a broken await" and "tests are not callers" (`testing.md`), the
-  lock-ordering / lock-order-inversion rule (`async-patterns.md`), and the twin-implementations rule
-  (`architecture.md`). Enforcement matrix gains rows for the new checker and the src-dead/test-alive
-  grep recipe.
+Upstream the method and lessons from a debugger-style execution-trace audit of a production
+  service's entrypoints (cut flow-dead code; surfaced confirmed producer/ consumer bugs that
+  file-level review missed).
+
+- New generic skill execution-trace-audit: 7-step per-entrypoint trace method (inventory -
+  hop-by-hop trace counting round-trips - YAGNI interrogation - risk-rated simplification table +
+  do-not-cut list - separate bug ledger - behavior-preserving implementation pass - agent fan-out),
+  with the honest note that LOC savings are single-digit % and the wins are round-trips + the bug
+  harvest. - brunofaust-python-style references: MagicMock-on-async false-green and
+  tests-are-not-callers (testing.md), lock-order-inversion rule (async-patterns.md),
+  twin-implementations rule (architecture.md), enforcement-matrix rows. - New checker
+  async_mock_target.py: flags patch()/patch.object on an async def with no async-aware double;
+  conservative resolution (unresolvable = silent, no false positives). Verified across
+  flag/silent/OK/unresolvable branches.
+
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>
+
+Claude-Session: https://claude.ai/code/session_012AE4FTiCRPaG42d3YfGrUw
 
 
 ## v0.6.0 (2026-07-20)
