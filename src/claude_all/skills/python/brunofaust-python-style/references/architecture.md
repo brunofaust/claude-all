@@ -265,6 +265,74 @@ def process_returns(returns: Sequence[Return]) -> Sequence[Result]:
 # But even then, sometimes explicit is better than abstract
 ```
 
+#### Rule of Three vs the two-copy trigger — reconciling "wait for three" with "extract at two"
+
+The Rule of Three governs **uncertain** similarity: code that *looks* alike but may
+turn out to change for different reasons (`process_orders` / `process_returns`
+above — different validation, different errors). Waiting protects you from
+abstracting on a coincidence and building the wrong shared thing.
+
+It does **not** govern **structurally certain** sameness — where the second copy is
+the same *by construction*, not by resemblance, and cannot diverge in *purpose*
+even though it will diverge in *detail* if left as twins. Two cases are certain:
+
+- **Same external store/API surface** — a second call site hand-assembling access to
+  the same store (the same table + index + cache read, the same multi-step API
+  dance). See [`external-system-ownership.md`](external-system-ownership.md),
+  "Query surfaces are external systems" and "Structural duplication".
+- **Same control-flow skeleton** — a second copy of the same wrapper shape
+  (cache-check → run → finish; fetch → build-result; guard → delete). See
+  "Same-skeleton wrappers" below.
+
+For those two, the trigger is the **SECOND** copy, not the third. The similarity is
+proven, so there is nothing to wait to learn — and the copies drift silently
+(the twin-resolver serialization divergence below is that drift realized). Rule of
+Three is a rule about *doubt*; when there is no doubt, it does not apply.
+
+#### Same-skeleton wrappers — extract the skeleton at copy two
+
+A family of functions that share a **control-flow skeleton** and differ only in the
+step they wrap — `cache-check → run → store`, `fetch → shape-into-result`,
+`guard → delete → confirm` — is structurally-certain sameness, not a coincidental
+resemblance. Extract the skeleton as a higher-order helper (a decorator, or a
+function taking the varying step as a callable) the moment the **second** copy
+appears. These families drift silently: each twin looks correct in its own file,
+and one gets a fix or a field the others don't.
+
+Real incident: a family of near-identical resolver methods — each `fetch row →
+build the response model` — had already diverged on **one field's serialization**
+(one resolver JSON-encoded it, its twins passed it raw). Every method's own test
+passed; the bug lived only in the disagreement *between* them. The skeleton
+(`fetch → build-result`) was the same in all of them; only the query and the field
+list varied. One helper taking `(query, row_to_model)` would have made the
+serialization single-sourced and the drift impossible.
+
+```python
+# BAD: three resolvers, same skeleton, drifting bodies
+async def resolve_widget(id: str) -> WidgetOut:
+    row = await store.fetch_widget(id)
+    return WidgetOut(id=row.id, spec=orjson.dumps(row.spec).decode())  # JSON-encoded
+
+async def resolve_gadget(id: str) -> GadgetOut:
+    row = await store.fetch_gadget(id)
+    return GadgetOut(id=row.id, spec=row.spec)  # raw — drifted!
+
+
+# GOOD: the skeleton is single-sourced; only the varying parts are arguments
+async def resolve[R: BaseModel](
+    fetch: Callable[[str], Awaitable[Row]],
+    build: Callable[[Row], R],
+    id: str,
+) -> R:
+    """Fetch a row and build its response model — the one fetch→build skeleton."""
+    return build(await fetch(id))
+```
+
+Distinct from the *cross-language* twins below (Python-vs-SQL): that is one rule
+re-expressed in two dialects; this is one *skeleton* re-expressed in the same
+language. Both drift; the fixes differ (collapse to one place vs. extract the
+skeleton).
+
 ### Twin implementations — the same rule in two languages/layers is a bug farm
 
 The Rule of Three tolerates duplication *within one language* until a pattern proves itself. It does

@@ -137,7 +137,12 @@ is a *liability* you pay down every time the code changes:
   the real one.
 
 Duplicate first. Abstract when the third real case teaches you what the shared
-thing actually is — see `architecture.md` Pattern 5 (Rule of Three).
+thing actually is — see `architecture.md` Pattern 5 (Rule of Three). *Carve-out:*
+this governs **uncertain** similarity. **Structurally-certain** sameness — a second
+call site on the same store surface, or a second copy of the same control-flow
+skeleton — has nothing to wait to learn and extracts at the **second** copy
+(`architecture.md`, "Rule of Three vs the two-copy trigger";
+`external-system-ownership.md`).
 
 ## When an abstraction IS earned
 

@@ -56,6 +56,70 @@ ticket = await jira.get_issue("PROJ-123")
 - Services/handlers consume the client interface, never import the underlying SDK.
 - Tests mock the client, not the SDK.
 
+## Query surfaces are external systems — one owner per store surface
+
+A **query surface** — a specific DB table (or logical entity), a search index, a
+vector namespace, a cache keyspace — is an external system in exactly this sense:
+every read and write against it is a store operation, and it gets **exactly one
+module** that owns those operations. Callers **never assemble store access inline**;
+they call the owner's functions and only build inputs / format outputs.
+
+The granularity is the *surface*, not the whole engine. `PostgresClient` is not the
+owner of the `orders` table any more than "the network" owns an API — the `orders`
+store module is. One module per table/index/namespace, each exposing a query per
+access pattern (`get_order(id) -> Order`, `list_open_orders(...) -> Sequence[Order]`).
+
+**The trigger is the SECOND call site, not the third.** The Rule of Three is about
+*uncertain* similarity; a second place hand-building the same store access is
+*structurally certain* sameness — same table, same columns, same filter shape — so
+there is nothing to wait to learn. Extract the owner when the second caller appears.
+(Reconciliation → [`architecture.md`](architecture.md), "Rule of Three vs the
+two-copy trigger".)
+
+```python
+# BAD: two call sites each hand-assembling the same store access
+# site A
+rows = await db.query(select(orders_t).where(orders_t.c.status == "open"))
+open_orders = [Order.model_validate(r._mapping) for r in rows]
+# site B (drifts the moment one is edited and the other isn't)
+rows = await db.query(select(orders_t).where(orders_t.c.status == "open"))
+...
+
+# GOOD: one owner; callers only build inputs and format outputs
+# stores/orders.py — THE owner of the orders surface
+async def list_open_orders() -> Sequence[Order]:
+    rows = await db.query(select(orders_t).where(orders_t.c.status == "open"))
+    return [Order.model_validate(r._mapping) for r in rows]
+```
+
+## Structural duplication — the clone detector cannot see it
+
+Token-similarity duplication gates (`jscpd`, codecongruence-style — see
+[`enforcement.md`](enforcement.md), "Bounded copy-paste duplication") catch
+**copy-paste**: same *text*. They are blind to **structural** duplication —
+*same responsibility, different text*: three call sites each hand-assembling the
+same multi-store pipeline with different variable names, helper spellings, and
+ordering. No token window matches, so the gate stays green at every threshold while
+the same logic lives in three places.
+
+Real incident: a multi-store read (a DB table + a search index + a cache) was
+hand-assembled at **three** call sites; collapsing them into a single owner module —
+callers only build the query inputs and format the results — removed **~1,700 lines**.
+The clone detector had never flagged any of it, because no two call sites shared
+enough literal text.
+
+**Find it by responsibility, not by text.** No tool substitutes for the review
+question, so ask it deliberately — especially when a PR adds a **new call site that
+touches an existing store or API**:
+
+> Who else already talks to this store / index / API? Should this caller be calling
+> an owner that already exists (or should exist) instead of assembling the access
+> itself?
+
+A new call site reaching a store directly is the single highest-yield place to catch
+a missing owner. Make it a standing review checkpoint, and re-sweep periodically by
+store surface ("everything that reads the `orders` table") rather than by diff.
+
 ## Enforcement — ruff `banned-api` config
 
 ```toml
