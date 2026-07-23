@@ -49,7 +49,7 @@ written, the ruff ban stops it being merged.
 | A module with public names declares `__all__` | `all_contract.py` rule `missing-all` — a module that defines a public module-level `def`/`class` but has no `__all__`. Closes the fail-open hole in `not-in-all`: without it, deleting `__all__` opts a module out of the gate entirely (in one repo, 53% of modules were unenforced while the gate stayed green). | none — add `__all__`; exempt BY CONSTRUCTION (a module with nothing public is never flagged) |
 | `__init__.py` is docstring-ONLY (no barrel) | `model_contract.py` rule `barrel-init` — ANY import/def/assign in an `__init__.py` is flagged. A re-export barrel forces every consumer to load the whole package (measured 324ms across 12 submodules → 0.3ms once emptied). ruff `RUF067` is INSUFFICIENT here: it permits docstrings **and re-exports**, and the re-exports are exactly what this bans. | none — a barrel is always wrong; move logic to a real module |
 | Stay async (no de-async on no-`await`)| ruff `RUF029` disabled in config (by design)                       | n/a — keep the API uniformly `async`       |
-| Bounded copy-paste duplication        | `jscpd` (regression-only `--threshold`)                            | dedup the clone — never `SKIP=jscpd`       |
+| Bounded copy-paste duplication        | `jscpd` (regression-only `--threshold`) — catches copy-paste (same *text*) only, **not** same-responsibility-different-text; structural dup is invisible to it at any threshold (→ `external-system-ownership.md`, "Structural duplication"). Its allowlist is a burn-down list, not a graveyard (below). | dedup the clone — never `SKIP=jscpd`       |
 | Raw SQL valid vs migration schema     | `check_raw_sql.py` (sqlglot, regression baseline, no DB)           | fix the query / baseline a real bug        |
 | Single alembic head + id ≤ 32 chars   | `check_alembic_heads.py` (AST, no DB)                              | merge heads into one linear chain          |
 | CI-reserved env vars hard-set in tests| pygrep `no-ci-env-setdefault` (`GITHUB_*`/`RUNNER_*`/`CI`)         | assign directly, never `os.environ.setdefault` |
@@ -91,6 +91,32 @@ Generalise the shape to every allowlist you add: an entry is
 `{target: (reason, machine-checkable predicate)}`, and a failing predicate is its
 own violation class. A name-set allowlist cannot do this — it rots silently, and
 nothing tells you the exemption outlived its reason.
+
+### Duplication-gate allowlists are burn-down lists, not graveyards
+
+A `jscpd`/codecongruence allowlist is the classic name-set allowlist that rots. Each
+entry is a *known duplicate the gate agreed to ignore* — i.e. **backlog**, not a
+permanent exemption. Left ungoverned it becomes an unmerged-refactor dumping ground
+and, worse, a **config-rot graveyard**: entries naming functions that were deleted
+long ago, which the gate can never re-emit, so they read as neither present nor
+stale and silently pad the count. One real allowlist of ~50 pairs held **8 genuinely
+extractable groups (~200 LOC)** and **12 dead entries naming deleted functions**.
+
+Govern it as a burn-down:
+
+1. **Every entry carries a classification**, not just a pair of paths:
+   - `MERGE` — the same thing lives in two spots; collapse to one. Do it, delete the entry.
+   - `EXTRACT-CORE` — recurring pattern that belongs to one owner (`core/`, a store module). Extract, delete the entry.
+   - `JUSTIFIED: <reason>` — genuinely-independent look-alike pairs that will diverge (Rule of Three doubt). The reason is written down and must still hold.
+2. **Sweep dead entries.** An allowlist naming code that no longer exists **is** config
+   rot (same class as an import-linter contract naming a deleted module). Grep each
+   entry's identifiers against the tree; a match-nothing entry is deleted, not kept.
+   A `jscpd` clone key that no longer resolves to real spans should fail the gate, not
+   pad it — prefer a gate that re-verifies its allowlist targets exist (the
+   positively-verified shape above), so a stale entry surfaces itself.
+3. **The list length only shrinks.** A PR may remove entries (fixed or dead) and may
+   not add one without a `JUSTIFIED:` reason reviewed like any other exemption. Track
+   the count; a rising count is a regression to explain, never a default.
 
 **Two sanctioned shapes, and why.** The gate accepts `Model.model_validate(event)`
 *or* `Model(field=event.get(...))`. The second is often preferable for an AWS
