@@ -1,6 +1,19 @@
 # CHANGELOG
 
 
+## v0.8.0 (2026-07-23)
+
+### Features
+
+- **brunofaust-python-style**: Anti-duplication rules — query-surface ownership, structural-dup
+  review, allowlist burn-down
+  ([`4c0969f`](https://github.com/brunofaust/claude-all/commit/4c0969f80746e9b55c21e13c6ad263095dbc86fd))
+
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>
+
+Claude-Session: https://claude.ai/code/session_012AE4FTiCRPaG42d3YfGrUw
+
+
 ## v0.7.0 (2026-07-22)
 
 ### Features
