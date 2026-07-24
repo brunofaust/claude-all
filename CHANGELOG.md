@@ -38,29 +38,34 @@
   kept byte-identical — only the digits change, for every targeted dependency including open `>=`
   floors. A surgical single-line `Edit` is the primary method so the signal can't be restructured.
   After editing it relocks and **validates** via the resolver: any dependency-vs-dependency clash or
-  `requires-python` / Python-version incompatibility reverts the `pyproject.toml` edit and reports the
-  conflict verbatim, so a broken pyproject/lock pair is never left behind. Adds a detection step for the
-  classic mismatch — a `uv.lock` alongside caret specifiers means the constraints live in a
-  `[tool.poetry.dependencies]` table uv ignores, so it flags rather than editing the wrong table.
+  `requires-python` / Python-version incompatibility restores **both** `pyproject.toml` and the lockfile
+  from a pre-edit snapshot (a `uv lock` that succeeded before `uv sync` failed has already advanced the
+  lock, so reverting only pyproject would leave a desynced pair) and reports the conflict verbatim.
+  Adds a detection step for the classic mismatch — a `uv.lock` alongside a `[tool.poetry.dependencies]`
+  table means the constraints live where uv ignores them, so it flags rather than editing the wrong
+  table (keyed on the table, not the specifier: `~=` is valid PEP 508, not a Poetry marker).
   Adds `Edit` to the agent's tools.
 
-- **brunofaust-python-style**: Multi-tenant isolation reference (`references/tenant-isolation.md`)
-  rewritten from a Postgres-RLS-only page into a two-layer model spanning five planes — boundary
-  contracts (a provenance-typed `TenantScope`, org-from-token-claim only, IDOR), Postgres RLS as the
-  second wall (a `STABLE app_current_org_id()` that raises on unset, `ENABLE`+`FORCE`, a schema-reserved
-  `0` platform sentinel, `query_system(platform_scan=True)` per cross-org call site, a coverage-guard
-  test), the warm-start singleton/cache leak class + audit taxonomy, `/tmp/{org}/{exec}/` scratch layout
-  with a cold-start orphan sweep, and AWS ABAC via STS session tags (spike-per-service support matrix,
-  fail-closed minting, billing isolation as IAM). SKILL.md reference table + a new architectural one-liner
-  updated to match.
+## v0.9.0 (2026-07-24)
 
-- **aws-architecture**: New "Multi-tenant resource isolation — ABAC / STS session tags" section (spike
-  support per service, lazy org-keyed STS caching, fail-closed, no-ai-model customer role), pointing to
-  the tenant-isolation reference.
+### Features
 
-- **security-audit**: Tenant isolation added as a first-class audit dimension — the warm-start taxonomy
-  sweep, the `/tmp` sweep, and the RLS coverage-guard / `platform_scan` inventory as auditable gates,
-  plus IDOR and single-wall anti-pattern rows.
+- **brunofaust-python-style**: Multi-tenant isolation reference — RLS, warm-start leaks, /tmp
+  layout, STS-tag ABAC, boundary contracts
+  ([`f2fe3c0`](https://github.com/brunofaust/claude-all/commit/f2fe3c084c884ea13fdd0f4cd3193133c5735557))
+
+Rewrite references/tenant-isolation.md from a Postgres-RLS-only page into a two-layer model across
+  five planes: boundary contracts (typed TenantScope, org-from-token-claim, IDOR), RLS as the second
+  wall (raising app_current_org_id(), ENABLE+FORCE, reserved 0 sentinel, query_system+coverage
+  guard), the warm-start singleton/cache leak class + taxonomy, /tmp/{org}/{exec}/ layout +
+  cold-start sweep, and AWS ABAC via STS session tags (spike-per-service, fail-closed,
+  billing-as-IAM). Update the SKILL.md reference table + a new architectural one-liner, and the
+  README description. Pointer-only additions to aws-architecture (ABAC/session-tag section) and
+  security-audit (tenant isolation as an audit dimension). Fully generic — no product names.
+
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>
+
+Claude-Session: https://claude.ai/code/session_012AE4FTiCRPaG42d3YfGrUw
 
 
 ## v0.8.0 (2026-07-23)
