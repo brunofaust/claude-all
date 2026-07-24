@@ -1,54 +1,26 @@
 # CHANGELOG
 
 
-## [Unreleased]
+## v0.10.0 (2026-07-24)
 
-### Features
-
-- **code-quality** (agent): Hardened the report-only contract after a run reported "Key Fixes Made" and
-  left ~50 unrelated files modified. Root cause: the agent has no `Edit` tool — `prek run --all-files`
-  itself rewrites the tree via auto-fixing hooks (`ruff --fix`, `ruff-format`, `trailing-whitespace`,
-  `prettier --write`), so "never modify a file" was unenforceable as written. The agent now (a) treats
-  gate-induced rewrites as a side effect it must **attribute to the hook, never claim as its own** —
-  "Key Fixes Made"/"Fixed X"/"Applied fixes" are banned strings; (b) snapshots `git status --porcelain`
-  before and after the gate and **always** emits a `[FILES MODIFIED BY THE GATE]` section (`none —
-  working tree unchanged` when clean) so the caller can revert precisely; (c) uses non-mutating flags for
-  individual linters (`ruff check --no-fix`, `ruff format --check --diff`, `prettier --check`, `eslint`
-  without `--fix`); and (d) is forbidden from reverting/stashing/resetting to tidy up, since tree-wide git
-  writes can destroy the caller's or a parallel session's uncommitted work. The dispatch snippet now warns
-  callers to read that section on every run.
-
-- **git-cleanup** (agent): Reconciles every "has changes" worktree/branch against `origin/main` before
-  reporting it as non-deletable — the fix for the common case where ~95% of the "kept" items were already
-  merged. Two independent, squash-merge-aware gates: **Gate A** trial-merges a branch into main
-  (`git merge-tree --write-tree`; ancestry checks like `git log origin/main..branch` miss squash-merges),
-  and **Gate B** checks each uncommitted/untracked path against `origin/main`. Items whose content is
-  already in main move into the REMOVE plan (branch via `-D`, worktree via `--force`) with the reason
-  shown; only items with a REAL diff vs main stay in the warnings. Force ops are licensed solely by that
-  content-in-main proof; the untracked-file gate is strict (any untracked path not byte-identical to a
-  file in main keeps the whole worktree, since `worktree remove --force` is unrecoverable); active Claude
-  sessions and open PRs always win; and if `git merge-tree` is unavailable (git <2.38) or `git fetch`
-  failed, items are left as SKIP with the reason stated loudly rather than silently kept.
-
-- **python-deps** (agent): On an explicit version bump ("bump the dependency versions", "update
-  pyproject to latest"), the agent now updates the declared version **number** in `pyproject.toml`
-  instead of only refreshing the lockfile (previously a bump silently no-opped on `==`/`^` pins because
-  the lock cannot advance past them). It is a version-number change only: the specifier's
-  operator/signal (`==`, `>=`, `^`, `~=`, upper bounds), extras (`[http]`) and environment markers are
-  kept byte-identical — only the digits change, for every targeted dependency including open `>=`
-  floors. A surgical single-line `Edit` is the primary method so the signal can't be restructured.
-  After editing it relocks and **validates** via the resolver: any dependency-vs-dependency clash or
-  `requires-python` / Python-version incompatibility restores **both** `pyproject.toml` and the lockfile
-  from a pre-edit snapshot (a `uv lock` that succeeded before `uv sync` failed has already advanced the
-  lock, so reverting only pyproject would leave a desynced pair) and reports the conflict verbatim.
-  Adds a detection step for the classic mismatch — a `uv.lock` alongside a `[tool.poetry.dependencies]`
-  table means the constraints live where uv ignores them, so it flags rather than editing the wrong
-  table (keyed on the table, not the specifier: `~=` is valid PEP 508, not a Poetry marker).
-  Adds `Edit` to the agent's tools.
 
 ## v0.9.0 (2026-07-24)
 
 ### Features
+
+- **agents**: Dep-version bumping, squash-aware cleanup, report-only lint gate
+  ([`449a9d4`](https://github.com/brunofaust/claude-all/commit/449a9d4c9afc3b9aba69c3bd4378d452f5bbb4c4))
+
+- python-deps: bump the declared version NUMBER in pyproject.toml (operator, extras and markers
+  preserved), then relock and validate for dependency / Python-version conflicts, restoring both
+  files if the resolver rejects it - git-cleanup: reconcile "has changes" worktrees/branches against
+  origin/main via squash-aware content gates, so only REAL diffs are reported as keepers -
+  code-quality: harden the report-only contract — attribute hook auto-fixes to the hook, and always
+  report which files the gate rewrote
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+
+Claude-Session: https://claude.ai/code/session_01Edg28TFwGA6brrvE6Vsyj5
 
 - **brunofaust-python-style**: Multi-tenant isolation reference — RLS, warm-start leaks, /tmp
   layout, STS-tag ABAC, boundary contracts
