@@ -1,6 +1,29 @@
 # CHANGELOG
 
 
+## [Unreleased]
+
+### Features
+
+- **brunofaust-python-style**: Multi-tenant isolation reference (`references/tenant-isolation.md`)
+  rewritten from a Postgres-RLS-only page into a two-layer model spanning five planes — boundary
+  contracts (a provenance-typed `TenantScope`, org-from-token-claim only, IDOR), Postgres RLS as the
+  second wall (a `STABLE app_current_org_id()` that raises on unset, `ENABLE`+`FORCE`, a schema-reserved
+  `0` platform sentinel, `query_system(platform_scan=True)` per cross-org call site, a coverage-guard
+  test), the warm-start singleton/cache leak class + audit taxonomy, `/tmp/{org}/{exec}/` scratch layout
+  with a cold-start orphan sweep, and AWS ABAC via STS session tags (spike-per-service support matrix,
+  fail-closed minting, billing isolation as IAM). SKILL.md reference table + a new architectural one-liner
+  updated to match.
+
+- **aws-architecture**: New "Multi-tenant resource isolation — ABAC / STS session tags" section (spike
+  support per service, lazy org-keyed STS caching, fail-closed, no-ai-model customer role), pointing to
+  the tenant-isolation reference.
+
+- **security-audit**: Tenant isolation added as a first-class audit dimension — the warm-start taxonomy
+  sweep, the `/tmp` sweep, and the RLS coverage-guard / `platform_scan` inventory as auditable gates,
+  plus IDOR and single-wall anti-pattern rows.
+
+
 ## v0.8.0 (2026-07-23)
 
 ### Features

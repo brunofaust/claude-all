@@ -65,6 +65,26 @@ findings with the `code-review-discipline` severity model (CRITICAL→BLOCK … 
 6. **Cloud / infra** — IAM least-privilege (→ `iam-auditor` for AWS), encryption at rest + in transit,
    minimal network exposure (security groups, no public DBs), audit logging + alerting on.
 
+## Tenant isolation (a first-class audit dimension for multi-tenant systems)
+
+A multi-tenant app leaks when one tenant's request touches another tenant's data, process memory,
+scratch disk, or cloud resources — a broken-access-control failure that authz-on-endpoints alone
+does not cover. Audit each plane, and prefer the checks that are **auditable gates** (a query or a
+sweep with a yes/no answer) over prose:
+
+- **Data (RLS).** Every `org_id` table has RLS `ENABLE`+`FORCE` + a policy — run the coverage-guard
+  query; a session tenant that is unset should **raise**, not silent-empty. The list of cross-org
+  readers (`platform_scan=True`) is a greppable, reviewed burn-down set.
+- **Process memory.** Re-run the **warm-start taxonomy sweep**: classify every process-global
+  (SAFE-platform / org-keyed / per-task / stateless / **LEAK**). A cache on tenant-bound state served
+  across a warm reuse is the leak; one-shot containers are safe by construction.
+- **Ephemeral disk.** The **`/tmp` sweep**: all scratch is `/tmp/{org_id}/{execution_id}/` via one
+  path owner (bare-`/tmp` checker on), with a cold-start orphan sweep because SIGKILL bypasses `finally`.
+- **Cloud resources.** ABAC/STS session tags conditioned on the tenant tag, fail-closed on mint
+  failure, and a customer role that structurally lacks the permissions it must never use.
+
+Full patterns + the exact gate queries → [`../../python/brunofaust-python-style/references/tenant-isolation.md`](../../python/brunofaust-python-style/references/tenant-isolation.md).
+
 ## Building safe action-taking tools & agents (design-time)
 
 The layers above *find* problems; this *prevents* them. When you **build** something that takes a
@@ -105,6 +125,8 @@ secret leak → **rotate first**, then purge from history, then sweep for simila
 | Anti-pattern | Why | Instead |
 | --- | --- | --- |
 | Authz enforced only in the UI | the API is public | check authz on every server endpoint |
+| Trusting a client-supplied `org_id` (path/query/body) | IDOR — read a stranger's tenant | derive org only from the auth token claim |
+| App-side `WHERE org_id` as the only tenant guard | one missing filter = cross-tenant leak | second wall per plane (RLS, warm-start sweep, `/tmp` layout, ABAC) |
 | Scanning only HEAD for secrets | the leak is in history | scan full git history (gitleaks/trufflehog) |
 | Pinning CI actions to a tag (`@v4`) | tags move → supply-chain hijack | pin to a commit SHA |
 | Long-lived cloud keys in CI | broad blast radius if leaked | OIDC short-lived creds |

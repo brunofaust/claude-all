@@ -319,6 +319,16 @@ Layout, session-reuse pattern, and the ownership rules → [`references/client-w
 
 ______________________________________________________________________
 
+## 10.6 Multi-tenant resource isolation — ABAC / STS session tags
+
+For a multi-tenant workload, scope cloud resources per tenant the way RLS scopes rows: **one** customer role, every grant conditioned on `${aws:PrincipalTag/org_id}`, and the worker assumes that role with a session tag rather than provisioning per-org roles. The worker assumes the tagged role **itself** from the tenant id in its own validated payload — never pass STS creds through orchestration payloads (role-chaining caps the session at 1h and puts tokens in transit). Mint STS lazily, cache credentials org-keyed with expiry refresh (AssumeRole is rate-limited — once per org per session, not per call), use the regional STS endpoint, and **FAIL-CLOSED** on a mint failure (never fall back to the platform role). A structural win: give the customer role no ai-model/Bedrock permissions, so "never bill the platform for a tenant's LLM call" is an IAM boundary, not a review checklist.
+
+**Spike support per service — the matrix is learned, not documented.** Whether a session tag actually scopes a service is service-specific and often documented incorrectly: S3 prefix policies YES, per-org vector-index ARNs YES, DynamoDB `LeadingKeys` YES **only where the partition key leads with the tenant id**, catalog/table stores (Iceberg-style) often NO (session tags are engine trust lists, not row selectors — fall back to per-org filter+grant or a trusted query layer). Run a live spike per service before relying on it.
+
+Full patterns, the YES/NO matrix, and the boundary-contract + billing-isolation rationale → [`../../python/brunofaust-python-style/references/tenant-isolation.md`](../../python/brunofaust-python-style/references/tenant-isolation.md) (§4).
+
+______________________________________________________________________
+
 ## Decision tree — "what should I use?"
 
 ```
