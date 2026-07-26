@@ -147,7 +147,7 @@ translation* table below to pick the actual tool. (`<src>` = the source root.)
 | 5 | **External systems have a single owner (containment)** | raw SDK / HTTP / DB-driver imports *outside* the designated owner module |
 | 6 | **Typed contracts at trust boundaries** | untyped / `any` / loosely-typed blobs crossing a module or I/O boundary (validate at the edge) |
 | 7 | **No silent error swallowing** | empty catches, ignored error returns, swallowed promise rejections, broad catch-all |
-| 8 | **Docs coverage + mandatory files** | doc-comment coverage %; README / CHANGELOG / architecture docs present |
+| 8 | **Docs coverage + mandatory files** | doc-comment coverage %; README / architecture docs present |
 | 9 | **No dead code; minimal public surface** | unused exports/symbols; over-broad visibility |
 | 10 | **Tests mirror source; coverage meets the per-layer bar** | coverage %; test↔source structure; anti-patterns (module-global mocks) |
 | 11 | **No scattered / hardcoded config** | env reads outside the config module; hardcoded endpoints / timeouts / model names / resource names |

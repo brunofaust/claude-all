@@ -48,11 +48,14 @@ Releases are triggered by merging a `release/` branch into `main` (same setup as
     (no content changes required) and open a PR to `main`.
 1. Merging that PR triggers `python-semantic-release`, which reads all
     conventional commits since the last tag, bumps `pyproject.toml`,
-    writes `CHANGELOG.md`, and creates a GitHub release + git tag.
+    and creates a GitHub release + git tag with auto-generated notes.
 
-**Do not bump the version or edit `CHANGELOG.md`'s version headers manually** — add your
-change under `## [Unreleased]` in a PR as usual; the release process turns that section
-into the next numbered version.
+**Do not bump the version manually** — the release process derives the version and
+release notes entirely from Conventional Commits history, so there is no changelog
+file to hand-edit.
+
+There is no `CHANGELOG.md` — a hand-maintained changelog was a merge-conflict magnet
+across every parallel PR. Release notes are generated from commit/PR history instead.
 
 ## Repo structure
 

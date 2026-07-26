@@ -16,7 +16,6 @@ Every rule in this skill has an enforcement mechanism. If a rule has no enforcem
 | Dockerfile per resource               | `skill_enforcer.py` rule `resource_mandatory_files`                | none                                       |
 | CLAUDE.md per resource                | `skill_enforcer.py` rule `resource_mandatory_files`                | none                                       |
 | Layer dependency direction            | `import-linter`                                                    | refactor required                          |
-| CHANGELOG updated                     | `precommit_changelog.sh` + GitHub Action                           | `skip-changelog` label                     |
 | Docs updated with code                | `precommit_docs.sh` + GitHub Action                                | `skip-docs` label                          |
 | Resource CLAUDE.md updated            | `precommit_resource_docs.sh` + GitHub Action                       | none                                       |
 | Conventional commits                  | commitizen `commit-msg` hook                                       | none                                       |
