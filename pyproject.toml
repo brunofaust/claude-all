@@ -108,7 +108,6 @@ major_on_zero = false
 # exit 0) is what stops the bump push from looping — not this — as release.yml has
 # always documented.
 commit_message = "chore(release): v{version}"
-changelog_file = "CHANGELOG.md"
 exclude_commit_patterns = [
   "^chore",
   "^docs",
@@ -141,4 +140,3 @@ name = "cz_conventional_commits"
 version_provider = "pep621"
 tag_format = "v$version"
 major_version_zero = true
-update_changelog_on_bump = false

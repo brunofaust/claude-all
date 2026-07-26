@@ -53,7 +53,7 @@ Subagents Claude Code delegates to for specific jobs. Haiku for mechanical work,
 | [`git-committer`](src/claude_all/agents/generic/git-committer/agent.md) | haiku | Stages, commits, and optionally pushes your changes. |
 | [`git-runner`](src/claude_all/agents/generic/git-runner/agent.md) | haiku | Reads git log, diff, status, blame. |
 | [`log-filter`](src/claude_all/agents/generic/log-filter.md) | haiku | Filters and summarizes logs you already have. |
-| [`docs-updater`](src/claude_all/agents/generic/docs-updater.md) | sonnet | Updates README/CLAUDE.md/CHANGELOG after a code change. |
+| [`docs-updater`](src/claude_all/agents/generic/docs-updater.md) | sonnet | Updates README/CLAUDE.md after a code change. |
 | [`docker-runner`](src/claude_all/agents/generic/docker-runner/agent.md) | haiku | Builds, runs, and inspects Docker containers. |
 | [`docker-log-inspector`](src/claude_all/agents/generic/docker-log-inspector/agent.md) | haiku | Reads container logs and diagnoses a crash. |
 | [`frontend-builder`](src/claude_all/agents/generic/frontend-builder/agent.md) | haiku | Runs your frontend build and reports the result. |

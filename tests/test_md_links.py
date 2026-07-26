@@ -12,11 +12,14 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
 from check_md_links import (
     CODE_SPAN,
     LINK,
+    check_links,
     is_vendored,
     strip_code_blocks,
 )
@@ -93,3 +96,16 @@ class TestIsVendored:
         registry = [{"path": "src/x/skill", "vendor_mode": "dir"}]
         root = Path(is_vendored.__globals__["ROOT"])
         assert not is_vendored(root / "README.md", registry)
+
+
+class TestCheckLinks:
+    def test_tracked_file_missing_from_disk_is_skipped(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        # `git ls-files` lists a tracked file even after it's deleted from the
+        # working tree but not yet re-staged — check_links() must skip it instead
+        # of crashing on read_text(). Regression for the CHANGELOG.md removal,
+        # which crashed exactly this way.
+        missing = tmp_path / "GONE.md"
+        monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [missing])
+        assert check_links(registry=[]) == []

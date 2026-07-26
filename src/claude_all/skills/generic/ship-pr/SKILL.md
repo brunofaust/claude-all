@@ -103,7 +103,7 @@ surface the diff doesn't touch); a skipped review is not a failure.
 ### Phase 3 — finalize (SERIAL)
 
 6. **Docs & CLAUDE.md — `docs-updater` agent.** With the code now final, revise `CLAUDE.md` (and
-   `README` / `ARCHITECTURE` / `CHANGELOG` where affected) to match the diff, so the always-loaded
+   `README` / `ARCHITECTURE` where affected) to match the diff, so the always-loaded
    guidance never drifts from the code. It proposes diffs — confirm doc changes before they're staged.
    No-op if the diff changes nothing a doc describes.
 7. **Commit — `git-committer` agent (after confirm).** When review is clean and docs are in sync, show

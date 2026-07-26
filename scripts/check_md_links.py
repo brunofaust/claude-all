@@ -87,6 +87,11 @@ def check_links(registry: list[dict]) -> list[str]:
     for md in tracked_markdown():
         if is_vendored(md, registry):
             continue
+        if not md.exists():
+            # `git ls-files` reflects the INDEX: a tracked file deleted from the
+            # working tree but not yet re-staged (`git rm`/`git add`) still shows up
+            # here. Nothing left to check its links against.
+            continue
         for line_no, line in strip_code_blocks(md.read_text()):
             for target in LINK.findall(CODE_SPAN.sub("", line)):
                 if target.startswith(SKIP_PREFIX):
