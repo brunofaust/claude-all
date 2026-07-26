@@ -1,4 +1,8 @@
 .DS_Store
+.memsearch/
+.cozempic/
+.cozempic*.lock
+/.claude/settings.json
 
 # Per-user local Claude settings (machine-specific paths / permission grants) — the rest of
 # .claude/ is tracked on purpose.
@@ -231,3 +235,5 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 .codecongruence
+# Added by code-review-graph
+.code-review-graph/
