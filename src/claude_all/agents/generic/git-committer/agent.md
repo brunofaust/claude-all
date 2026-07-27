@@ -153,6 +153,24 @@ re-dispatch per group as above.
 
 This is ADVISORY, not blocking — commit as dispatched and include the split suggestion in the report. Keep the existing >500-line size warning.
 
+### Splitting a staged set that contains RENAMES
+
+A rename is **two index entries** — a delete of the old path and an add of the new one — that
+`git status` collapses into a single `R old -> new` line. Un-staging by the new path only
+(`git restore --staged <new>`, `git reset HEAD <dir>`) removes the *add* and silently leaves the
+*delete* behind in the working tree, unstaged. The resulting commit adds the new file without
+removing the old one, so **both copies end up in HEAD** — and the run still reports success.
+
+When the staged set contains any `R` entry and you are splitting into multiple commits:
+
+1. Read `git status --short` and, for every `R old -> new`, treat **`old` and `new` as one unit** —
+   they always move into and out of the index together.
+2. Re-stage with both paths named: `git add -- <old> <new>` (staging `old` records the deletion).
+3. **After each commit, verify**: `git status --short` must show no ` D` (unstaged-delete) line.
+   A leftover ` D` means you just committed half a rename — stage it and amend before continuing.
+
+Report a leftover ` D` in your output even if you fixed it; the caller needs to know it happened.
+
 ## Rules
 
 - The dispatch prompt is the confirmation: a prompt that asks for a commit authorizes it (you cannot pause for a mid-run reply). If the prompt asks for a message preview only, return the proposed message and stop — the caller approves and re-dispatches.
@@ -161,6 +179,9 @@ This is ADVISORY, not blocking — commit as dispatched and include the split su
 - If `git status` shows untracked files the user might not want committed, ask before `git add -A`.
 - If the diff is very large (>500 lines), warn the user and suggest splitting before generating the message.
 - If the working tree is clean, report "Nothing to commit." and stop.
+- After every commit, check `git status --short` for an unstaged ` D` line. A rename split by the
+  new path alone leaves the delete behind and puts BOTH copies of the file in HEAD — see "Splitting
+  a staged set that contains RENAMES".
 - Don't use emojis in commit messages unless the repo's existing commits use them.
 - Honor the `no-restage` and `skip_hooks` caller directives (see "Caller directives"). In a
   `skip_hooks` run, name the skipped hook IDs in the summary. Never substitute `--no-verify` for
