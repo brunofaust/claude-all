@@ -2,6 +2,21 @@
 # See https://github.com/brunofaust/codecongruence for the full option reference
 # (codecongruence.toml.example in that repo documents every rule/key).
 
+[rules.docs_on_change]
+# D005 requires a docs_files entry to have staged changes whenever src/** changes.
+# Its CODE default is docs_files = ["CHANGELOG.md"] only — note that this disagrees
+# with codecongruence.toml.example, which advertises ["CHANGELOG.md", "README.md"];
+# the example is not the fallback. This repo deleted CHANGELOG.md deliberately (release
+# notes come from Conventional Commits history), so with no config the rule became
+# UNSATISFIABLE: no commit can ever stage a file that does not exist. It went unnoticed
+# because the commit that deleted CHANGELOG.md staged that exact path and so passed —
+# consuming the last commit that could ever satisfy it.
+#
+# Disabled rather than repointed at README.md because README coverage is already
+# enforced, and enforced better, by the check-md-links hook: it fails when a discovered
+# agent/skill/hook has no README row. D005 would only assert that README.md was touched.
+enabled = false
+
 [rules.duplicate_functions]
 # Hook scripts under src/claude_all/hooks/ and every skill's hook.py companion
 # are deployed as individually-symlinked, standalone single files (see cli.py's
