@@ -82,8 +82,8 @@ Subagents Claude Code delegates to for specific jobs. Haiku for mechanical work,
 | [`cost-audit-runner`](src/claude_all/agents/aws/cost-audit-runner/agent.md) | sonnet | Finds idle or wasted AWS resources. |
 | [`rds-postgres-query`](src/claude_all/agents/aws/rds-postgres-query/agent.md) | haiku | Runs read-only SQL against RDS/Aurora Postgres. |
 | [`terraform-deployer`](src/claude_all/agents/aws/terraform-deployer/agent.md) | haiku | Runs `terraform plan`/`apply` with your approval. |
-| [`terraform-reviewer`](src/claude_all/agents/aws/terraform-reviewer.md) | sonnet | Reviews Terraform for security and cost issues. |
-| [`cloudformation-deployer`](src/claude_all/agents/aws/cloudformation-deployer.md) | haiku | Deploys CloudFormation stacks with your approval. |
+| [`terraform-reviewer`](src/claude_all/agents/aws/terraform-reviewer/agent.md) | sonnet | Reviews Terraform for security and cost issues. |
+| [`cloudformation-deployer`](src/claude_all/agents/aws/cloudformation-deployer/agent.md) | haiku | Deploys CloudFormation stacks with your approval. |
 | [`cloudformation-reviewer`](src/claude_all/agents/aws/cloudformation-reviewer/agent.md) | sonnet | Reviews CloudFormation templates for risk. |
 | [`aws-events-scheduler`](src/claude_all/agents/aws/aws-events-scheduler/agent.md) | haiku | Manages EventBridge rules and Scheduler schedules. |
 | [`dynamodb-mutator`](src/claude_all/agents/aws/dynamodb-mutator/agent.md) | sonnet | Writes to DynamoDB — only with your confirmation. |
