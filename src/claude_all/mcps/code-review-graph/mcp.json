@@ -1,0 +1,11 @@
+{
+  "name": "code-review-graph",
+  "github": "https://github.com/tirth8205/code-review-graph",
+  "package": "code-review-graph",
+  "command": "code-review-graph",
+  "args": ["serve"],
+  "env": {},
+  "transport": "stdio",
+  "description": "Persistent incremental codebase knowledge graph. MCP tools cover hub/bridge detection (betweenness centrality), surprise scoring (unexpected cross-community coupling), knowledge-gap analysis (isolated nodes, untested hotspots), execution-flow tracing, and risk-scored diff review (detect_changes maps a diff to affected functions/flows/test gaps). Requires 'code-review-graph build' inside each project before use — see the code-review-graph-analyst agent and repo-audit skill for how this repo consumes it.",
+  "post_install_message": "Run 'code-review-graph build' inside each project where you want to use it (creates .code-review-graph/graph.db). Re-run 'code-review-graph update' after pulling changes to keep the graph fresh — a stale graph gives wrong risk/impact scores."
+}

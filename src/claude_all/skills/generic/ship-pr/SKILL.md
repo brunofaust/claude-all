@@ -3,11 +3,12 @@ name: ship-pr
 description: >-
   Heavyweight pre-PR pipeline in three phases, with the review/gate phase run in PARALLEL so it is not
   a 30-minute serial crawl. Phase 1 (serial, mutating): skill audit + /simplify → lint-fixer. Phase 2
-  (CONCURRENT subagents, read-only): test-coverage gate · test-runner · full prek gate (--all-files,
-  both stages) · /code-review · security-review (if security surface) · seo (if HTML surface) ·
-  architecture-decision-guard (if structural) · IaC review (if CFN/Terraform) · migration-reviewer
-  (if a DB migration) · dependency review (if a pyproject/package.json/lockfile changed — CVE gate +
-  version-currency advice). Phase 3 (serial): docs-updater → (confirm) → git-committer → open a PR
+  (CONCURRENT subagents, read-only): test-coverage gate · graph impact review (code-review-graph-analyst,
+  if the graph is set up) · test-runner · full prek gate (--all-files, both stages) · /code-review ·
+  security-review (if security surface) · seo (if HTML surface) · architecture-decision-guard (if
+  structural) · IaC review (if CFN/Terraform) · migration-reviewer (if a DB migration) · dependency
+  review (if a pyproject/package.json/lockfile changed — CVE gate + version-currency advice). Phase 3
+  (serial): docs-updater → (confirm) → git-committer → open a PR
   ready for review. Surface-scoped reviews run only when the diff touches their surface. Use when: "open a PR for this", "review and ship", finishing a substantive change
   that warrants review before it goes out. For the quick lint+test+commit loop with no review/PR, use
   the lighter `/ship`. Orchestrator only: it sequences existing agents and skills and gates on results.
@@ -55,6 +56,13 @@ surface the diff doesn't touch); a skipped review is not a failure.
 - **Test-coverage gate** — the change ships unit tests for its code AND, where an e2e/integration suite
   exists, e2e/integration tests validating each **business requirement**. Missing business-requirement
   coverage is a hard stop.
+- **Graph impact review — `code-review-graph-analyst` (if the code-review-graph MCP server is
+  registered and `code-review-graph build` has run in this repo; skip silently otherwise — this is
+  an enhancement to the test-coverage gate, not a new hard requirement).** Call `detect_changes_tool`
+  against the PR's merge-base. Feeds the test-coverage gate directly: a changed function/flow with no
+  covering test is exactly the "missing coverage" signal that gate needs, now diff-scoped instead of
+  eyeballed. Non-zero risk score with an unaddressed test gap is a hard stop; a risk score alone
+  (no test gap) is advisory context passed to the code-review step, not a gate by itself.
 - **Tests — `test-runner`.** Affected tests green.
 - **Full prek gate — `code-quality`, whole repo, both stages.** `prek run --all-files` AND
   `prek run --all-files --hook-stage pre-push`, **zero `Failed`**, **no pre-existing-issue amnesty** —
