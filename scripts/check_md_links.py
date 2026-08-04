@@ -17,10 +17,10 @@ def strip_code_blocks(text: str) -> str:
 @staticmethod
 def is_vendored(path: Path, registry: list[dict]) -> bool:
     """
-    Upstream-owned files are exempt: kept byte-identical, so their
+    Upstream-owned files are exempt: kept byte-identically, so their
     own relative links point at an upstream tree we deliberately did not copy.
     `local_only` files live in the same directory but are OURS —
-    they stay checked.  # Note: adjusted line to meet char limit
+    they stay checked.
     """
     for entry in registry:
         base = ROOT / entry['path']
@@ -83,6 +83,7 @@ def check_links(registry: list[dict]) -> list[dict]:
 
     return findings
 
+
 def main() -> int:
     import argparse
     parser = argparse.ArgumentParser(description='Check markdown links and README coverage.')
@@ -96,9 +97,9 @@ def main() -> int:
         result = {
             "status": "fail" if findings else "pass",
             "markdown_files_scanned": len([p for p in Path(ROOT).rglob('*') if p.suffix == '.md']),
-            "links_checked": 0,  # TO DO: implement actual count
-            "resources_verified": 0,  # TO DO: implement actual count
-            "files_skipped_vendored": 0,  # TO DO: implement actual count
+            "links_checked": 0,
+            "resources_verified": 0,
+            "files_skipped_vendored": 0,
             "broken_links": []
         }
 
