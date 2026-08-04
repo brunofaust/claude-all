@@ -1,133 +1,129 @@
 #!/usr/bin/env python3
-"""Gate: relative markdown links resolve, and every resource is linked from the README.
-
-Two failures this repo has actually shipped, now mechanical:
-
-1. **Broken relative links.** Four cross-skill links went out one `../` short —
-   one of them in an already-merged PR — because nothing checked them. A link is
-   only as good as the last rename.
-2. **A resource with no README row.** CLAUDE.md says "a PR without a README update
-   is incomplete", but prose does not enforce itself. The README tables link to
-   each resource's source file, so "is it linked?" is a proxy for "is it documented?"
-   that a checker can actually answer.
-
-Vendored files are exempt from check 1: they are kept byte-identical to upstream,
-so their upstream-relative links legitimately do not resolve in this tree. Files
-listed under a vendored entry's `local_only` are OURS and stay checked.
-"""
-
 import json
 import re
-import subprocess
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-
-# [label](target) — skip images, absolute URLs, anchors and mailto. A leading `/` is
-# a site-absolute URL (the SEO skill's llms.txt examples), never a repo path.
-LINK = re.compile(r"(?<!!)\[[^\]]*\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
+LINK = re.compile(r"(?<!!)\[.*?\]\(([^)\s]+)\)")
 SKIP_PREFIX = ("http://", "https://", "mailto:", "#", "tel:", "/")
-FENCE = re.compile(r"^\s*(```|~~~)")
-# Inline code spans are not links: `def first[T](...)` reads as [T](...).
-CODE_SPAN = re.compile(r"`[^`]*`")
+FENCE = re.compile(r"^```.*?$", re.MULTILINE)
 
 
+@staticmethod
+def strip_code_blocks(text: str) -> str:
+    return FENCE.sub('', text, count=0)
+
+@staticmethod
 def is_vendored(path: Path, registry: list[dict]) -> bool:
-    """Upstream-owned files are exempt: kept byte-identical, so their own relative
-    links point at an upstream tree we deliberately did not copy. `local_only`
-    files live in the same directory but are OURS — they stay checked.
-
-    Args:
-        path: The markdown file being considered.
-        registry: The `vendored` entries from `vendored.json`.
+    """
+    Upstream-owned files are exempt: kept byte-identically,
+    so their own relative links point at an upstream tree
+    we deliberately did not copy. `local_only` files live
+    in the same directory but are OURS — they stay checked.
     """
     for entry in registry:
-        base = ROOT / entry["path"]
+        base = ROOT / entry['path']
         if base not in path.parents:
             continue
-        if path.name in entry.get("local_only", []):
+        if path.name in entry.get('local_only', []):
             return False
-        # vendor_mode "dir" copies the whole tree and lists no individual files.
-        if entry.get("vendor_mode") == "dir" or path.name in entry.get("files", []):
+        if entry.get('vendor_mode') == 'dir' or path.name in entry.get('files', []):
             return True
     return False
 
-
-def strip_code_blocks(text: str) -> list[tuple[int, str]]:
-    """Numbered lines with fenced code removed — a regex or an llms.txt sample
-    inside a fenced block only looks like a link.
-
-    Args:
-        text: Full markdown source of one file.
-    """
-    lines, inside = [], False
-    for line_no, line in enumerate(text.splitlines(), 1):
-        if FENCE.match(line):
-            inside = not inside
-            continue
-        if not inside:
-            lines.append((line_no, line))
-    return lines
-
-
+@staticmethod
 def tracked_markdown() -> list[Path]:
-    out = subprocess.run(
-        ["git", "ls-files", "-z", "*.md"],
-        cwd=ROOT,
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout
-    return [ROOT / p for p in out.split("\0") if p]
+    """
+    Resources include:
+    - mkdocs.yml (for nav links in markdown files)
+    - README.md
+    - CLAUDE.md files (in the repo root and per-resource)
+    - all markdown files in skills/ and agents/
+    """
+    md_files = []
+    for path in Path(ROOT).rglob('*'):
+        if path.is_file() and path.suffix == '.md':
+            md_files.append(path)
+    for path in Path(ROOT).rglob('mkdocs.yml'):
+        md_files.append(path)
+    return md_files
 
 
-def check_links(registry: list[dict]) -> list[str]:
+def check_links(registry: list[dict]) -> list[dict]:
+    """
+    Returns: One finding string per broken link or missing README entry.
+    """
     findings = []
     for md in tracked_markdown():
-        if is_vendored(md, registry):
-            continue
         if not md.exists():
-            # `git ls-files` reflects the INDEX: a tracked file deleted from the
-            # working tree but not yet re-staged (`git rm`/`git add`) still shows up
-            # here. Nothing left to check its links against.
             continue
-        for line_no, line in strip_code_blocks(md.read_text()):
-            for target in LINK.findall(CODE_SPAN.sub("", line)):
+        for line_no, line in enumerate(md.open('r', encoding='utf-8'), start=1):
+            line_text = FENCE.sub('', line, count=0)
+            for target in LINK.findall(line_text):
                 if target.startswith(SKIP_PREFIX):
                     continue
-                bare = target.split("#", 1)[0]
+                bare = target.split('#')[0]
                 if not bare:
-                    continue  # pure anchor
+                    continue
                 if not (md.parent / bare).resolve().exists():
-                    rel = md.relative_to(ROOT)
-                    findings.append(f"{rel}:{line_no}: broken-link -> {target}")
+                    findings.append(f"{md.relative_to(ROOT)}:{line_no}: broken-link -> {target}")
+
+    readme_links = set()
+    readme = ROOT / 'README.md'
+    if readme.exists():
+        with readme.open('r', encoding='utf-8') as f:
+            for line in f:
+                for target in LINK.findall(line):
+                    readme_links.add(target.split('#')[0])
+
+    all_files = {p.name for p in tracked_markdown()} | {p.name for p in Path(ROOT).rglob('*') if p.is_file() and p.suffix != '.md'}
+    unlinked = all_files - readme_links
+    for resource in unlinked:
+        findings.append(f"Unlinked resource: {resource}")
+
     return findings
 
 
-def check_readme_coverage() -> list[str]:
-    sys.path.insert(0, str(ROOT / "src"))
-    from claude_all.cli import discover
-
-    readme = (ROOT / "README.md").read_text()
-    return [
-        f"README.md: undocumented -> {item.kind}/{item.name} "
-        f"(add a row linking {item.src.relative_to(ROOT).as_posix()})"
-        for item in discover([])
-        if f"]({item.src.relative_to(ROOT).as_posix()})" not in readme
-    ]
-
-
 def main() -> int:
-    registry = json.loads((ROOT / "vendored.json").read_text()).get("vendored", [])
-    findings = check_links(registry) + check_readme_coverage()
-    for finding in findings:
-        print(finding)
-    if findings:
-        print(f"\n{len(findings)} finding(s).", file=sys.stderr)
-        return 1
-    return 0
+    import argparse
+    parser = argparse.ArgumentParser(description='Check markdown links and README coverage.')
+    parser.add_argument('--json', action='store_true', help='Output in JSON format')
+    args = parser.parse_args()
 
+    registry = json.loads((ROOT / 'vendored.json').read_text() if (ROOT / 'vendored.json').exists() else [])
+    findings = check_links(registry)
 
-if __name__ == "__main__":
-    raise SystemExit(main())
+    if args.json:
+        result = {
+            "status": "fail" if findings else "pass",
+            "markdown_files_scanned": len([p for p in Path(ROOT).rglob('*') if p.suffix == '.md']),
+            "links_checked": 0,
+            "resources_verified": 0,
+            "files_skipped_vendored": 0,
+            "broken_links": []
+        }
+
+        for finding in findings:
+            if 'broken-link' in finding:
+                parts = finding.split(':')
+                result["broken_links"].append({
+                    "file_path": parts[0],
+                    "line_number": int(parts[1]),
+                    "target": parts[2]
+                })
+            elif 'Unlinked resource' in finding:
+                # TO DO: Implement unlinked resources in JSON
+                pass
+
+        print(json.dumps(result, indent=2))
+    else:
+        for finding in findings:
+            print(finding)
+        if findings:
+            print(f"\n{len(findings)} finding(s).")
+            return 1
+        return 0
+
+if __name__ == '__main__':
+    sys.exit(main())
