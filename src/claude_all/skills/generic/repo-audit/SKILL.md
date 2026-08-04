@@ -143,13 +143,13 @@ translation* table below to pick the actual tool. (`<src>` = the source root.)
 | 1 | **Format + lint clean** | run the stack linter+formatter in check mode; count findings |
 | 2 | **Static type safety, no escape hatches** | strict type-check error count + count of `any` / `as any` / `interface{}` / `dict[str, Any]` / `unwrap()` escapes |
 | 3 | **Bounded complexity & size** | functions/files over the complexity & length caps (cyclomatic, params, returns, lines) |
-| 4 | **Layering / dependency direction enforced** | folder layout vs intended architecture; import-direction / forbidden-dependency violations |
+| 4 | **Layering / dependency direction enforced** | folder layout vs intended architecture; import-direction / forbidden-dependency violations. *Optional graph evidence:* hub/bridge nodes + surprise-scoring — see below. |
 | 5 | **External systems have a single owner (containment)** | raw SDK / HTTP / DB-driver imports *outside* the designated owner module |
 | 6 | **Typed contracts at trust boundaries** | untyped / `any` / loosely-typed blobs crossing a module or I/O boundary (validate at the edge) |
 | 7 | **No silent error swallowing** | empty catches, ignored error returns, swallowed promise rejections, broad catch-all |
 | 8 | **Docs coverage + mandatory files** | doc-comment coverage %; README / architecture docs present |
-| 9 | **No dead code; minimal public surface** | unused exports/symbols; over-broad visibility |
-| 10 | **Tests mirror source; coverage meets the per-layer bar** | coverage %; test↔source structure; anti-patterns (module-global mocks) |
+| 9 | **No dead code; minimal public surface** | unused exports/symbols; over-broad visibility. *Optional graph evidence:* cross-check with graph-based dead-code detection — see below. |
+| 10 | **Tests mirror source; coverage meets the per-layer bar** | coverage %; test↔source structure; anti-patterns (module-global mocks). *Optional graph evidence:* knowledge-gap analysis (untested hotspots) — see below. |
 | 11 | **No scattered / hardcoded config** | env reads outside the config module; hardcoded endpoints / timeouts / model names / resource names |
 | 12 | **Secrets clean + SAST** | delegate to **`security-audit`**: secret scan over *full git history* + SAST |
 | 13 | **Infrastructure-as-Code** | CFN: `cfn-lint` + `checkov --framework cloudformation`. Terraform: `terraform fmt -check`, `validate`, `tflint`, `checkov`/`tfsec`, `plan -detailed-exitcode` (drift) |
@@ -168,6 +168,27 @@ translation* table below to pick the actual tool. (`<src>` = the source root.)
 > Dimensions 14 & 15 audit the *development setup*, not the code. **No double-run:** repo-audit runs
 > `session-harvest` **once** as dim 14 — don't also invoke it separately in the same pass. Run
 > `session-harvest` standalone only for history-only mining outside an audit.
+
+> **Optional graph-based evidence (dims 4, 9, 10).** If `code-review-graph status` succeeds for this
+> repo (graph already built — this is a project-by-project opt-in, not a universal requirement), use
+> the `code-review-graph-analyst` agent to add structural evidence the stack-native tools above don't
+> surface:
+>
+> - **Dim 4 (layering):** `get_bridge_nodes_tool` (architectural chokepoints via betweenness
+>   centrality) and `get_surprising_connections_tool` (cross-community/cross-language coupling the
+>   layering isn't supposed to have). `get_hub_nodes_tool` names the highest-blast-radius change
+>   points — useful context for *where* a layering violation matters most, not a violation by itself.
+> - **Dim 9 (dead code):** `refactor_tool(mode="dead_code")` as a cross-check against vulture/knip/
+>   ts-prune — the agent applies its own false-positive filter (visitor-dispatch, test hooks, dunders,
+>   the project's existing vulture-whitelist-equivalent) before reporting, so don't re-report what it
+>   already excluded.
+> - **Dim 10 (tests):** `get_knowledge_gaps_tool` for untested hotspots (high-degree nodes with no
+>   test coverage) and thin/isolated communities — a different lens than raw coverage %.
+>
+> This is **evidence for the existing dimensions, not a 16th dimension** — don't invent new taxonomy
+> for it, and don't gate on it during the audit (repo-audit is report-only per the brownfield thesis
+> above). If the graph isn't set up, record `SKIP — code-review-graph not built for this repo` for
+> these three notes and move on; it's a bonus lens, never a blocker.
 
 ______________________________________________________________________
 
@@ -332,6 +353,7 @@ ______________________________________________________________________
 | Frontend / UI dimensions | `react-correctness` / `react-testing` / `web-design-guidelines` / `web-security` / `seo` | UI-layer specialists |
 | The security dimension (12) | `security-audit` skill | full six-layer + secrets-history pass |
 | The IaC dimension (13) | `cloudformation-reviewer` + `iam-auditor` agents, `aws-architecture` skill | CFN/Terraform correctness, IAM, cost |
+| Graph-based structural evidence (dims 4, 9, 10 — optional) | `code-review-graph-analyst` agent | hub/bridge chokepoints, surprise-scoring, dead-code cross-check, knowledge-gaps — only if the graph is already set up for this repo |
 | The process-tooling dimension (14) | `session-harvest` skill | assistant histories → resource backlog with est. % improvement |
 | The project-profile dimension (15) | `Explore` agent + `claude-all --list` | profile → recommend; `research-before-build` before net-new |
 | Fixing findings (Phases 1, 3) — *after* the audit | `lint-fixer`, `python-module-migrator` | root-cause fixes, never during the audit |
@@ -369,6 +391,7 @@ ______________________________________________________________________
 | `react-correctness` / `react-testing` / `composition-patterns` / `web-design-guidelines` / `web-security` / `seo` | own the frontend/UI lenses (dims 1–12 for the view layer) |
 | `security-audit` | owns dimension 12 (delegate, don't reimplement) |
 | `aws-architecture` / `aws-cost-optimization` / `iam-auditor` / `cloudformation-reviewer` | own dimension 13 (IaC) |
+| `code-review-graph-analyst` | optional graph-based evidence for dims 4/9/10 — see the note under *Audit dimensions*; report-only, never a gate here |
 | `session-harvest` | owns dimension 14 — mines assistant histories into a resource backlog |
 | `claude-all --list` catalog + `research-before-build` | dimension 15 — match the profile to resources; avoid duplicates |
 | `architecture-decision-guard` | gate every structural phase-3 move (containment > layering) |

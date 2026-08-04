@@ -7,8 +7,17 @@
   "extras": ["communities", "enrichment"],
   "command": "code-review-graph",
   "post_install": [
-    {"type": "bash", "command": ["code-review-graph", "install"]}
+    {
+      "type": "bash",
+      "command": [
+        "code-review-graph",
+        "install",
+        "--platform",
+        "claude-code",
+        "-y"
+      ]
+    }
   ],
-  "post_install_message": "Please run 'code-review-graph build' inside each project where you want to use it.",
+  "post_install_message": "Please run 'code-review-graph build' inside each project where you want to use it. --platform claude-code scopes CLAUDE.md instructions + bundled skills + hooks to Claude Code only (code-review-graph's unscoped default also writes AGENTS.md, GEMINI.md, .cursorrules, and hooks into every other detected coding tool's config — cursor, codex, opencode, gemini-cli, qoder, codebuddy — even ones you don't use in this project). This installs a git pre-commit hook running 'update + detect-changes --brief'. It appends after an existing hook rather than overwriting it (verified against its source, skills.py::install_git_hook) — but if prek's own hook hasn't been wired yet in this checkout (run `prek install` — `uv sync --dev` only installs the `prek` binary, it does not wire the git hook), code-review-graph's hook installs alone and becomes the ONLY pre-commit check until you run `prek install` afterward. Run `prek install` in this checkout either way to be sure prek's gate is present.",
   "description": "Persistent incremental knowledge graph for token-efficient, context-aware code reviews with Claude Code. Installed via 'uv tool install' from git (extras: communities → igraph for community detection, enrichment → jedi for static analysis)."
 }

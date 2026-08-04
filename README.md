@@ -66,6 +66,7 @@ Subagents Claude Code delegates to for specific jobs. Haiku for mechanical work,
 | [`repo-cleaner`](src/claude_all/agents/generic/repo-cleaner/agent.md) | haiku | Removes build artifacts, caches, and empty folders. |
 | [`env-audit`](src/claude_all/agents/generic/env-audit.md) | haiku | Checks whether a deployed environment is behind the code. |
 | [`env-sync`](src/claude_all/agents/generic/env-sync.md) | sonnet | Brings a dev/staging environment up to date, with your approval. |
+| [`code-review-graph-analyst`](src/claude_all/agents/generic/code-review-graph-analyst/agent.md) | haiku | Risk-scores diffs, finds dead code, hub/bridge nodes, surprise-scoring, knowledge gaps via the code-review-graph MCP server. |
 
 ### AWS
 
@@ -229,6 +230,7 @@ MCP servers Claude Code can connect to. Each lives at `src/claude_all/mcps/<name
 | [`context7`](src/claude_all/mcps/context7/mcp.json) | Fresh library docs on demand. |
 | [`playwright`](src/claude_all/mcps/playwright/mcp.json) | Browser automation — navigate, click, fill, screenshot. |
 | [`postgres`](src/claude_all/mcps/postgres/mcp.json) | Read-only SQL against a Postgres DB (set the connection URL after install). |
+| [`code-review-graph`](src/claude_all/mcps/code-review-graph/mcp.json) | Codebase knowledge graph — risk-scored diff review, hub/bridge detection, surprise-scoring, knowledge gaps, dead code. Run `code-review-graph build` in each target repo after install. |
 
 **Secrets:** an MCP config value prefixed `keychain:NAME` is resolved from the macOS keychain at launch time — nothing is ever stored in plaintext. Store one once:
 
