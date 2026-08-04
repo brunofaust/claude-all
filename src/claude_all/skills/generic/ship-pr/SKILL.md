@@ -62,7 +62,13 @@ surface the diff doesn't touch); a skipped review is not a failure.
   against the PR's merge-base. Feeds the test-coverage gate directly: a changed function/flow with no
   covering test is exactly the "missing coverage" signal that gate needs, now diff-scoped instead of
   eyeballed. Non-zero risk score with an unaddressed test gap is a hard stop; a risk score alone
-  (no test gap) is advisory context passed to the code-review step, not a gate by itself.
+  (no test gap) is advisory context passed to the code-review step, not a gate by itself. **If this
+  project also has code-review-graph's own bundled `review-changes` skill installed** (`.claude/
+  skills/review-changes/` — ships alongside the MCP server unless a project explicitly excluded it),
+  invoke it too: it walks `detect_changes` → `get_affected_flows` → `tests_for` per high-risk function
+  → `get_impact_radius` and produces a risk-grouped (high/medium/low) summary with an explicit merge
+  recommendation. Treat that recommendation as a second, independent read on the same graph data —
+  advisory input alongside this gate's hard-stop, not a duplicate of it.
 - **Tests — `test-runner`.** Affected tests green.
 - **Full prek gate — `code-quality`, whole repo, both stages.** `prek run --all-files` AND
   `prek run --all-files --hook-stage pre-push`, **zero `Failed`**, **no pre-existing-issue amnesty** —
