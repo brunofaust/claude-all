@@ -122,7 +122,18 @@ def run_prek_stage(
     env["SKIP"] = ",".join(skip)
     try:
         return subprocess.run(
-            ["uv", "run", "prek", "run", "--hook-stage", stage, "--files", *files],
+            [
+                "uv",
+                "run",
+                "prek",
+                "run",
+                "--quiet",
+                "--show-diff-on-failure",
+                "--hook-stage",
+                stage,
+                "--files",
+                *files,
+            ],
             cwd=root,
             capture_output=True,
             text=True,
