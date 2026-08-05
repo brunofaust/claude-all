@@ -166,20 +166,28 @@ uv run alembic merge -m "merge feature-x and feature-y" <head1> <head2>
 The generated file should have empty `upgrade()` and `downgrade()`. If alembic
 suggested actual changes, something is wrong — investigate before applying.
 
-### Gate it: `checkers/alembic_heads.py`
+### Gate it: `regression-gates/checkers/migration_head.py`
 
 `uv run alembic heads` catches a fork only when someone remembers to run it.
-This skill ships a runnable AST checker at `checkers/alembic_heads.py` that
-turns the pre-flight check into a gate: wire it into prek/pre-commit as a
-`language = "system"` hook on `alembic/versions/*.py`, and it fails the commit
-the moment two migrations independently branch off the same parent — before
-the fork ever reaches `main` — plus it catches a revision id too long for
-`alembic_version.version_num VARCHAR(32)` on a fresh database. Pure AST parse,
-no alembic import, no DB connection, fast enough for every commit.
+Make it a gate instead: the `regression-gates` skill ships a runnable AST
+checker — `checkers/migration_head.py` — that fails the commit the moment two
+migrations independently branch off the same parent, before the fork ever
+reaches `main`. It also flags a dangling `down_revision` and a revision id too
+long for `alembic_version.version_num VARCHAR(32)` (which only bites on a
+FRESH database — an existing one with a row already written never notices).
+Pure static parse: no alembic import, no DB connection, fast enough for every
+commit.
 
 ```bash
-uv run python checkers/alembic_heads.py alembic/versions
+# one directory per alembic environment — never split one tree across roots
+uv run python checkers/migration_head.py alembic/versions
 ```
+
+It exits 0 always and prints findings to stdout, so it composes behind
+`regression-gates/baseline_gate.py` for the regression-only ratchet on a
+codebase that already has findings. Pin `language_version` on the hook — it
+parses with the interpreter's own `ast`, and an older interpreter silently
+fails to parse newer syntax.
 
 ## Downgrade
 
