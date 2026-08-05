@@ -207,6 +207,8 @@ Scripts Claude Code runs automatically around tool calls — mostly quiet remind
 | [`python-structlog-guard.py`](src/claude_all/hooks/python-structlog-guard.py) | PreToolUse | Blocks stdlib `logging` in favor of `structlog`. |
 | [`python-settings-env-guard.py`](src/claude_all/hooks/python-settings-env-guard.py) | PreToolUse | Blocks raw `os.environ` reads in favor of typed settings. |
 | [`python-thread-subprocess-guard.py`](src/claude_all/hooks/python-thread-subprocess-guard.py) | PreToolUse | Blocks raw threads/subprocess in favor of the project's wrappers. |
+| [`lockfile-protection.py`](src/claude_all/hooks/lockfile-protection.py) | PreToolUse | Blocks direct edits to package-manager lockfiles. |
+| [`junk-drawer-guard.py`](src/claude_all/hooks/junk-drawer-guard.py) | PreToolUse | Blocks creating a new `utils.py`/`helpers.py`-style junk-drawer module. |
 | [`destructive-command-guard.py`](src/claude_all/hooks/destructive-command-guard.py) | PreToolUse | Blocks catastrophic commands — `rm -rf /`, force pushes, `DROP TABLE`. |
 | [`secret-leak-guard.py`](src/claude_all/hooks/secret-leak-guard.py) | PreToolUse | Blocks a commit that would leak a credential. |
 | [`supply-chain-guard.py`](src/claude_all/hooks/supply-chain-guard.py) | PreToolUse | Flags risky package installs before they run. |
