@@ -7,6 +7,15 @@
 # gets gated. The governing principle — a rule in prose gets violated; a rule
 # encoded as a checker holds.
 #
+# ── WHY THE `.example` SUFFIX — KEEP IT ──────────────────────────────────────
+# prek treats EVERY `prek.toml` it finds under the repo root as a workspace
+# PROJECT (see `prek run [HOOK|PROJECT]`), not just the one at the root. A file
+# literally named `prek.toml` sitting in a skill directory is therefore LOADED
+# AND RUN by the host repo's own gate — and one stale `rev` in it breaks the
+# whole gate with "Failed to init hooks" before a single check executes. The
+# suffix is what keeps this a document instead of a landmine. Rename it only
+# once it is in the repo that should actually run it.
+#
 # prek (https://github.com/j178/prek) is a faster, dependency-free Rust drop-in
 # for pre-commit. It reads `.pre-commit-config.yaml` unchanged; `prek.toml` is
 # its own optional format. Everything below works with either tool.
@@ -353,8 +362,10 @@ stages = ["pre-push"]
 # ═════════════════════════════════════════════════════════════════════════════
 # 4. THIS SKILL'S OWN CHECKERS
 #
-# Copy them out of `checkers/` into your repo (e.g. `scripts/`). Each encodes a
-# rule from references/enforcement.md that no off-the-shelf tool enforces. All
+# Copy them out of `checkers/` into your repo (e.g. `scripts/`) — copy the whole
+# directory rather than picking files, since some checkers share a helper module
+# that has no hook entry of its own (see the mock-drift note below). Each encodes
+# a rule from references/enforcement.md that no off-the-shelf tool enforces. All
 # are pure AST parses — they never import your code and never touch a database.
 #
 # ⚠️ Pin `language_version` on EVERY one, for the reason given above. These
@@ -420,6 +431,13 @@ language_version = "python3.14"
 # gave it, not the production system. Pass BOTH source and tests so dotted patch
 # targets resolve — passing only tests/ leaves every target unresolvable, and
 # therefore silent.
+#
+# ⚠️ COPY THIS FAMILY AS A UNIT, NOT FILE-BY-FILE.
+# All four scripts below do `from mock_drift_common import ...` — they share one
+# resolution helper. Copy `mock_drift_common.py` into the SAME directory
+# (`scripts/`) alongside them, or every hook here dies on the first commit with
+# `ModuleNotFoundError: No module named 'mock_drift_common'`. It has no hook
+# entry of its own because it is a library, not a checker.
 
 [[repos]]
 repo = "local"
@@ -471,6 +489,18 @@ language_version = "python3.14"
 # ── Migration graph — from the `regression-gates` skill's checkers/ ───────────
 # Only if the project uses Alembic. Pairs with the `alembic-migration` skill.
 # Pass ONE directory per Alembic environment; never split one tree across roots.
+#
+# ⚠️ WRAPPED IN baseline_gate.py ON PURPOSE — DO NOT "SIMPLIFY" THIS.
+# Unlike the checkers above, `migration_head.py` follows the regression-gates
+# contract: it prints findings to stdout and ALWAYS EXITS 0, so that
+# `baseline_gate.py` can own the pass/fail decision. Invoking it directly as a
+# hook entry means a real two-head fork PRINTS its finding and the hook still
+# reports PASS — a vacuous pass, the exact bug class this checker exists to
+# catch. The wrapper is what makes it bite.
+#
+# Seed once, then enforce with the SAME command in the hook and in CI:
+#   python scripts/baseline_gate.py --baseline migration_head_baseline.txt --update -- \
+#       python scripts/migration_head.py migrations/versions
 
 [[repos]]
 repo = "local"
@@ -478,7 +508,7 @@ repo = "local"
 [[repos.hooks]]
 id = "migration-head"
 name = "🗄️ migrations · Single head, no duplicate/over-length/dangling ids"
-entry = "uv run python scripts/migration_head.py migrations/versions"
+entry = "uv run python scripts/baseline_gate.py --baseline migration_head_baseline.txt -- python scripts/migration_head.py migrations/versions"
 language = "system"
 pass_filenames = false
 always_run = true

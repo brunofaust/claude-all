@@ -118,6 +118,11 @@ def test_detects_duplicate_revision_id(tmp_path: Path) -> None:
     revisions = [
         parse_file(tmp_path / name) for name in ("0001_init.py", "0002_dup.py", "0003_dup.py")
     ]
+    # Assert all three parsed BEFORE analysing — same discipline as write_tree().
+    # Without this, reverting the annotated-form fix would silently drop
+    # 0002_dup.py, leaving one owner and no collision, and the test would still
+    # look like it exercised the duplicate path.
+    assert all(r is not None for r in revisions), revisions
     findings = analyse([r for r in revisions if r is not None], label="migrations")
     assert any("duplicate revision id" in f and "0002_shared" in f for f in findings), findings
 

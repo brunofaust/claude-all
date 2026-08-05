@@ -45,7 +45,7 @@ requirement — no speculative abstraction, no prop-drilling ceremony, no wrappe
 | Writing frontend tests — RTL query priority, `userEvent`, MSW, async assertions, `renderHook`, axe, Playwright, coverage per layer | [`references/react-testing.md`](references/react-testing.md) |
 | Rendering user content, handling tokens/sessions/env vars, setting a CSP, embedding third-party scripts | [`references/web-security.md`](references/web-security.md) |
 | Auditing a changed file before shipping (the judgment checklist `/ship` + `/ship-pr` run) | [`references/audit.md`](references/audit.md) |
-| Reference hook config — a complete, commented `prek.toml` wiring repo hygiene + the tsc/eslint/prettier/knip/audit gates this skill assumes are running | [`prek.toml`](prek.toml) |
+| Reference hook config — a complete, commented `prek.toml` wiring repo hygiene + the tsc/eslint/prettier/knip/audit gates this skill assumes are running. Copy it to your repo root **and rename it to `prek.toml`** | [`prek.toml.example`](prek.toml.example) |
 | **Performance** — memoization, bundle size, data fetching, Server Components, streaming | the **`react-best-practices`** skill *(vendored from Vercel — kept in place so upstream updates keep flowing; 75 rule files under its `rules/`)* |
 | **Composition** — compound components, render props, context providers, flexible component APIs | the **`composition-patterns`** skill *(vendored)* |
 | **Animation** — the View Transition API, `<ViewTransition>`, `addTransitionType`, Next.js integration | the **`react-view-transitions`** skill *(vendored)* |

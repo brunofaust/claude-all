@@ -4,6 +4,15 @@
 # This file is DOCUMENTATION, not an active config. Copy it to your repo root as
 # `prek.toml` and delete what doesn't apply.
 #
+# ── WHY THE `.example` SUFFIX — KEEP IT ──────────────────────────────────────
+# prek treats EVERY `prek.toml` it finds under the repo root as a workspace
+# PROJECT (see `prek run [HOOK|PROJECT]`), not just the one at the root. A file
+# literally named `prek.toml` sitting in a skill directory is therefore LOADED
+# AND RUN by the host repo's own gate — and one stale `rev` in it breaks the
+# whole gate with "Failed to init hooks" before a single check executes. The
+# suffix is what keeps this a document instead of a landmine. Rename it only
+# once it is in the repo that should actually run it.
+#
 # prek (https://github.com/j178/prek) is a faster, dependency-free Rust drop-in
 # for pre-commit. It reads `.pre-commit-config.yaml` unchanged; `prek.toml` is
 # its own optional format.

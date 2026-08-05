@@ -223,6 +223,23 @@ The naming-conventions rule above is enforced mechanically by the
 `src/claude_all/skills/`, and `src/claude_all/instructions/` for known real
 names/artifacts (vendored dirs excluded).
 
+Note that check does **not** cover `src/claude_all/hooks/`, `tests/`, or
+`README.md` — when a change adds files there, grep them for real project names
+by hand before opening the PR.
+
+### 🔴 A reference hook config MUST be named `prek.toml.example`, never `prek.toml`
+
+prek treats **every** `prek.toml` under the repo root as a workspace *project*
+(see `prek run [HOOK|PROJECT]`), not just the one at the root. So a file literally
+named `prek.toml` shipped inside a skill directory as *documentation* gets loaded
+and executed by this repo's own gate — and a single stale `rev` in it kills the
+whole run with `Failed to init hooks` before one check executes. Ship reference
+configs as `<skill>/prek.toml.example` and tell the user to rename on copy.
+
+The `.example` suffix means `check-toml` no longer validates them (it matches
+`*.toml`), so `tests/test_reference_prek_configs.py` buys that coverage back —
+it parses each one with `tomllib` and asserts the suffix is still in place.
+
 ## Vendored (third-party) resources
 
 Some skills/agents are copied from upstream repos (e.g. Vercel `agent-skills`, `humanink`). They are

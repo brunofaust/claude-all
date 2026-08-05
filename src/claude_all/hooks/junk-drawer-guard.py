@@ -42,6 +42,13 @@ _BANNED_STEMS: frozenset[str] = frozenset(
 _CODE_SUFFIXES: frozenset[str] = frozenset(
     {".py", ".js", ".jsx", ".ts", ".tsx", ".go", ".rs", ".rb", ".java", ".kt"}
 )
+# Barrel files — the name identifies the PACKAGE, not the module, so a banned
+# name one level up is the real finding. NOTE: this is deliberately a SUPERSET
+# of the CI-time junk_drawer.py checker, which is stem-only and so misses
+# `utils/__init__.py`. Catching it at creation is the cheap moment; widening the
+# CI checker would surface pre-existing packages and needs a baseline, so that
+# is a separate change.
+_BARREL_STEMS: frozenset[str] = frozenset({"__init__", "index", "mod"})
 # A `# guard:allow` comment anywhere in the content bypasses the guard.
 _ALLOW_RE: re.Pattern[str] = re.compile(r"#\s?guard:allow")
 
@@ -54,22 +61,32 @@ def _message(stem: str) -> str:
     )
 
 
-def _edited_text(tool_name: str, tool_input: dict[str, object]) -> str:
-    """Return the new text this call writes, across Write / Edit / MultiEdit shapes.
+def _junk_drawer_name(path: Path) -> str | None:
+    """Return the offending name when `path` creates a junk drawer, else `None`.
+
+    Two shapes, not one — the module form and the PACKAGE form:
+
+    - `utils.py`            -> the stem is banned
+    - `utils/__init__.py`   -> the stem is `__init__`, so a stem-only check misses
+      it entirely; the banned name is the PARENT directory. This is the commonest
+      Python junk drawer of the two, so missing it would gut the guard.
 
     Args:
-        tool_name: The tool being called (``Write`` / ``Edit`` / ``MultiEdit``).
-        tool_input: The tool input dict.
+        path: The file being written.
 
     Returns:
-        The concatenated new text, or ``""`` when there is none.
+        The banned name to report, or `None` when this path is fine.
     """
-    if tool_name == "MultiEdit":
-        edits = tool_input.get("edits", [])
-        if isinstance(edits, list):
-            return "\n".join(str(e.get("new_string", "")) for e in edits if isinstance(e, dict))
-        return ""
-    return str(tool_input.get("new_string") or tool_input.get("content") or "")
+    if path.suffix not in _CODE_SUFFIXES:
+        return None
+    if path.stem.lower() in _BANNED_STEMS:
+        return path.stem
+    # Package form: the barrel file of a directory that is itself a junk drawer.
+    # Both halves lower-cased, same as the module form above — otherwise
+    # `Utils/Index.ts` slips past while `UTILS.ts` is caught.
+    if path.stem.lower() in _BARREL_STEMS and path.parent.name.lower() in _BANNED_STEMS:
+        return path.parent.name
+    return None
 
 
 def _block(reason: str) -> int:
@@ -110,10 +127,14 @@ def main() -> int:
     if path.exists():
         return 0  # existing file — the CI-time ratchet owns this, not this guard
 
-    if path.suffix not in _CODE_SUFFIXES or path.stem.lower() not in _BANNED_STEMS:
+    offender = _junk_drawer_name(path)
+    if offender is None:
         return 0
 
-    content = _edited_text(tool_name, tool_input)
+    # Only `Write` can reach here: the path does not exist yet, and Edit/MultiEdit
+    # both require an existing file. So the new text is always `content` — there is
+    # no `new_string`/`edits[]` shape to handle at file-creation time.
+    content = str(tool_input.get("content") or "")
     if _ALLOW_RE.search(content):
         return 0
 
