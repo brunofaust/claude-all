@@ -215,6 +215,7 @@ Scripts Claude Code runs automatically around tool calls — mostly quiet remind
 | [`prek-stop-runner.py`](src/claude_all/hooks/prek-stop-runner.py) | Stop | Runs prek once per response instead of once per edit. |
 | [`suggest-compact.py`](src/claude_all/hooks/suggest-compact.py) | PreToolUse | Reminds you to run `/compact` when context is getting full. |
 | [`python-style-skill-loader.py`](src/claude_all/hooks/python-style-skill-loader.py) | SessionStart | Reminds Claude to load the Python style skill in a Python repo. |
+| [`worktree-count-nudge.py`](src/claude_all/hooks/worktree-count-nudge.py) | SessionStart | Nudges cleanup once the git worktree count passes a threshold. |
 
 ## Plugins
 
