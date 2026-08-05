@@ -7,6 +7,12 @@
 claude-all --all --user <name>     # global (~/.claude)
 claude-all --all --project <name>  # repo-local (./.claude)
 
+# Remove installs
+claude-all --prune                 # only what the repo no longer ships
+claude-all --uninstall             # EVERYTHING recorded — shows a plan, then asks
+claude-all --uninstall <name>      # narrow it with the same path filters
+claude-all --uninstall --yes       # skip the prompt (non-interactive)
+
 # Dev setup (editable install + installs prek)
 uv sync --dev
 # then run the dev build with: uv run claude-all

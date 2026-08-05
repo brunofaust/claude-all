@@ -387,6 +387,88 @@ def forget_records(entries: list[dict]) -> list[str]:
     return forgotten
 
 
+# ---------------------- full uninstall ----------------------
+#
+# `--prune` reverses installs the repo NO LONGER SHIPS. `--uninstall` reverses
+# them ALL — same footprint model, same scope guards, same reversal helpers, just
+# a different selection. Nothing here re-implements removal: it hands the chosen
+# records to `prune_installs` / `forget_records` exactly as prune does, so a
+# guard fixed in one path is fixed in both.
+#
+# Two things it deliberately does NOT do:
+#   1. Uninstall the `claude-all` binary. A process cannot reliably delete the
+#      package it is executing from; the command prints the one-liner instead.
+#   2. Touch hand-written CLAUDE.md content. Only tagged blocks this tool
+#      injected are stripped — everything outside the markers survives.
+
+
+def all_install_records(filters: list[str] | None = None) -> list[dict]:
+    """Every PRIMARY install record, optionally narrowed by filter tokens.
+
+    Mirrors :func:`scan_stale`'s guard 1 — companion sub-records ride their
+    primary and must never be selected alone, or the uninstall would strip an
+    installed resource's CLAUDE.md block while leaving the resource in place.
+
+    Args:
+        filters: Tokens that must each appear in ``"<kind>/<name>"``. Empty or
+            ``None`` selects every recorded install.
+
+    Returns:
+        The matching primary records, in state order.
+    """
+    records: list[dict] = []
+    for entry in load_state().get("installs", {}).values():
+        name = entry.get("name", "")
+        if is_companion_key(name):
+            continue
+        if filters and not all(
+            token in state_key(entry.get("kind", ""), name) for token in filters
+        ):
+            continue
+        records.append(entry)
+    return records
+
+
+def confirm(prompt: str) -> bool:
+    """Ask for an explicit yes on stdin.
+
+    Returns ``False`` when stdin is not a TTY (a piped/CI invocation gets the
+    safe answer, never an accidental wipe) and on EOF/interrupt. Callers offer
+    ``--yes`` for non-interactive use.
+
+    Args:
+        prompt: The question to show, without the ``[y/N]`` suffix.
+
+    Returns:
+        True only on an explicit ``y``/``yes``.
+    """
+    if not sys.stdin.isatty():
+        return False
+    try:
+        return input(f"{prompt} [y/N] ").strip().lower() in {"y", "yes"}
+    except (EOFError, KeyboardInterrupt):
+        print()
+        return False
+
+
+def remove_state_file() -> bool:
+    """Delete the state file once nothing is recorded any more.
+
+    Only ever removes the file when :func:`load_state` reports zero installs, so
+    a filtered uninstall that left records behind keeps its state.
+
+    Returns:
+        True when the state file was removed.
+    """
+    if load_state().get("installs"):
+        return False
+    removed = STATE_FILE.exists()
+    STATE_FILE.unlink(missing_ok=True)
+    with contextlib.suppress(OSError):
+        STATE_DIR.rmdir()  # only succeeds when empty — never force-removes
+    return removed
+
+
 # ---------------------- leftover-artifact detection ----------------------
 #
 # Part of the same secret as install/prune: the artifact model — what an install
@@ -2059,6 +2141,76 @@ def choose_scope_tui() -> str | None:
 # ---------------------- main ----------------------
 
 
+def cmd_uninstall(*, filters: list[str], scope: str, assume_yes: bool) -> int:
+    """Reverse every recorded install: symlinks, CLAUDE.md blocks, hook entries.
+
+    Shows the full plan BEFORE touching anything — this removes a user's whole
+    setup, so it must never be a surprise. Reversal itself is delegated to the
+    same :func:`prune_installs` / :func:`forget_records` used by ``--prune``, so
+    both paths share one set of scope and symlink guards.
+
+    Args:
+        filters: Tokens narrowing which records to remove (empty = everything).
+        scope: ``"user"`` or ``"project"`` — which install root to clean.
+        assume_yes: Skip the confirmation prompt.
+
+    Returns:
+        0 on success or a no-op, 1 when the user declined.
+    """
+    records = all_install_records(filters)
+    if not records:
+        target = f" matching {' '.join(filters)}" if filters else ""
+        print(f"Nothing to uninstall — no claude-all installs recorded{target}.")
+        return 0
+
+    prunable = [e for e in records if e.get("kind") not in PRUNE_EXCLUDED_KINDS]
+    external = [e for e in records if e.get("kind") in PRUNE_EXCLUDED_KINDS]
+
+    print(f"claude-all --uninstall — {len(records)} recorded install(s), {scope} scope:\n")
+    for entry in prunable:
+        print(f"  - {entry.get('kind')}/{entry.get('name')}")
+    for entry in external:
+        print(f"  - {entry.get('kind')}/{entry.get('name')}  [record only — binary left in place]")
+    print(
+        "\nRemoves the resource symlinks, the CLAUDE.md blocks this tool injected, "
+        "and its settings.json hook entries.\nHand-written CLAUDE.md content outside "
+        "those markers is NOT touched."
+    )
+    if external:
+        print(
+            f"{len(external)} tool/plugin record(s) are forgotten only — their real "
+            "install (brew/pipx/marketplace) stays; remove those yourself."
+        )
+
+    if not assume_yes and not confirm("\nProceed?"):
+        print("Aborted — nothing was removed. (Use --yes for non-interactive runs.)")
+        return 1
+
+    removed = prune_installs(prunable)
+    forgotten = forget_records(external)
+    leftovers, advisory = scan_leftovers(scope)
+    cleaned = remove_leftovers(leftovers)
+
+    for line in removed:
+        print(f"  ✓ {line}")
+    for line in forgotten:
+        print(f"  ✓ {line}")
+    for line in cleaned:
+        print(f"  ✓ leftover: {line}")
+    if remove_state_file():
+        print("  ✓ removed state file (nothing recorded any more)")
+    if advisory:
+        print(f"\nℹ  {len(advisory)} issue(s) --uninstall cannot fix:")
+        for finding in advisory:
+            print(f"  - {finding['label']}")
+
+    print(
+        f"\nRemoved {len(removed) + len(forgotten)} install(s). The claude-all CLI itself "
+        "is still installed — remove it with:\n  uv tool uninstall claude-all"
+    )
+    return 0
+
+
 def cmd_list(items: list[Item]):
     last_kind = None
     last_subcat = None
@@ -2093,8 +2245,26 @@ def main(argv: list[str]) -> int:
         action="store_true",
         help="Remove installs that are no longer shipped by the repo (no confirmation)",
     )
+    ap.add_argument(
+        "--uninstall",
+        action="store_true",
+        help="Remove EVERY recorded install (symlinks, CLAUDE.md blocks, hook entries). "
+        "Shows a plan and asks before removing anything; narrow it with filters",
+    )
+    ap.add_argument(
+        "--yes",
+        action="store_true",
+        help="Skip the --uninstall confirmation prompt (for non-interactive use)",
+    )
     ap.add_argument("filters", nargs="*", help="Filter tokens (each must appear in path)")
     args = ap.parse_args(argv)
+
+    if args.uninstall:
+        return cmd_uninstall(
+            filters=args.filters,
+            scope="project" if args.project else "user",
+            assume_yes=args.yes,
+        )
 
     if args.prune:
         prune_scope = "project" if args.project else "user"

@@ -30,6 +30,22 @@ claude-all --all --project skills      # install all skills, this project only
 
 Update anytime with `uv tool upgrade claude-all`.
 
+### Removing things
+
+```bash
+claude-all --prune                     # drop installs the repo no longer ships
+claude-all --uninstall                 # reverse EVERY recorded install
+claude-all --uninstall agents aws      # or just the ones matching a filter
+```
+
+`--uninstall` prints the full plan and asks before it removes anything (`--yes` skips the
+prompt; a non-TTY run answers *no* by default, so a piped invocation can't wipe a setup by
+accident). It removes the resource symlinks, the `CLAUDE.md` blocks this tool injected, and its
+`settings.json` hook entries — **hand-written `CLAUDE.md` content outside those markers is left
+alone**, and a `tools`/`plugins` record is forgotten without touching the real binary.
+
+It does not remove the CLI itself; finish with `uv tool uninstall claude-all`.
+
 **Developing on this repo?**
 
 ```bash
