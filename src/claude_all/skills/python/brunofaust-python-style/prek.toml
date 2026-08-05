@@ -1,0 +1,485 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# REFERENCE prek.toml — brunofaust-python-style
+#
+# This file is DOCUMENTATION, not an active config. Copy it to your repo root as
+# `prek.toml` and delete what doesn't apply. It is the executable counterpart to
+# `references/enforcement.md`: that file says WHAT each rule is, this says HOW it
+# gets gated. The governing principle — a rule in prose gets violated; a rule
+# encoded as a checker holds.
+#
+# prek (https://github.com/j178/prek) is a faster, dependency-free Rust drop-in
+# for pre-commit. It reads `.pre-commit-config.yaml` unchanged; `prek.toml` is
+# its own optional format. Everything below works with either tool.
+#
+# ── WHY THE [[repos.hooks]] STYLE ────────────────────────────────────────────
+# prek also accepts `hooks = [{ id = "x" }, ...]` inline tables, but multi-line
+# inline tables with trailing commas are NOT valid strict TOML — `tomllib`, the
+# `check-toml` hook, and most editors reject them. The array-of-tables form below
+# parses under both prek and strict TOML, so use it.
+#
+# ── HOW TO ADOPT ON AN EXISTING CODEBASE ─────────────────────────────────────
+# Do NOT switch all of this on at once — a gate that fails 400 times on day one
+# gets `SKIP=`'d and then protects nothing. Roll each new rule out regression-
+# only: baseline today's findings, fail on NEW ones, ratchet the baseline down.
+# The `regression-gates` skill ships `baseline_gate.py` for exactly this.
+#
+# ── THE TWO THINGS THAT MAKE A GREEN RUN A LIE ───────────────────────────────
+# 1. prek only inspects GIT-TRACKED files. A new untracked file is skipped and
+#    the gate passes vacuously. `git add` before you trust a run. The tell is a
+#    hook reporting "(no files to check) Skipped" — read the per-hook status
+#    lines, not just the final colour.
+# 2. `--all-files` runs only the PRE-COMMIT stage. Pre-push hooks go unexercised
+#    until you also run `prek run --all-files --hook-stage pre-push`. Both stages
+#    must be green before you claim a change is clean.
+# ─────────────────────────────────────────────────────────────────────────────
+
+default_language_version.python = "3.14"
+
+# Hooks without an explicit `stages` run ONLY at pre-commit. Without this, every
+# unstaged hook runs at EVERY stage — so anything invoking the whole suite (a
+# Stop hook, CI) double-executes ruff, vulture, typos, gitleaks, …
+default_stages = ["pre-commit"]
+
+# Generated / vendored / not-hand-authored trees: formatters and spell-checkers
+# only churn and false-positive on these.
+exclude = { glob = [".venv/**", "vendor/**", "node_modules/**", "**/migrations/versions/**"] }
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 1. REPO HYGIENE — the defaults every repo should have, Python or not
+# ═════════════════════════════════════════════════════════════════════════════
+
+[[repos]]
+repo = "https://github.com/pre-commit/pre-commit-hooks"
+rev = "v6.0.0"
+
+# — structural validity —
+[[repos.hooks]]
+id = "check-json"
+name = "✅ check · Valid JSON"
+
+[[repos.hooks]]
+id = "check-toml"
+name = "✅ check · Valid TOML"
+
+[[repos.hooks]]
+id = "check-yaml"
+name = "✅ check · Valid YAML"
+
+[[repos.hooks]]
+id = "check-xml"
+name = "✅ check · Valid XML"
+
+[[repos.hooks]]
+id = "debug-statements"
+name = "✅ check · No leftover breakpoint()/pdb"
+
+# — whitespace/EOL formatters: pre-push only, so a commit is never blocked by
+#   churn the tool fixes itself —
+[[repos.hooks]]
+id = "end-of-file-fixer"
+name = "✅ check · Newline at EOF"
+stages = ["pre-push"]
+
+[[repos.hooks]]
+id = "trailing-whitespace"
+name = "✅ check · No trailing whitespace"
+stages = ["pre-push"]
+
+[[repos.hooks]]
+id = "mixed-line-ending"
+name = "✅ check · Consistent line endings"
+stages = ["pre-push"]
+
+# — filesystem —
+[[repos.hooks]]
+id = "check-case-conflict"
+name = "📁 fs · No case-only filename collisions"
+
+[[repos.hooks]]
+id = "check-executables-have-shebangs"
+name = "📁 fs · +x files have a shebang"
+
+[[repos.hooks]]
+id = "check-symlinks"
+name = "📁 fs · No broken symlinks"
+
+[[repos.hooks]]
+id = "destroyed-symlinks"
+name = "📁 fs · No symlink turned into a regular file"
+
+# — git —
+[[repos.hooks]]
+id = "check-merge-conflict"
+name = "🌳 git · No conflict markers"
+
+[[repos.hooks]]
+id = "forbid-new-submodules"
+name = "🌳 git · No new submodules"
+
+[[repos.hooks]]
+id = "no-commit-to-branch"
+name = "🌳 git · Protect the default branch"
+
+[[repos.hooks]]
+id = "check-added-large-files"
+name = "🌳 git · Block large blobs"
+args = ["--maxkb=5000"]
+
+# — tests —
+# `--pytest-test-first` enforces test_*.py over *_test.py. Pick one and gate it;
+# two spellings means a glob somewhere will miss half your tests.
+[[repos.hooks]]
+id = "name-tests-test"
+name = "🧪 test · Test files are test_*.py"
+args = ["--pytest-test-first"]
+files = "^tests/.+\\.py$"
+
+
+[[repos]]
+repo = "https://github.com/crate-ci/typos"
+rev = "v1.29.4"
+
+[[repos.hooks]]
+id = "typos"
+name = "🔍 content · Spelling"
+
+
+[[repos]]
+repo = "https://github.com/gitleaks/gitleaks"
+rev = "v8.23.1"
+
+[[repos.hooks]]
+id = "gitleaks"
+name = "🔒 security · No committed secrets"
+
+
+[[repos]]
+repo = "https://github.com/commitizen-tools/commitizen"
+rev = "v4.1.0"
+
+[[repos.hooks]]
+id = "commitizen"
+name = "🌳 git · Conventional commit message"
+stages = ["commit-msg"]
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 2. PYTHON TOOLCHAIN
+# ═════════════════════════════════════════════════════════════════════════════
+
+[[repos]]
+repo = "https://github.com/astral-sh/ruff-pre-commit"
+rev = "v0.9.4"
+
+[[repos.hooks]]
+id = "ruff-check"
+name = "🐍 python · Lint (ruff)"
+args = ["--fix"]
+
+# Formatter — pre-push, same rationale as the whitespace fixers above.
+[[repos.hooks]]
+id = "ruff-format"
+name = "🐍 python · Format (ruff)"
+stages = ["pre-push"]
+
+
+[[repos]]
+repo = "https://github.com/asottile/pyupgrade"
+rev = "v3.19.1"
+
+[[repos.hooks]]
+id = "pyupgrade"
+name = "🐍 python · Modern syntax"
+args = ["--py314-plus"]
+
+
+[[repos]]
+repo = "https://github.com/pre-commit/pygrep-hooks"
+rev = "v1.10.0"
+
+[[repos.hooks]]
+id = "python-check-blanket-type-ignore"
+name = "🐍 python · No blanket # type: ignore"
+
+[[repos.hooks]]
+id = "python-check-mock-methods"
+name = "🐍 python · No assert_called_once typo'd as an attribute"
+
+[[repos.hooks]]
+id = "python-no-log-warn"
+name = "🐍 python · log.warning, not deprecated log.warn"
+
+[[repos.hooks]]
+id = "python-use-type-annotations"
+name = "🐍 python · Annotations, not type comments"
+
+[[repos.hooks]]
+id = "text-unicode-replacement-char"
+name = "🐍 python · No U+FFFD replacement char"
+
+
+# ⚠️ language_version MUST be pinned per-hook on bandit / vulture / interrogate.
+# They parse with the interpreter's own `ast`, so on an older interpreter they
+# silently SKIP files they cannot parse and still exit 0 — a vacuous pass. A
+# repo-level `default_language_version` does NOT reach a hook's isolated env.
+# Tools with their own parser (ruff, jscpd) are immune — don't cargo-cult the pin.
+[[repos]]
+repo = "https://github.com/PyCQA/bandit"
+rev = "1.8.2"
+
+# Ruff's `S` group ports most of bandit; keep bandit for what it hasn't ported.
+[[repos.hooks]]
+id = "bandit"
+name = "🔒 security · SAST (bandit)"
+args = ["-c", "pyproject.toml"]
+language_version = "python3.14"
+
+
+[[repos]]
+repo = "https://github.com/jendrikseipp/vulture"
+rev = "v2.14"
+
+# ⚠️ vulture counts a call FROM A TEST as a use, so a helper whose only callers
+# live in tests/ reads as live while production silently lost its wiring. See
+# references/enforcement.md, "A `src`-dead, test-alive function is a finding".
+[[repos.hooks]]
+id = "vulture"
+name = "🐍 python · Dead code"
+language_version = "python3.14"
+
+
+[[repos]]
+repo = "https://github.com/econchick/interrogate"
+rev = "1.7.0"
+
+# Docstring COVERAGE only — it cannot tell a real docstring from a restatement of
+# the function name. Pair with review; don't read 100% as "documented".
+[[repos.hooks]]
+id = "interrogate"
+name = "🐍 python · Docstring coverage"
+language_version = "python3.14"
+
+
+[[repos]]
+repo = "https://github.com/abravalheri/validate-pyproject"
+rev = "v0.23"
+
+[[repos.hooks]]
+id = "validate-pyproject"
+name = "📦 deps · pyproject.toml schema"
+
+
+[[repos]]
+repo = "https://github.com/tox-dev/pyproject-fmt"
+rev = "v2.5.0"
+
+[[repos.hooks]]
+id = "pyproject-fmt"
+name = "📦 deps · Format pyproject.toml"
+stages = ["pre-push"]
+
+
+[[repos]]
+repo = "https://github.com/astral-sh/uv-pre-commit"
+rev = "0.5.26"
+
+# Can rewrite uv.lock — defer to push so a commit is never blocked by a relock.
+[[repos.hooks]]
+id = "uv-lock"
+name = "📦 deps · uv.lock matches pyproject"
+stages = ["pre-push"]
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 3. LOCAL GATES — type-check, dependency CVEs, duplication, layering
+#
+# `language = "system"` runs these in YOUR project venv rather than an isolated
+# hook env. That is deliberate: mypy needs your installed dependencies to
+# resolve types at all.
+# ═════════════════════════════════════════════════════════════════════════════
+
+[[repos]]
+repo = "local"
+
+# Whole-tree, not per-file: a change in one module breaks types in an untouched
+# importer, which per-file mode never sees.
+[[repos.hooks]]
+id = "mypy"
+name = "🐍 python · Type-check (mypy)"
+entry = "uv run mypy"
+language = "system"
+types_or = ["python"]
+pass_filenames = false
+always_run = true
+stages = ["pre-push"]
+
+# ⚠️ THE GAP MOST REPOS HAVE. Lockfile CVE scan against the PyPI advisory DB —
+# nothing else here looks at your dependencies' known vulnerabilities.
+[[repos.hooks]]
+id = "uv-audit"
+name = "🔒 security · Dependency CVEs"
+entry = "uv audit"
+language = "system"
+pass_filenames = false
+always_run = true
+stages = ["pre-push"]
+
+# Catches copy-paste (same TEXT) only — NOT same-responsibility-different-text.
+# Structural duplication is invisible to it at any threshold. Its allowlist is a
+# burn-down list, not a graveyard.
+[[repos.hooks]]
+id = "jscpd"
+name = "🧬 dup · Copy-paste detection"
+entry = "npx --yes jscpd --threshold 1 --reporters consoleFull --min-lines 12"
+language = "system"
+pass_filenames = false
+always_run = true
+stages = ["pre-push"]
+
+# Import-direction / layering contracts, declared under [tool.importlinter] in
+# pyproject.toml. See references/architecture.md + project-structure.md.
+[[repos.hooks]]
+id = "import-linter"
+name = "🏗️ architecture · Import direction"
+entry = "uv run lint-imports"
+language = "system"
+types_or = ["python"]
+pass_filenames = false
+always_run = true
+stages = ["pre-push"]
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 4. THIS SKILL'S OWN CHECKERS
+#
+# Copy them out of `checkers/` into your repo (e.g. `scripts/`). Each encodes a
+# rule from references/enforcement.md that no off-the-shelf tool enforces. All
+# are pure AST parses — they never import your code and never touch a database.
+#
+# ⚠️ Pin `language_version` on EVERY one, for the reason given above. These
+# checkers exit 2 (a tool error, distinct from 1 = findings) on a file they
+# cannot parse, precisely so that surfaces instead of passing silently.
+# ═════════════════════════════════════════════════════════════════════════════
+
+[[repos]]
+repo = "local"
+
+[[repos.hooks]]
+id = "model-contract"
+name = "🧩 models · Pydantic config, no dataclass/alias/barrel-init (AST)"
+entry = "uv run python scripts/model_contract.py src --check"
+language = "system"
+types_or = ["python"]
+pass_filenames = false
+always_run = true
+language_version = "python3.14"
+
+[[repos.hooks]]
+id = "pydantic-contract"
+name = "🧩 models · No opaque annotations, masking defaults, TypedDict or cast (AST)"
+entry = "uv run python scripts/pydantic_contract.py src --check"
+language = "system"
+types_or = ["python"]
+pass_filenames = false
+always_run = true
+language_version = "python3.14"
+
+[[repos.hooks]]
+id = "all-contract"
+name = "📤 exports · from x import y requires y in x.__all__ (AST)"
+entry = "uv run python scripts/all_contract.py src --check"
+language = "system"
+types_or = ["python"]
+pass_filenames = false
+always_run = true
+language_version = "python3.14"
+
+[[repos.hooks]]
+id = "flat-test-mirror"
+name = "🧪 test · Unit tier is ONE flat mirror of src (AST)"
+entry = "uv run python scripts/flat_test_mirror.py tests/unit src"
+language = "system"
+pass_filenames = false
+always_run = true
+language_version = "python3.14"
+
+[[repos.hooks]]
+id = "lambda-event-validation"
+name = "☁️ lambda · Handler validates its event payload (AST)"
+entry = "uv run python scripts/lambda_event_validation.py src --check"
+language = "system"
+types_or = ["python"]
+pass_filenames = false
+always_run = true
+language_version = "python3.14"
+
+
+# ── Mock-drift family — from the `mock-drift-sweep` skill's checkers/ ─────────
+# Mock drift is the #1 silent-failure class: an agent satisfies the fixture you
+# gave it, not the production system. Pass BOTH source and tests so dotted patch
+# targets resolve — passing only tests/ leaves every target unresolvable, and
+# therefore silent.
+
+[[repos]]
+repo = "local"
+
+[[repos.hooks]]
+id = "async-mock-target"
+name = "🧪 test · async def needs an async-aware double"
+entry = "uv run python scripts/async_mock_target.py tests src"
+language = "system"
+types_or = ["python"]
+pass_filenames = false
+always_run = true
+language_version = "python3.14"
+
+[[repos.hooks]]
+id = "patch-target-exists"
+name = "🧪 test · patch() target must exist (no silent attribute creation)"
+entry = "uv run python scripts/patch_target_exists.py tests src"
+language = "system"
+types_or = ["python"]
+pass_filenames = false
+always_run = true
+language_version = "python3.14"
+
+# Regression-only — expect real findings on an existing codebase. Seed once with
+# --baseline, then enforce with --check.
+[[repos.hooks]]
+id = "mock-assert-signature"
+name = "🧪 test · assert_called_with() must fit the real signature"
+entry = "uv run python scripts/mock_assert_signature.py tests src --check"
+language = "system"
+types_or = ["python"]
+pass_filenames = false
+always_run = true
+language_version = "python3.14"
+
+# Regression-only — the noisiest rule of the family by design.
+[[repos.hooks]]
+id = "unspecced-model-mock"
+name = "🧪 test · No unspecced mock for a patched model class"
+entry = "uv run python scripts/unspecced_model_mock.py tests src --check"
+language = "system"
+types_or = ["python"]
+pass_filenames = false
+always_run = true
+language_version = "python3.14"
+
+
+# ── Migration graph — from the `regression-gates` skill's checkers/ ───────────
+# Only if the project uses Alembic. Pairs with the `alembic-migration` skill.
+# Pass ONE directory per Alembic environment; never split one tree across roots.
+
+[[repos]]
+repo = "local"
+
+[[repos.hooks]]
+id = "migration-head"
+name = "🗄️ migrations · Single head, no duplicate/over-length/dangling ids"
+entry = "uv run python scripts/migration_head.py migrations/versions"
+language = "system"
+pass_filenames = false
+always_run = true
+language_version = "python3.14"
