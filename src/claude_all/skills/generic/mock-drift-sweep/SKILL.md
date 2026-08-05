@@ -68,6 +68,45 @@ Any of these is a mock-drift risk — sweep before you call the change done:
    `create=True`) at run time. After a rename, grep the old symbol name across `tests/` and run the
    affected tests, don't just collect.
 
+## Gate it: `checkers/`
+
+This skill ships four AST checkers under `checkers/` that turn the sweep above
+into an enforced gate instead of a habit to remember. All four are pure AST
+parses (no import of the code under test, no DB, fast enough for every
+commit) and share `mock_drift_common.py`'s dotted-target resolution — every
+one of them is conservative by design: silence over a false positive, because
+a noisy hook gets disabled and then protects nothing.
+
+- **`patch_target_exists.py`** — a `patch("dotted.path")` string whose target
+  does not exist anywhere in the scanned tree (the #1 mock-drift class: a
+  rename/move/delete leaves the string "working" because `patch()` happily
+  creates the attribute it can't find).
+- **`async_mock_target.py`** — an `async def` patched with a plain
+  `MagicMock`/`Mock` instead of `AsyncMock`/`autospec=True` — never awaited,
+  never fails, so the test passes whether or not the code actually awaits it.
+- **`mock_assert_signature.py`** — `mock.assert_called_with(...)` /
+  `assert_any_call(...)` asserting more positional args than the real
+  (patch-bound) signature accepts, or a keyword that isn't a real parameter
+  name. Regression-only (ships a `--baseline`/`--check` JSON ratchet — expect
+  real findings on first run against an existing codebase).
+- **`unspecced_model_mock.py`** — a `patch()`-replaced Pydantic `BaseModel`
+  subclass stood in for by an unspecced `MagicMock`/`Mock`/`AsyncMock` (the gap
+  next to a real model construction, which already fails loudly on drift when
+  every model sets `extra="forbid"`). Also regression-only — the noisiest rule
+  in the family by design.
+
+```bash
+uv run python checkers/patch_target_exists.py tests src/myapp
+uv run python checkers/async_mock_target.py tests src/myapp
+uv run python checkers/mock_assert_signature.py tests src/myapp --check
+uv run python checkers/unspecced_model_mock.py tests src/myapp --check
+```
+
+Wire each as a prek/pre-commit hook (`language = "system"`) scoped to
+`tests/` + your source dir; pin `language_version` on each hook, since these
+parse with the interpreter's own `ast` module and an older interpreter
+silently fails to parse newer syntax it wasn't built to understand.
+
 ## The deeper fix: one real-dependency test per contract
 
 A fully-mocked test of a DB or SDK call validates nothing about SQL syntax, the real schema, or the
