@@ -65,9 +65,10 @@ The rules:
 
 - **Patching an `async def` target requires an async-aware double** — `AsyncMock`, `autospec=True`
   (autospec infers async from the real object), or `new_callable=AsyncMock`. A bare `MagicMock` on an
-  async target is a false green. (Enforced by `checkers/async_mock_target.py` — it flags a
-  `patch("dotted.path")` / `patch.object(...)` whose resolved target is an `async def` and that uses
-  none of those three signals.)
+  async target is a false green. (Enforced by
+  [`mock-drift-sweep/checkers/async_mock_target.py`](../../../generic/mock-drift-sweep/checkers/async_mock_target.py)
+  — it flags a `patch("dotted.path")` / `patch.object(...)` whose resolved target is an `async def`
+  and that uses none of those three signals. Its three sibling checkers live beside it.)
 - **A fixture that would pass whether or not the code awaits is not a test.** If swapping the double
   for a no-op wouldn't change the result, the double is validating nothing.
 - **Pair every async context-manager seam with one real-invocation test** — one test that actually

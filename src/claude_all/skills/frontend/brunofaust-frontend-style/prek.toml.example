@@ -1,0 +1,265 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# REFERENCE prek.toml — brunofaust-frontend-style
+#
+# This file is DOCUMENTATION, not an active config. Copy it to your repo root as
+# `prek.toml` and delete what doesn't apply.
+#
+# ── WHY THE `.example` SUFFIX — KEEP IT ──────────────────────────────────────
+# prek treats EVERY `prek.toml` it finds under the repo root as a workspace
+# PROJECT (see `prek run [HOOK|PROJECT]`), not just the one at the root. A file
+# literally named `prek.toml` sitting in a skill directory is therefore LOADED
+# AND RUN by the host repo's own gate — and one stale `rev` in it breaks the
+# whole gate with "Failed to init hooks" before a single check executes. The
+# suffix is what keeps this a document instead of a landmine. Rename it only
+# once it is in the repo that should actually run it.
+#
+# prek (https://github.com/j178/prek) is a faster, dependency-free Rust drop-in
+# for pre-commit. It reads `.pre-commit-config.yaml` unchanged; `prek.toml` is
+# its own optional format.
+#
+# ── THE DIVISION OF LABOUR ───────────────────────────────────────────────────
+# `references/audit.md` is explicit that anything eslint / `tsc` / prettier /
+# biome already catches mechanically is NOT restated as a skill rule. This file
+# is the other half of that deal: the skill assumes those tools are running, so
+# here is the config that actually makes them run. A rule the skill declines to
+# restate because "the linter catches it" is only safe if the linter is wired
+# into a gate — otherwise nothing catches it.
+#
+# ── WHY THE [[repos.hooks]] STYLE ────────────────────────────────────────────
+# prek also accepts `hooks = [{ id = "x" }, ...]` inline tables, but multi-line
+# inline tables with trailing commas are NOT valid strict TOML — `tomllib`, the
+# `check-toml` hook, and most editors reject them. The array-of-tables form below
+# parses under both prek and strict TOML, so use it.
+#
+# ── WHY MOST FRONTEND HOOKS ARE `language = "system"` ────────────────────────
+# tsc, eslint and knip need your project's real `node_modules` — its TypeScript
+# version, its eslint plugin set, its path aliases. An isolated hook env would
+# resolve a different toolchain than your editor and CI do, and you'd be gating
+# on a config nobody else runs. Run them through the project's own package
+# manager, and keep the SAME command in CI.
+#
+# ── THE TWO THINGS THAT MAKE A GREEN RUN A LIE ───────────────────────────────
+# 1. prek only inspects GIT-TRACKED files — a new untracked file is skipped and
+#    the gate passes vacuously. `git add` before you trust a run. The tell is a
+#    hook reporting "(no files to check) Skipped".
+# 2. `--all-files` runs only the PRE-COMMIT stage. Also run
+#    `prek run --all-files --hook-stage pre-push`. Both must be green.
+# ─────────────────────────────────────────────────────────────────────────────
+
+default_stages = ["pre-commit"]
+
+# Build output, deps, and generated artifacts — never hand-authored.
+exclude = { glob = [
+  "node_modules/**",
+  "dist/**",
+  "build/**",
+  ".next/**",
+  ".astro/**",
+  "coverage/**",
+  "**/*.min.js",
+  "**/pnpm-lock.yaml",
+  "**/package-lock.json",
+] }
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 1. REPO HYGIENE — the defaults every repo should have, frontend or not
+# ═════════════════════════════════════════════════════════════════════════════
+
+[[repos]]
+repo = "https://github.com/pre-commit/pre-commit-hooks"
+rev = "v6.0.0"
+
+# — structural validity —
+[[repos.hooks]]
+id = "check-json"
+name = "✅ check · Valid JSON"
+# tsconfig.json / .eslintrc.json are JSONC (comments + trailing commas) and will
+# fail a strict JSON parse. Exclude them here and let tsc/eslint validate them.
+exclude = { glob = ["**/tsconfig*.json", "**/.eslintrc.json", "**/*.jsonc"] }
+
+[[repos.hooks]]
+id = "check-yaml"
+name = "✅ check · Valid YAML"
+
+[[repos.hooks]]
+id = "check-toml"
+name = "✅ check · Valid TOML"
+
+# — whitespace/EOL formatters: pre-push only, so a commit is never blocked by
+#   churn the tool fixes itself —
+[[repos.hooks]]
+id = "end-of-file-fixer"
+name = "✅ check · Newline at EOF"
+stages = ["pre-push"]
+
+[[repos.hooks]]
+id = "trailing-whitespace"
+name = "✅ check · No trailing whitespace"
+stages = ["pre-push"]
+
+[[repos.hooks]]
+id = "mixed-line-ending"
+name = "✅ check · Consistent line endings"
+stages = ["pre-push"]
+
+# — filesystem —
+# check-case-conflict matters more here than almost anywhere: macOS is
+# case-insensitive, Linux CI is not, so `Button.tsx` vs `button.tsx` builds
+# locally and fails only in CI.
+[[repos.hooks]]
+id = "check-case-conflict"
+name = "📁 fs · No case-only filename collisions"
+
+[[repos.hooks]]
+id = "check-symlinks"
+name = "📁 fs · No broken symlinks"
+
+[[repos.hooks]]
+id = "destroyed-symlinks"
+name = "📁 fs · No symlink turned into a regular file"
+
+# — git —
+[[repos.hooks]]
+id = "check-merge-conflict"
+name = "🌳 git · No conflict markers"
+
+[[repos.hooks]]
+id = "forbid-new-submodules"
+name = "🌳 git · No new submodules"
+
+[[repos.hooks]]
+id = "no-commit-to-branch"
+name = "🌳 git · Protect the default branch"
+
+# Frontends attract committed binaries (fonts, hero images, design exports).
+[[repos.hooks]]
+id = "check-added-large-files"
+name = "🌳 git · Block large blobs"
+args = ["--maxkb=5000"]
+
+
+[[repos]]
+repo = "https://github.com/crate-ci/typos"
+rev = "v1.29.4"
+
+# User-visible copy lives in this tree — a typo here ships to production UI.
+[[repos.hooks]]
+id = "typos"
+name = "🔍 content · Spelling"
+
+
+[[repos]]
+repo = "https://github.com/gitleaks/gitleaks"
+rev = "v8.23.1"
+
+# ⚠️ Especially load-bearing in a frontend repo: anything bundled into client
+# code is PUBLIC. See references/web-security.md — only NEXT_PUBLIC_* / VITE_*
+# belong in client code, and a session token never belongs in localStorage.
+[[repos.hooks]]
+id = "gitleaks"
+name = "🔒 security · No committed secrets"
+
+
+[[repos]]
+repo = "https://github.com/commitizen-tools/commitizen"
+rev = "v4.1.0"
+
+[[repos.hooks]]
+id = "commitizen"
+name = "🌳 git · Conventional commit message"
+stages = ["commit-msg"]
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 2. FRONTEND TOOLCHAIN
+#
+# Swap `pnpm` for npm/yarn/bun to match your project. Keep these commands
+# IDENTICAL in CI — a gate that runs a different command than CI is two gates.
+# ═════════════════════════════════════════════════════════════════════════════
+
+[[repos]]
+repo = "local"
+
+# Whole-project, not per-file: TypeScript is a whole-program checker. A change in
+# one file breaks types in an untouched importer, which a per-file run never
+# sees. `--noEmit` type-checks without writing build output.
+[[repos.hooks]]
+id = "frontend-typecheck"
+name = "🟦 ts · Type-check (tsc --noEmit)"
+entry = "pnpm exec tsc --noEmit"
+language = "system"
+types_or = ["ts", "tsx"]
+pass_filenames = false
+always_run = true
+stages = ["pre-push"]
+
+# --max-warnings=0: a warning nobody fails on is a warning nobody fixes.
+# Plugin set per reference file's "Enforcement" section (react-hooks,
+# jsx-a11y, react-compiler, …).
+[[repos.hooks]]
+id = "frontend-lint"
+name = "🟦 ts · Lint (eslint)"
+entry = "pnpm exec eslint --max-warnings=0"
+language = "system"
+types_or = ["javascript", "jsx", "ts", "tsx"]
+
+# Formatter — pre-push, so a commit is never blocked by churn it fixes itself.
+# Use biome instead if that's your toolchain; don't run both.
+[[repos.hooks]]
+id = "frontend-format"
+name = "🟦 ts · Format (prettier)"
+entry = "pnpm exec prettier --write"
+language = "system"
+types_or = ["javascript", "jsx", "ts", "tsx", "css", "scss", "json", "markdown"]
+stages = ["pre-push"]
+
+# ⚠️ THE GAP MOST FRONTEND REPOS HAVE. knip finds unused FILES, EXPORTS and
+# DEPENDENCIES. `noUnusedLocals` only sees within a file; eslint only sees within
+# a module. Neither can tell you a whole component is imported by nothing — which
+# is how a deleted feature leaves its component tree behind for a year.
+[[repos.hooks]]
+id = "frontend-knip"
+name = "🧹 dead · Unused files, exports, dependencies (knip)"
+entry = "pnpm exec knip"
+language = "system"
+pass_filenames = false
+always_run = true
+stages = ["pre-push"]
+
+# ⚠️ Lockfile CVE scan. `--audit-level=high` so a low-severity transitive advisory
+# doesn't block every commit; raise the bar as the tree gets clean.
+[[repos.hooks]]
+id = "npm-audit"
+name = "🔒 security · Dependency CVEs"
+entry = "pnpm audit --audit-level=high"
+language = "system"
+pass_filenames = false
+always_run = true
+stages = ["pre-push"]
+
+# Catches copy-paste (same TEXT) only — NOT same-responsibility-different-text.
+# A duplicated component that was reformatted is invisible to it at any
+# threshold; that one is a review concern. See references/composition.
+[[repos.hooks]]
+id = "jscpd"
+name = "🧬 dup · Copy-paste detection"
+entry = "pnpm exec jscpd --threshold 1 --reporters consoleFull --min-lines 12"
+language = "system"
+pass_filenames = false
+always_run = true
+stages = ["pre-push"]
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 3. DOCS
+# ═════════════════════════════════════════════════════════════════════════════
+
+[[repos]]
+repo = "https://github.com/igorshubovych/markdownlint-cli"
+rev = "v0.43.0"
+
+[[repos.hooks]]
+id = "markdownlint-fix"
+name = "📄 docs · Markdown lint"
+stages = ["pre-push"]

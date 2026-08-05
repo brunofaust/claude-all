@@ -8,6 +8,8 @@
   "python-structlog-guard": {"event": "PreToolUse", "matcher": "Edit|Write|MultiEdit", "timeout": 2000},
   "python-settings-env-guard": {"event": "PreToolUse", "matcher": "Edit|Write|MultiEdit", "timeout": 2000},
   "python-thread-subprocess-guard": {"event": "PreToolUse", "matcher": "Edit|Write|MultiEdit", "timeout": 2000},
+  "lockfile-protection": {"event": "PreToolUse", "matcher": "Edit|Write|MultiEdit", "timeout": 2000},
+  "junk-drawer-guard": {"event": "PreToolUse", "matcher": "Edit|Write|MultiEdit", "timeout": 2000},
   "destructive-command-guard": {"event": "PreToolUse", "matcher": "Bash", "timeout": 5000},
   "secret-leak-guard": {"event": "PreToolUse", "matcher": "Bash", "timeout": 5000},
   "supply-chain-guard": {"event": "PreToolUse", "matcher": "Bash", "timeout": 15000},
@@ -15,5 +17,6 @@
   "suggest-compact": {"event": "PreToolUse", "matcher": "", "timeout": 2000},
   "edited-files-accumulator": {"event": "PostToolUse", "matcher": "Edit|Write|MultiEdit", "timeout": 2000},
   "prek-stop-runner": {"event": "Stop", "matcher": "", "timeout": 60000},
-  "python-style-skill-loader": {"event": "SessionStart", "matcher": "", "timeout": 5000}
+  "python-style-skill-loader": {"event": "SessionStart", "matcher": "", "timeout": 5000},
+  "worktree-count-nudge": {"event": "SessionStart", "matcher": "", "timeout": 5000}
 }

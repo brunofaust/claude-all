@@ -176,6 +176,7 @@ Reusable know-how Claude loads on demand — a checklist, a workflow, or a style
 | [architecture-decision-guard](src/claude_all/skills/generic/architecture-decision-guard/SKILL.md) | Don't add a new layer or abstraction without a real need. |
 | [regression-gates](src/claude_all/skills/generic/regression-gates/SKILL.md) | Add a new lint rule to an old codebase without breaking every commit. |
 | [mock-drift-sweep](src/claude_all/skills/generic/mock-drift-sweep/SKILL.md) | Update every mock after a function's signature changes. |
+| [i18n-management](src/claude_all/skills/generic/i18n-management/SKILL.md) | Add a translation key and audit for locale drift across every i18n system. |
 | [execution-trace-audit](src/claude_all/skills/generic/execution-trace-audit/SKILL.md) | Trace a service's entrypoints to find dead code and bugs. |
 | [diff-retrospective](src/claude_all/skills/generic/diff-retrospective/SKILL.md) | Turn recently merged PRs into new guardrails. |
 | [research-before-build](src/claude_all/skills/generic/research-before-build/SKILL.md) | Check nothing like this already exists before building it. |
@@ -207,6 +208,8 @@ Scripts Claude Code runs automatically around tool calls — mostly quiet remind
 | [`python-structlog-guard.py`](src/claude_all/hooks/python-structlog-guard.py) | PreToolUse | Blocks stdlib `logging` in favor of `structlog`. |
 | [`python-settings-env-guard.py`](src/claude_all/hooks/python-settings-env-guard.py) | PreToolUse | Blocks raw `os.environ` reads in favor of typed settings. |
 | [`python-thread-subprocess-guard.py`](src/claude_all/hooks/python-thread-subprocess-guard.py) | PreToolUse | Blocks raw threads/subprocess in favor of the project's wrappers. |
+| [`lockfile-protection.py`](src/claude_all/hooks/lockfile-protection.py) | PreToolUse | Blocks direct edits to package-manager lockfiles. |
+| [`junk-drawer-guard.py`](src/claude_all/hooks/junk-drawer-guard.py) | PreToolUse | Blocks creating a new `utils.py`/`helpers.py`-style junk-drawer module. |
 | [`destructive-command-guard.py`](src/claude_all/hooks/destructive-command-guard.py) | PreToolUse | Blocks catastrophic commands — `rm -rf /`, force pushes, `DROP TABLE`. |
 | [`secret-leak-guard.py`](src/claude_all/hooks/secret-leak-guard.py) | PreToolUse | Blocks a commit that would leak a credential. |
 | [`supply-chain-guard.py`](src/claude_all/hooks/supply-chain-guard.py) | PreToolUse | Flags risky package installs before they run. |
@@ -215,6 +218,7 @@ Scripts Claude Code runs automatically around tool calls — mostly quiet remind
 | [`prek-stop-runner.py`](src/claude_all/hooks/prek-stop-runner.py) | Stop | Runs prek once per response instead of once per edit. |
 | [`suggest-compact.py`](src/claude_all/hooks/suggest-compact.py) | PreToolUse | Reminds you to run `/compact` when context is getting full. |
 | [`python-style-skill-loader.py`](src/claude_all/hooks/python-style-skill-loader.py) | SessionStart | Reminds Claude to load the Python style skill in a Python repo. |
+| [`worktree-count-nudge.py`](src/claude_all/hooks/worktree-count-nudge.py) | SessionStart | Nudges cleanup once the git worktree count passes a threshold. |
 
 ## Plugins
 

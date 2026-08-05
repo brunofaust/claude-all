@@ -8,12 +8,23 @@ two branches each add a migration, the chain forks into TWO heads; the next
 ``upgrade head`` is ambiguous and a fresh database may apply only one branch.
 A single-head invariant catches this at commit time. It also flags over-length
 revision ids (some backends truncate the ``alembic_version.version_num`` column —
-classically 32 chars) and dangling ``down_revision`` pointers.
+classically 32 chars), duplicate revision ids, and dangling ``down_revision``
+pointers.
 
 This is a PURE STATIC PARSE — it never imports the migration modules (importing
 runs top-level code and may need the app/DB). It reads ``revision`` /
 ``down_revision`` assignments via ``ast``. Files it cannot parse are skipped
 (fail-open) — a sibling migration-integrity gate owns those.
+
+BOTH ASSIGNMENT FORMS — do not narrow this back to ``ast.Assign``
+------------------------------------------------------------------
+Migrations bind ``revision`` either plainly (``revision = "0001"``) or with an
+annotation (``revision: str = "0001"``) — recent Alembic ``script.py.mako``
+templates emit the ANNOTATED form. Parsing only ``ast.Assign`` makes every
+migration in such a project look like "not a migration file", so the checker
+reports zero findings on a genuinely forked graph and exits 0. That is a
+VACUOUS PASS, not a clean bill of health: the gate runs, says nothing, and the
+fork ships. Both forms are handled below, and the regression test pins it.
 
 Each root argument is treated as ONE INDEPENDENT migration tree and analysed on
 its own graph — pass one directory per Alembic environment (e.g. ``migrations/``
@@ -31,6 +42,7 @@ from __future__ import annotations
 import argparse
 import ast
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 
 __all__ = ["Revision", "analyse", "main", "parse_file"]
@@ -64,6 +76,29 @@ def literal(node: ast.expr) -> tuple[str | None, ...]:
     return (None,)
 
 
+def module_assignments(tree: ast.Module) -> Iterator[tuple[str, ast.expr]]:
+    """Yield ``(target_name, value)`` for each module-level assignment.
+
+    Handles BOTH ``revision = "x"`` and the annotated ``revision: str = "x"``
+    that recent Alembic templates emit — see the module docstring on why
+    missing the annotated form is a vacuous pass rather than a missed edge case.
+
+    Args:
+        tree: The parsed migration module.
+    """
+    for node in tree.body:
+        if isinstance(node, ast.Assign):
+            for tgt in node.targets:
+                if isinstance(tgt, ast.Name):
+                    yield tgt.id, node.value
+        elif (
+            isinstance(node, ast.AnnAssign)
+            and node.value is not None
+            and isinstance(node.target, ast.Name)
+        ):
+            yield node.target.id, node.value
+
+
 def parse_file(path: Path) -> Revision | None:
     """Extract ``revision`` / ``down_revision`` from a migration file (no import).
 
@@ -76,23 +111,18 @@ def parse_file(path: Path) -> Revision | None:
         return None  # fail open
     revision: str | None = None
     down: tuple[str | None, ...] = ()
-    for node in tree.body:
-        if not isinstance(node, ast.Assign):
-            continue
-        for tgt in node.targets:
-            if not isinstance(tgt, ast.Name):
-                continue
-            if tgt.id == "revision" and isinstance(node.value, ast.Constant):
-                revision = node.value.value if isinstance(node.value.value, str) else None
-            elif tgt.id == "down_revision":
-                down = literal(node.value)
+    for name, value in module_assignments(tree):
+        if name == "revision" and isinstance(value, ast.Constant):
+            revision = value.value if isinstance(value.value, str) else None
+        elif name == "down_revision":
+            down = literal(value)
     if revision is None and not down:
         return None  # not a migration file
     return Revision(path, revision, down)
 
 
 def analyse(revisions: list[Revision], label: str = "migrations") -> list[str]:
-    """Return findings: multiple heads, dangling down-revisions, over-length ids.
+    """Return findings: multiple heads, dangling down-revisions, over-length/duplicate ids.
 
     ``label`` names the migration tree in the multiple-heads finding so findings
     from different roots stay distinct baseline keys.
@@ -100,6 +130,19 @@ def analyse(revisions: list[Revision], label: str = "migrations") -> list[str]:
     findings: list[str] = []
     ids = {r.revision for r in revisions if r.revision}
     referenced: set[str] = set()
+    # Two migrations claiming the SAME revision id: the set above collapses them,
+    # so head/dangling analysis silently treats them as one node. Track first-seen
+    # owners separately to surface the collision.
+    owner: dict[str, Path] = {}
+    for rev in sorted(revisions, key=lambda r: r.path.name):
+        if rev.revision:
+            if rev.revision in owner:
+                findings.append(
+                    f"{rev.path.name}: duplicate revision id {rev.revision!r} "
+                    f"(also defined in {owner[rev.revision].name})"
+                )
+            else:
+                owner[rev.revision] = rev.path
     for rev in revisions:
         if rev.revision and len(rev.revision) > MAX_REVISION_LEN:
             findings.append(
