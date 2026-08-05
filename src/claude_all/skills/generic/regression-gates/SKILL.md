@@ -101,7 +101,7 @@ gate owns those) and exit 0 so they compose with `baseline_gate.py`.
 
 | Checker | Lesson | What it catches |
 | --- | --- | --- |
-| `checkers/migration_head.py` | distributed-systems correctness | >1 migration head, dangling `down_revision`, over-length revision ids — pure static parse, no DB/import. Pairs with `alembic-migration` + `migration-reviewer`. |
+| `checkers/migration_head.py` | distributed-systems correctness | >1 migration head, dangling `down_revision`, duplicate + over-length revision ids — pure static parse, no DB/import. Reads BOTH `revision = "x"` and the annotated `revision: str = "x"` recent Alembic templates emit (parsing only the former reported nothing at all on a modern project). Pairs with `alembic-migration` + `migration-reviewer`. |
 | `checkers/ci_env_guard.py` | tests must agree with reality | `os.environ.setdefault(...)` of a CI-reserved var (`CI`, `GITHUB_*`, `RUNNER_*`, …) in test bootstrap — `setdefault` loses to the runner's real value, so the "mock" silently points at the real service in CI. |
 | `checkers/junk_drawer.py` | single ownership | files named `helpers`/`utils`/`common`/`misc`/`shared` — ownerless attractors that grow into hidden god-modules. |
 | `checkers/module_private.py` | single ownership / dead-code visibility | module-level `_private` names (Python) — they blind dead-code detectors and aren't a real export mechanism; use `__all__` instead. |
