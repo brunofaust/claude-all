@@ -176,6 +176,7 @@ Reusable know-how Claude loads on demand — a checklist, a workflow, or a style
 | [architecture-decision-guard](src/claude_all/skills/generic/architecture-decision-guard/SKILL.md) | Don't add a new layer or abstraction without a real need. |
 | [regression-gates](src/claude_all/skills/generic/regression-gates/SKILL.md) | Add a new lint rule to an old codebase without breaking every commit. |
 | [mock-drift-sweep](src/claude_all/skills/generic/mock-drift-sweep/SKILL.md) | Update every mock after a function's signature changes. |
+| [i18n-management](src/claude_all/skills/generic/i18n-management/SKILL.md) | Add a translation key and audit for locale drift across every i18n system. |
 | [execution-trace-audit](src/claude_all/skills/generic/execution-trace-audit/SKILL.md) | Trace a service's entrypoints to find dead code and bugs. |
 | [diff-retrospective](src/claude_all/skills/generic/diff-retrospective/SKILL.md) | Turn recently merged PRs into new guardrails. |
 | [research-before-build](src/claude_all/skills/generic/research-before-build/SKILL.md) | Check nothing like this already exists before building it. |
