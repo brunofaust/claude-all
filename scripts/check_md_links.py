@@ -1,6 +1,12 @@
-# Type hints for JSON output
+#!/usr/bin/env python3
 import json
-from collections.abc import Iterable
+import re
+import subprocess
+import sys
+from collections.abc import Iterable  # pylint: disable=unused-import
+from pathlib import Path  # Required for path operations
+import argparse  # Required for CLI argument parsing
+import argparse  # For CLI argument parsing
 
 class CheckResult:
     def __init__(self, pass_result: bool, findings: list[str], config: dict):
@@ -14,10 +20,35 @@ class CheckResult:
             'findings': self.findings,
             'config': self.config,
         }
-"""Gate: relative markdown links resolve, and every resource is linked from the README.
 
-Two failures this repo has actually shipped, now mechanical:
-# Type hints for JSON output
+# Gate: relative markdown links resolve, and every resource is linked from the README.
+# Two failures this repo has actually shipped, now mechanical:
+# 1. Broken relative links (four shipped, one in merged PR)
+# 2. Undocumented resources (missing README rows)
+
+# JSON output format for --json flag
+JSON_OUTPUT = {
+    'passed': False,
+    'findings': []
+}
+
+# ... (rest of existing script remains unchanged)
+        }
+
+# Gate: relative markdown links resolve, and every resource is linked from the README.
+# Two failures this repo has actually shipped, now mechanical:
+# 1. Broken relative links (four shipped, one in merged PR)
+# 2. Undocumented resources (missing README rows)
+
+# ... (rest of existing script remains unchanged)
+        }
+
+# Gate: relative markdown links resolve, and every resource is linked from the README.
+# Two failures this repo has actually shipped, now mechanical:
+# 1. Broken relative links (four shipped, one in merged PR)
+# 2. Undocumented resources (missing README rows)
+
+... (rest of file remains unchanged)
 from collections.abc import Iterable
 
 class CheckResult:
@@ -45,7 +76,6 @@ so their upstream-relative links legitimately do not resolve in this tree. Files
 listed under a vendored entry's `local_only` are OURS and stay checked.
 """
 
-import json
 import re
 import subprocess
 import sys
