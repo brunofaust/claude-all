@@ -1,19 +1,10 @@
 #!/usr/bin/env python3
 """Gate: every `claude-all.json` `requires` entry resolves to a real resource.
 
-A per-resource dependency manifest (`claude-all.json`, key `requires`) is only
-safe if its targets exist — a `requires` pointing at a renamed/deleted resource
-would make the installer silently skip a dependency (treat it as "external") and
-ship a broken closure. This is the drift guard: it fails when a `requires` entry
-names no resource the installer can discover, and when a manifest is malformed.
-
-It resolves targets by importing the installer's own `discover()` /`state_key`,
-so "what counts as a resource" is defined in exactly one place (the installer),
-never re-derived here.
+A per-resource dependency manifest (`claude-all.json`, key `requires`) is only safe if its targets exist — a `requires` pointing at a renamed/deleted resource would make the installer silently skip a dependency (treat it as \\\"external\\") and ship a broken closure. This is the drift guard: it fails when a `requires` entry names no resource the installer can discover, and when a manifest is malformed. It resolves targets by importing the installer's own `discover()` /`state_key`, so \\\"what counts as a resource\\" is defined in exactly one place (the installer), never re-derived here.
 
 Exit codes: 0 = every entry resolves · 1 = a dangling/malformed entry.
 """
-
 from __future__ import annotations
 
 import json
@@ -33,7 +24,6 @@ def load_resource_keys() -> set[str]:
     """
     sys.path.insert(0, str(SRC))
     from claude_all.cli import discover, state_key
-
     return {state_key(it.kind, it.name) for it in discover([])}
 
 
@@ -56,33 +46,43 @@ def find_violations(known: set[str]) -> list[str]:
         except (json.JSONDecodeError, OSError) as exc:
             findings.append(f"{rel}: not valid JSON — {exc}")
             continue
+
         requires = config.get("requires", [])
         if not isinstance(requires, list):
             findings.append(f"{rel}: `requires` must be a list of 'kind/name' strings")
             continue
+
         for dep in requires:
             if not isinstance(dep, str):
                 findings.append(f"{rel}: non-string dependency {dep!r}")
             elif dep not in known:
                 findings.append(
                     f"{rel}: requires '{dep}' — no such resource (renamed/deleted? "
-                    "a built-in like /code-review does not belong in requires)"
+                    f"a built-in like /code-review does not belong in requires)"
                 )
     return findings
 
 
 def main() -> int:
     """CLI entry point — print findings to stdout, exit 1 on any."""
-    findings = find_violations(load_resource_keys())
+    known = load_resource_keys()
+    findings = find_violations(known)
+
+    # Print resource count on successful run
+    if not findings:
+        print(f"Resources inspected: {len(known)}")
+
     for finding in findings:
         print(finding)
+
     if findings:
         print(
             f"\n{len(findings)} dangling/invalid requires entry(ies) — a dependency "
-            "manifest points at a resource the installer cannot discover.",
-            file=sys.stderr,
+            f"manifest points at a resource the installer cannot discover."
+          , file=sys.stderr
         )
         return 1
+
     return 0
 
 
