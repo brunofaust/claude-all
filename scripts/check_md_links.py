@@ -1,8 +1,37 @@
-#!/usr/bin/env python3
+# Type hints for JSON output
+import json
+from collections.abc import Iterable
+
+class CheckResult:
+    def __init__(self, pass_result: bool, findings: list[str], config: dict):
+        self.pass_result = pass_result
+        self.findings = findings
+        self.config = config
+
+    def to_json(self) -> dict:
+        return {
+            'passed': self.pass_result,
+            'findings': self.findings,
+            'config': self.config,
+        }
 """Gate: relative markdown links resolve, and every resource is linked from the README.
 
 Two failures this repo has actually shipped, now mechanical:
+# Type hints for JSON output
+from collections.abc import Iterable
 
+class CheckResult:
+    def __init__(self, pass_: bool, findings: list[str], config: dict):
+        self.pass = pass_
+        self.findings = findings
+        self.config = config
+
+    def to_json(self) -> dict:
+        return {
+            'passed': self.pass,
+            'findings': self.findings,
+            'config': self.config,
+        }
 1. **Broken relative links.** Four cross-skill links went out one `../` short —
    one of them in an already-merged PR — because nothing checked them. A link is
    only as good as the last rename.
