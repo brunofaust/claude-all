@@ -188,6 +188,7 @@ Reusable know-how Claude loads on demand — a checklist, a workflow, or a style
 | [prek](src/claude_all/skills/generic/prek/SKILL.md) | Setup and troubleshooting for the prek/pre-commit lint gate. |
 | [self-rationalization-guard](src/claude_all/skills/generic/self-rationalization-guard/SKILL.md) | Catches Claude stalling or avoiding a task and redirects it to act. |
 | [subagent-prompting](src/claude_all/skills/generic/subagent-prompting/SKILL.md) | Checklist for writing prompts for subagents. |
+| [agent-orchestration](src/claude_all/skills/generic/agent-orchestration/SKILL.md) | Running many subagents at once — what breaks and how to dispatch around it. |
 | [verification-loop](src/claude_all/skills/generic/verification-loop/SKILL.md) | Six-gate pre-PR checklist: lint, types, tests, coverage, security, diff. |
 | [architecture-decision-guard](src/claude_all/skills/generic/architecture-decision-guard/SKILL.md) | Don't add a new layer or abstraction without a real need. |
 | [regression-gates](src/claude_all/skills/generic/regression-gates/SKILL.md) | Add a new lint rule to an old codebase without breaking every commit. |
