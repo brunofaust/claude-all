@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+# Added --json flag for machine-readable output
 """Gate: relative markdown links resolve, and every resource is linked from the README.
 
 Two failures this repo has actually shipped, now mechanical:
