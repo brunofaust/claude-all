@@ -130,4 +130,49 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    if __name__ == "__main__":
+        import argparse
+        
+        parser = argparse.ArgumentParser(description='Check markdown links and README coverage')
+        parser.add_argument('--json', action='store_true', help='Output results in JSON format')
+        args = parser.parse_args()
+        
+        findings = main()
+        if args.json:
+            import json
+            
+            # Aggregate counts and structured data
+            counts = {
+                'markdown_files_scanned': len(tracked_markdown()),
+                'links_resolved': len([f for f in findings if f.startswith('file:') and ':broken-link->' in f]),
+                'resources_checked': len([f for f in findings if f.startswith('README.md: undocumented ->')]),
+                'vendored_files_skipped': sum(1 for f in findings if 'SKIPPED: vendored file' in f)
+            }
+            
+            broken_links = [
+                {
+                    'file': f.split(':')[0],
+                    'link': f.split('->')[0].split(':')[1],
+                    'resolved_path': f.split('->')[1].split(':')[1].strip()
+                } for f in findings if f.startswith('file:') and ':broken-link->' in f
+            ]
+            
+            unlinked_resources = [
+                f.split('-> ')[1].split(':')[1].strip() for f in findings if f.startswith('README.md: undocumented ->')
+            ]
+            
+            result = {
+                'pass': len(findings) == 0,
+                'counts': counts,
+                'broken_links': broken_links,
+                'unlinked_resources': unlinked_resources
+            }
+            
+            print(json.dumps(result, indent=2))
+        else:
+            for finding in findings:
+                print(finding)
+            if findings:
+                print(f"\n{len(findings)} finding(s)\n", file=sys.stderr)
+                sys.exit(1)
+            sys.exit(0)
