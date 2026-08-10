@@ -1,0 +1,20 @@
+# JSON Output for check_md_links
+{
+    "pass": false,
+    "counts": {
+        "markdown_files_scanned": 42,
+        "links_resolved": 150,
+        "resources_checked": 12,
+        "files_skipped": 5
+    },
+    "broken_links": [
+        {
+            "file": "docs/guide.md",
+            "target": "../link.md",
+            "resolved_path": "../../link.md"
+        }
+    ],
+    "unlinked_resources": [
+        "src/claude_all/skills/generic/new_skill/SKILL.md"
+    ]
+}
