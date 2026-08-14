@@ -6,8 +6,12 @@ Fires on the `Bash` tool. Inspects the command and:
 - **BLOCKS** (exit 2 — the command does NOT run) clearly catastrophic or
   irreversible operations: `rm -rf /` and friends, disk wipes, fork bombs,
   destructive DB statements (`DROP`/`TRUNCATE`), history-rewriting force pushes,
-  `git reset --hard` / `git clean -fdx`, `docker`/`kubectl`/volume destruction,
-  and cloud-resource deletion (`terraform destroy`, `aws ... delete-*`,
+  `git reset --hard` / `git clean -fdx`, `git stash` / `push` / `save` / `drop` /
+  `clear` (pulls changes out of — or destroys stashed work in — a working tree
+  that may be shared by other sessions; `pop`/`apply`/`list`/`show`/`branch` stay
+  allowed since they only ever RESTORE or read an already-existing stash, never
+  create or destroy one), `docker`/`kubectl`/volume destruction, and
+  cloud-resource deletion (`terraform destroy`, `aws ... delete-*`,
   `aws s3 rm --recursive` / `rb`).
 - **WARNS** (exit 0 + `additionalContext`) on risky-but-sometimes-legitimate
   commands (broad `rm -rf`, `chmod -R 777`, `curl | sh`). Claude sees the warning
@@ -133,6 +137,23 @@ BLOCK_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (
         re.compile(r"\bgit\s+clean\s+[^\n]*(?:-[a-z]*f[a-z]*\b|--force\b)"),
         "git clean -f (deletes untracked files)",
+    ),
+    (
+        # Flags before the subcommand (`git -C <path> stash`, `git --no-pager
+        # stash`) are matched by the optional `-flag [value]` group so they don't
+        # slip past the `\bgit\s+stash\b` anchor. The negative lookahead is the
+        # whole point: `pop`/`apply`/`list`/`show`/`branch` all operate on an
+        # EXISTING stash (restore or read-only) and must stay allowed — trapping
+        # already-stashed work with no recovery path would be worse than the bug
+        # this blocks. Only stash-creating (`stash`, `push`, `save`, `-u`,
+        # `--include-untracked`) and stash-destroying (`drop`, `clear`) forms hit
+        # this pattern.
+        re.compile(
+            r"\bgit\s+(?:-[\w-]+(?:[ =]\S+)?\s+)*stash\b(?!\s+(?:pop|apply|list|show|branch)\b)"
+        ),
+        "git stash (removes changes from a shared working tree — another session's "
+        "uncommitted work can be silently pulled out from under it; to revert-proof "
+        "an edit instead, copy the file to a scratchpad, edit there, then copy back)",
     ),
     (
         re.compile(r"\bdocker\s+system\s+prune\b[^\n]*(--volumes|-a)"),
