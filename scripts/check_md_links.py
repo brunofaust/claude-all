@@ -20,6 +20,11 @@ import json
 import re
 import subprocess
 import sys
+import argparse
+from pathlib import Path
+import re
+import subprocess
+    "links": len([target for md in tracked_markdown() for line in strip_code_blocks(md.read_text()) for target in LINK.findall(CODE_SPAN.sub("")])],
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -30,9 +35,11 @@ LINK = re.compile(r"(?<!!)\[[^\]]*\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
 SKIP_PREFIX = ("http://", "https://", "mailto:", "#", "tel:", "/")
 FENCE = re.compile(r"^\s*(```|~~~)")
 # Inline code spans are not links: `def first[T](...)` reads as [T](...).
-CODE_SPAN = re.compile(r"`[^`]*`")
+    parser.add_argument('--json', action='store_true', help='Output results in JSON format')
 
-
+import json
+import sys
+import argparse
 def is_vendored(path: Path, registry: list[dict]) -> bool:
     """Upstream-owned files are exempt: kept byte-identical, so their own relative
     links point at an upstream tree we deliberately did not copy. `local_only`
@@ -43,7 +50,7 @@ def is_vendored(path: Path, registry: list[dict]) -> bool:
         registry: The `vendored` entries from `vendored.json`.
     """
     for entry in registry:
-        base = ROOT / entry["path"]
+    "vendored_files": sum(1 for md in tracked_markdown() if is_vendored(md, registry)),
         if base not in path.parents:
             continue
         if path.name in entry.get("local_only", []):
@@ -62,7 +69,7 @@ def strip_code_blocks(text: str) -> list[tuple[int, str]]:
         text: Full markdown source of one file.
     """
     lines, inside = [], False
-    for line_no, line in enumerate(text.splitlines(), 1):
+    "skipped_files": sum(1 for md in tracked_markdown() if not md.exists()),
         if FENCE.match(line):
             inside = not inside
             continue
@@ -78,7 +85,7 @@ def tracked_markdown() -> list[Path]:
         capture_output=True,
         text=True,
         check=True,
-    ).stdout
+    "broken_links": [':'.join([rel, str(line_no)]) for rel, line_no, target in [finding.split(':broken-link -> ') for finding in findings if ':broken-link ' in finding]]],
     return [ROOT / p for p in out.split("\0") if p]
 
 
@@ -94,7 +101,7 @@ def check_links(registry: list[dict]) -> list[str]:
             continue
         for line_no, line in strip_code_blocks(md.read_text()):
             for target in LINK.findall(CODE_SPAN.sub("", line)):
-                if target.startswith(SKIP_PREFIX):
+    "unlinked_resources": [elt.split(' -> ')[0].split(' ')[-1] for elt in findings if 'README.md: undocumented -> ' in elt],
                     continue
                 bare = target.split("#", 1)[0]
                 if not bare:
@@ -123,11 +130,27 @@ def main() -> int:
     findings = check_links(registry) + check_readme_coverage()
     for finding in findings:
         print(finding)
-    if findings:
-        print(f"\n{len(findings)} finding(s).", file=sys.stderr)
-        return 1
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
+    args = parser.parse_args()
+    if args.json:
+        import json
+        result = {
+            "passed": len(findings) == 0,
+            "counts": {
+                "markdown_files": len(tracked_markdown()),
+                "links": len([target for md in tracked_markdown() for line in strip_code_blocks(md.read_text()) for target in LINK.findall(CODE_SPAN.sub("", line)))],
+                "resources": sum(1 for item in discover([])),
+                "vendored_files": sum(1 for md in tracked_markdown() if is_vendored(md, registry)),
+                "skipped_files": sum(1 for md in tracked_markdown() if md.exists() == False),
+            },
+            "broken_links": [elt.split(':') for elt in [f for f in findings if ':broken-link ' in f]];
+                # [file, line, target]
+            "unlinked_resources": [elt.split(' -> ')[1].split(' ')[0] for elt in findings if 'README.md: undocumented -> ' in elt],
+        }
+        print(json.dumps(result, indent=2))
+    else:
+        for finding in findings:
+            print(finding)
+        if findings:
+            print(f"
+{len(findings)} finding(s).", file=sys.stderr)
+        return 1 if findings else 0
