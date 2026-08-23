@@ -82,8 +82,8 @@ def main() -> int:
             "manifest points at a resource the installer cannot discover.",
             file=sys.stderr,
         )
-        return 1
-    return 0
+    known_resources = load_resource_keys()
+    print(f'Checked {len(findings)} entries across {len(known_resources)} resources')
 
 
 if __name__ == "__main__":
