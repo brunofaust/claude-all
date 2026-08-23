@@ -47,9 +47,14 @@ def find_violations(known: set[str]) -> list[str]:
         Stable ``path: message`` findings (empty when the graph is clean).
     """
     findings: list[str] = []
-    for manifest in sorted((SRC / "claude_all").rglob("claude-all.json")) + sorted(
-        (SRC / "claude_all").rglob("*.claude-all.json")
-    ):
+    # Count the number of manifests inspected
+    manifests = sorted((SRC / "claude_all").rglob("claude-all.json"))
+        + sorted((SRC / "claude_all").rglob("*.claude-all.json"))
+    # Break long line into two for PEP8 compliance
+    # Report the total number of files inspected
+    print(f"Inspected {len(manifests)} claude-all.json files")
+    
+    for manifest in manifests:
         rel = manifest.relative_to(REPO_ROOT)
         try:
             config = json.loads(manifest.read_text(encoding="utf-8"))
@@ -84,7 +89,21 @@ def main() -> int:
         )
         return 1
     return 0
-
-
 if __name__ == "__main__":
-    sys.exit(main())
+    # Move the print statement inside main to ensure it's executed
+    # and findings is defined in this scope
+    findings = find_violations(load_resource_keys())
+    # Report the total number of files inspected
+    print(f"Inspected {len(manifests)} claude-all.json files")
+    for finding in findings:
+        print(finding)
+    if findings:
+        print(
+            f"\n{len(findings)} dangling/invalid requires entry(ies) — a dependency "
+            "manifest points at a resource the installer cannot discover.",
+            file=sys.stderr,
+        )
+        return 1
+    return 0
+
+        return findings
