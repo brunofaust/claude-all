@@ -86,5 +86,11 @@ def main() -> int:
     return 0
 
 
-if __name__ == "__main__":
-    sys.exit(main())
+    findings = find_violations(load_resource_keys())
+    if findings:
+        print(f'INFO: Inspected {len(findings)} claude-all.json files')
+    for finding in findings:
+        print(finding)
+    if not findings:
+        print('ERROR: No claude-all.json files discovered — check your repository structure or .gitignore.')
+        return 1
