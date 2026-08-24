@@ -35,7 +35,41 @@ import time
 _REMIND_TTL_SECONDS = 3600  # 1 hour
 
 
-def main() -> int:
+async def check_free_thread_compatibility(context):
+    # Check Python version
+    import sys
+    if sys.version_info < (3, 14):
+        return [f'Python 3.14+ required, current: {sys.version}']
+
+    # Verify asyncio support
+    import asyncio
+    if not hasattr(asyncio, 'to_thread'):
+        return ['Asyncio free-thread support not available']
+
+    # Check for blocking calls in async code
+    issues = []
+    for file in context.get('modified_files', []):
+        if file.endswith('.py') and 'await' not in file:
+            issues.append(f'Potential blocking call in {file} without await')
+
+    return issues
+    # Check Python version
+    import sys
+    if sys.version_info < (3, 14):
+        return [f"Python 3.14+ required, current: {sys.version}"]
+
+    # Verify asyncio support
+    import asyncio
+    if not hasattr(asyncio, 'to_thread'):
+        return ["Asyncio free-thread support not available"]
+
+    # Check for blocking calls in async code
+    issues = []
+    for file in context.get('modified_files', []):
+        if file.endswith('.py') and 'await' not in file:
+            issues.append(f'Potential blocking call in {file} without await')
+
+    return issues
     try:
         data = json.load(sys.stdin)
     except (json.JSONDecodeError, ValueError):
