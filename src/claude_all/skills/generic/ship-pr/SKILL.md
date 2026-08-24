@@ -8,7 +8,7 @@ description: >-
   security-review (if security surface) · seo (if HTML surface) · architecture-decision-guard (if
   structural) · IaC review (if CFN/Terraform) · migration-reviewer (if a DB migration) · dependency
   review (if a pyproject/package.json/lockfile changed — CVE gate + version-currency advice). Phase 3
-  (serial): docs-updater → (confirm) → git-committer → open a PR
+  (serial): docs-updater → re-gate the doc edits → (confirm) → git-committer → open a PR
   ready for review. Surface-scoped reviews run only when the diff touches their surface. Use when: "open a PR for this", "review and ship", finishing a substantive change
   that warrants review before it goes out. For the quick lint+test+commit loop with no review/PR, use
   the lighter `/ship`. Orchestrator only: it sequences existing agents and skills and gates on results.
@@ -116,14 +116,24 @@ surface the diff doesn't touch); a skipped review is not a failure.
 
 ### Phase 3 — finalize (SERIAL)
 
+> Phase 2's gate result is only valid for the tree it ran against. Step 6 mutates that tree, so
+> step 7 re-gates before anything is committed.
+
 6. **Docs & CLAUDE.md — `docs-updater` agent.** With the code now final, revise `CLAUDE.md` (and
    `README` / `ARCHITECTURE` where affected) to match the diff, so the always-loaded
    guidance never drifts from the code. It proposes diffs — confirm doc changes before they're staged.
    No-op if the diff changes nothing a doc describes.
-7. **Commit — `git-committer` agent (after confirm).** When review is clean and docs are in sync, show
+7. **Re-gate the doc edits — `code-quality`, ONLY if step 6 changed a file.** `docs-updater` mutates
+   the tree *after* Phase 2 already gated it, so the markdown hooks (`markdownlint`, `mdformat`,
+   `typos`, `check-md-links`) have never seen what it wrote. Re-run `prek run --all-files` **and**
+   `prek run --all-files --hook-stage pre-push` over the doc changes before committing. Skip only when
+   step 6 was a genuine no-op (`git status --porcelain` unchanged). Without this the commit carries an
+   ungated diff and the `prek` Stop hook blocks the turn *after* the work looks finished.
+
+8. **Commit — `git-committer` agent (after confirm).** When review is clean and docs are in sync, show
    the diff summary + proposed Conventional Commits message, get a one-word confirm, commit to the
    current branch.
-8. **PR — (after confirm).** Push the branch and open a PR (title + body summarizing the change and
+9. **PR — (after confirm).** Push the branch and open a PR (title + body summarizing the change and
    the gate results), ready for review — **not** a draft. Opening a PR is outward-facing — confirm
    before doing it. Do not enable auto-merge.
 
@@ -145,6 +155,12 @@ number (someone else's, or a re-review after pushes), use the existing **`review
 - **No feature without its tests.** The test-coverage gate runs before the other gates: a new/changed
   feature must ship unit tests for its code AND e2e/integration tests validating its business
   requirements (where such a suite exists). A missing-coverage gap is a hard stop, not a warning.
+- **The gate must be the LAST thing to touch the tree before the commit.** Any step that mutates files
+  after the Phase-2 gate — `docs-updater` above, or anything added later — invalidates it: the commit
+  then carries a diff no hook has read, and the `prek` Stop hook fires once the turn looks done. Either
+  re-gate after the mutation (step 7) or move the mutation ahead of Phase 2. A gate result is only
+  valid for the exact tree it ran against.
+
 - **Confirm the two outward steps** (commit, then PR) separately; open the PR ready for review (not a
   draft); never push force / enable auto-merge from here.
 - **Three phases; the review/gate phase runs in PARALLEL.** Phase 1 (mutating: the simplification
