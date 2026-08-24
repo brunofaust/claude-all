@@ -16,7 +16,6 @@ Exit codes: 0 = every entry resolves · 1 = a dangling/malformed entry.
 
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 
@@ -37,39 +36,36 @@ def load_resource_keys() -> set[str]:
     return {state_key(it.kind, it.name) for it in discover([])}
 
 
-def find_violations(known: set[str]) -> list[str]:
-    """Return one finding per dangling/malformed ``requires`` entry.
-
-    Args:
-        known: Every resolvable resource key.
-
-    Returns:
-        Stable ``path: message`` findings (empty when the graph is clean).
-    """
-    findings: list[str] = []
-    for manifest in sorted((SRC / "claude_all").rglob("claude-all.json")) + sorted(
-        (SRC / "claude_all").rglob("*.claude-all.json")
-    ):
-        rel = manifest.relative_to(REPO_ROOT)
-        try:
-            config = json.loads(manifest.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError) as exc:
-            findings.append(f"{rel}: not valid JSON — {exc}")
-            continue
-        requires = config.get("requires", [])
-        if not isinstance(requires, list):
-            findings.append(f"{rel}: `requires` must be a list of 'kind/name' strings")
-            continue
-        for dep in requires:
-            if not isinstance(dep, str):
-                findings.append(f"{rel}: non-string dependency {dep!r}")
-            elif dep not in known:
-                findings.append(
-                    f"{rel}: requires '{dep}' — no such resource (renamed/deleted? "
-                    "a built-in like /code-review does not belong in requires)"
-                )
-    return findings
-
+    def find_violations(known: set[str]) -> list[str]):
+        findings = []
+        valid_manifests = 0
+        for manifest in sorted((SRC / "claude_all").rglob("claude-all.json")) + sorted((SRC / "claude_all").rglob("*.claude-all.json")):
+            valid_manifests += 1
+            rel = manifest.relative_to(REPO_ROOT)
+            try:
+                config = json.loads(manifest.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError) as exc:
+                findings.append(f"{rel}: not valid JSON — {exc}")
+                continue
+            requires = config.get("requires", [])
+            if not isinstance(requires, list):
+                findings.append(f"{rel}: `requires` must be a list of 'kind/name' strings")
+                continue
+            for dep in requires:
+                if not isinstance(dep, str):
+                    findings.append(f"{rel}: non-string dependency {dep!r}")
+                elif dep not in known:
+                    findings.append(
+                        f"{rel}: requires '{dep}' — no such resource (renamed/deleted? "
+                        "a built-in like /code-review does not belong in requires)"
+                    )
+        if valid_manifests == 0:
+            print("No manifests discovered — check patterns in 'claude_all' or '*.claude-all.json'")
+            return []
+        count = len(findings)
+        if count == 0:
+            print(f"✓ {valid_manifests} resources validated, no issues found")
+        return findings
 
 def main() -> int:
     """CLI entry point — print findings to stdout, exit 1 on any."""
