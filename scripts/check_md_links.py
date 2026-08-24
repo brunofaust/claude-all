@@ -118,16 +118,53 @@ def check_readme_coverage() -> list[str]:
     ]
 
 
-def main() -> int:
+import json
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+
+# ... [rest of the original file remains unchanged] ...
+
+executions = []
+
+def record_execution(result: dict) -> None:
+    executions.append(result)
+
+# ... [rest of the original file remains unchanged] ...
+
+if __name__ == "__main__":
     registry = json.loads((ROOT / "vendored.json").read_text()).get("vendored", [])
     findings = check_links(registry) + check_readme_coverage()
+
+    if '--json' in sys.argv:
+        result = {
+            "passed": len(findings) == 0,
+            "counts": {
+                "markdown_files": len(tracked_markdown()),
+                "links_resolved": len(check_links(registry)),
+                "resources_checked": len(check_readme_coverage()),
+                "files_skipped": sum(1 for md in tracked_markdown() if is_vendored(md, registry))
+            },
+            "broken_links": [
+                {
+                    "file": finding.split(':', 1)[0],
+                    "link_target": finding.split('->')[1].strip().split()[0],
+                    "resolved_path": finding.split('->')[1].strip().split()[1]
+                } for finding in findings if ':->' in finding
+            ],
+            "unlinked_resources": [
+                finding.split('->')[1].strip() for finding in findings
+                if '->' not in finding and 'undocumented' in finding
+            ]
+        }
+        print(json.dumps(result))
+        sys.exit(0 if not findings else 1)
+    }
+
     for finding in findings:
         print(finding)
     if findings:
         print(f"\n{len(findings)} finding(s).", file=sys.stderr)
-        return 1
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
+        sys.exit(1)
+    sys.exit(0)
