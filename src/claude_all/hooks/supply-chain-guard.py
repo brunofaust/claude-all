@@ -50,7 +50,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-__all__ = ["analyze", "classify", "cooldown_findings", "main"]
+__all__ = ["analyze", "classify", "cooldown_findings", "executable_text", "main"]
 
 # ── static-check patterns ────────────────────────────────────────────────────
 JS_INSTALL_RE = re.compile(r"\b(npm|pnpm|yarn|bun)\s+(install|i|add|ci)\b")
@@ -60,6 +60,44 @@ PY_INSTALL_RE = re.compile(
 GIT_URL_RE = re.compile(r"git\+(?:https?|ssh)://|(?<![\w-])github:[\w.-]+/[\w.-]+|(?<![\w/])git://")
 PY_INDEX_RE = re.compile(r"--(?:extra-)?index-url\b")
 BARE_INSTALL_RE = re.compile(r"\b(npm|pnpm|yarn|bun)\s+(install|i)\b(?!\s+[\w@./-])")
+
+# A heredoc opener: `<<EOF`, `<<-EOF`, `<<'EOF'`, `<<"EOF"`.
+HEREDOC_RE = re.compile(r"<<-?\s*(['\"]?)(?P<tag>[A-Za-z_][A-Za-z0-9_]*)\1")
+
+
+def executable_text(command: str) -> str:
+    """Return ``command`` with every non-executable span blanked to spaces.
+
+    Trigger detection must never fire on text the shell will not RUN as a
+    command. A `grep` pattern searching logs for ``pip install``, an ``echo``
+    of setup instructions, a heredoc writing documentation, or a trailing
+    ``# remember to npm install`` comment all MENTION an install without
+    performing one; matching them trains the reader to ignore the guard,
+    which is worse than having no guard at all.
+
+    Spans are replaced with equal-length runs of spaces rather than deleted,
+    so every offset in the result still lines up with ``command`` and no two
+    previously-separated tokens can be joined into a spurious match.
+
+    Args:
+        command: The full Bash command line being inspected.
+    """
+    text = command
+    # 1. Heredoc bodies. Scan the ORIGINAL for openers: blanking preserves
+    #    length, so match offsets stay valid across iterations.
+    for match in HEREDOC_RE.finditer(command):
+        tag = match.group("tag")
+        rest = text[match.end() :]
+        closer = re.search(rf"^\s*{re.escape(tag)}\s*$", rest, re.MULTILINE)
+        stop = match.end() + (closer.start() if closer else len(rest))
+        text = text[: match.end()] + " " * (stop - match.end()) + text[stop:]
+    # 2. Quoted literals — single quotes first (no escapes inside them in sh).
+    blank = lambda m: " " * len(m.group())  # noqa: E731
+    text = re.sub(r"'[^']*'", blank, text)
+    text = re.sub(r'"[^"]*"', blank, text)
+    # 3. Comments — `#` only starts one at the beginning of a word.
+    return re.sub(r"(?m)(?:^|\s)#.*$", blank, text)
+
 
 LOCKFILES: dict[str, tuple[str, str]] = {
     "package-lock.json": ("npm", "npm ci"),
@@ -101,8 +139,11 @@ def analyze(command: str, cwd: Path) -> list[str]:
         command: The full Bash command line being inspected.
         cwd: Working directory the command runs in (used to locate lockfiles).
     """
-    js = JS_INSTALL_RE.search(command)
-    py = PY_INSTALL_RE.search(command)
+    # Triggers match EXECUTABLE text only — a command that merely mentions an
+    # install (grep pattern, heredoc, comment) must not fire the guard.
+    scan = executable_text(command)
+    js = JS_INSTALL_RE.search(scan)
+    py = PY_INSTALL_RE.search(scan)
     if not (js or py):
         return []
 
@@ -127,7 +168,7 @@ def analyze(command: str, cwd: Path) -> list[str]:
             "`--trusted-host` disables TLS/certificate verification for that host — avoid it; "
             "fix the index's certificate instead of trusting it blindly."
         )
-    bare = BARE_INSTALL_RE.search(command)
+    bare = BARE_INSTALL_RE.search(scan)
     if bare:
         for lock_name, (mgr, frozen) in LOCKFILES.items():
             if bare.group(1) == mgr and (cwd / lock_name).is_file():
@@ -171,10 +212,13 @@ def classify(command: str) -> tuple[str, str, list[str], str | None]:
     Args:
         command: The full Bash command line to classify.
     """
+    # Sanitise first: `shlex.split` on a heredoc body would tokenise its prose
+    # into what looks like a genuine install and trigger registry lookups.
+    scan = executable_text(command)
     try:
-        tokens = shlex.split(command)
+        tokens = shlex.split(scan)
     except ValueError:
-        tokens = command.split()
+        tokens = scan.split()
     n = len(tokens)
     for i, tok in enumerate(tokens):
         base = tok.rsplit("/", 1)[-1]
