@@ -65,6 +65,15 @@ BARE_INSTALL_RE = re.compile(r"\b(npm|pnpm|yarn|bun)\s+(install|i)\b(?!\s+[\w@./
 HEREDOC_RE = re.compile(r"<<-?\s*(['\"]?)(?P<tag>[A-Za-z_][A-Za-z0-9_]*)\1")
 
 
+def _blank(match: re.Match[str]) -> str:
+    """Replace a matched span with an equal-length run of spaces.
+
+    Args:
+        match: A regex match object to replace with spaces.
+    """
+    return " " * len(match.group())
+
+
 def executable_text(command: str) -> str:
     """Return ``command`` with every non-executable span blanked to spaces.
 
@@ -92,11 +101,10 @@ def executable_text(command: str) -> str:
         stop = match.end() + (closer.start() if closer else len(rest))
         text = text[: match.end()] + " " * (stop - match.end()) + text[stop:]
     # 2. Quoted literals — single quotes first (no escapes inside them in sh).
-    blank = lambda m: " " * len(m.group())  # noqa: E731
-    text = re.sub(r"'[^']*'", blank, text)
-    text = re.sub(r'"[^"]*"', blank, text)
+    text = re.sub(r"'[^']*'", _blank, text)
+    text = re.sub(r'"[^"]*"', _blank, text)
     # 3. Comments — `#` only starts one at the beginning of a word.
-    return re.sub(r"(?m)(?:^|\s)#.*$", blank, text)
+    return re.sub(r"(?m)(?:^|\s)#.*$", _blank, text)
 
 
 LOCKFILES: dict[str, tuple[str, str]] = {
