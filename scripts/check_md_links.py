@@ -119,35 +119,40 @@ def check_readme_coverage() -> list[str]:
 
     import json
     import sys
-    
-    
+
+
     def main(json_output: bool = False) -> int:
         registry = json.loads((ROOT / "vendored.json").read_text()).get("vendored", [])
         link_findings = check_links(registry)
         readme_findings = check_readme_coverage()
         findings = link_findings + readme_findings
-        
+
         if json_output:
             output = {
                 "passed": len(findings) == 0,
                 "counts": {
-                    "markdown_files_scanned": len([p for p in tracked_markdown() if p.exists() and not is_vendored(p, registry)]),
-                    "links_resolved": sum(1 for MD in tracked_markdown() if not is_vendored(MD, registry) for _ in check_links(registry)),
-                    "resources_checked": len(readme_findings),
-                    "files_skipped_as_vendored": len([p for p in tracked_markdown() if is_vendored(p, registry)])
+    "markdown_files_scanned": len([p for p in tracked_markdown() if 
+        p.exists() and not is_vendored(p, registry)]),
+    "links_resolved": sum(1 for MD in tracked_markdown() if 
+        not is_vendored(MD, registry) for _ in check_links(registry)),
+    "resources_checked": len(readme_findings),
+    "files_skipped_as_vendored": len([p for p in tracked_markdown() if 
+        is_vendored(p, registry)])
                 },
-                "broken_links": [
-                    {
-                        "file": finding.split": ")[0].split("#")[0],
-                        "raw_link": finding.split("(")[1].split(")")[0],
-                        "resolved_path": "not/exist"
-                    } for finding in link_findings
-                ],
-                "unlinked_resources": [
-                    finding.split(" -> ")[1].strip() for finding in readme_findings
+    "broken_links": [
+        {
+            "file": finding.split("(")[1].split(")")[0].split("#")[0]),
+            "raw_link": finding.split("(")[1].split(")")[0],
+            "resolved_path": "not/exist"
+        }
+        for finding in link_findings
+    ],
+    "unlinked_resources": [
+        finding.split(" -> ")[1].strip() for finding in readme_findings
+    ]
                 ]
             }
-            
+
             print(json.dumps(output, indent=2))
             return 0 if len(findings) == 0 else 1
         else:
