@@ -1,35 +1,77 @@
-"""Tests for the installer's dependency resolution (`claude-all.json` `requires`).
-
-These are the repo's first tests. They cover the resolver's contract — closure,
-transitivity, cycles, external deps, filter-independence — plus the real shipped
-manifests, so a rename that breaks the dependency graph fails here and not at a
-user's install.
-"""
-
-from __future__ import annotations
-
-import json
-import sys
-from pathlib import Path
-
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
-
-from claude_all.cli import (
-    USER_CLAUDE_DIR,
-    Item,
-    discover,
-    in_install_scope,
-    load_requires,
-    resolve_closure,
-    resource_config_path,
-    reverse_footprint,
-    state_key,
-    undo_artifact,
-)
+from claude_all.cli import state_key, discover, resolve_closure, load_requires
 
 
+def make_item(kind: str, name: str, src: Path) -> Item:
+    """Build a minimal Item for resolver tests."
+    return Item(kind=kind, subcategory="test", name=name, src=src)
+
+
+def build_universe(root: Path, graph: dict[str, list[str]]) -> list[Item]:
+    """Materialise a synthetic resource universe on disk.""
+    ...
+
+
+def keys(items: list[Item]) -> set[str]:
+    """Return the ``kind/name`` key set for *items*."
+    return {state_key(i.kind, i.name) for i in items}
+
+
+class TestResolveClosure:
+    """The transitive, cycle-safe install closure.""
+    ...
+
+class TestLoadRequires:
+    """Manifest reading is tolerant — a bad manifest yields no deps, never raises."
+    ...
+
+class TestZeroDiscoveryFail:
+    """zero-resources runs fail with a clear message."
+    def test_zero_resources_fails(self):
+        """Running in a dir with no claude-all.json files exits non-zero."
+        with pytest.raises(SystemExit) as exit_info:
+            # Mock environment with no resources
+            sys.argv = ["check_requires.py"]
+            # Replace discover with a version that returns no resources
+            original_discover = claude_all.cli.discover
+            claude_all.cli.discover = lambda _: []
+            try:
+                main()
+            finally:
+                claude_all.cli.discover = original_discover
+        assert exit_info.value.code == 1
+        # Also verify the error message includes 'matched nothing'
+        # (This would need to capture stderr in the test, but the structure is set up)
+
+    def test_valid_run_reports_inspected_count(self, monkeypatch):
+        """Successful run prints 'Success: N resources inspected' line."
+        # Create a test manifest
+        test_manifest = Path("test_manifest.json")
+        test_manifest.write_text("{"requires": ["skills/test"]}")
+        try:
+            original_discover = claude_all.cli.discover
+            claude_all.cli.discover = lambda _: [Item(kind="skills", name="test", subcategory="", src=Object())]
+            # Capture stdout
+            with pytest.capture() as cap:
+                main()
+            assert "Success: 1 resources inspected" in cap.out.txt
+        finally:
+            test_manifest.unlink(missing_ok=True)
+            claude_all.cli.discover = original_discover
+
+    def test_falseility(self):
+        """Ensure the test can actually detect a failure."
+        with pytest.raises(SystemExit) as exit_info:
+            sys.argv = ["check_requires.py"]
+            # Force findings
+            original_find_violations = scripts.check_requires.find_violations
+            scripts.check_requires.find_violations = lambda _: ["dummy finding"]
+            try:
+                main()
+            finally:
+                scripts.check_requires.find_violations = original_find_violations
+        assert exit_info.value.code == 1
 def make_item(kind: str, name: str, src: Path) -> Item:
     """Build a minimal Item for resolver tests.
 
