@@ -79,12 +79,10 @@ def main() -> int:
     if findings:
         print(
             f"\n{len(findings)} dangling/invalid requires entry(ies) — a dependency "
-            "manifest points at a resource the installer cannot discover.",
-            file=sys.stderr,
-        )
-        return 1
-    return 0
 
-
-if __name__ == "__main__":
-    sys.exit(main())
+    print(f'INFO: Scanned {len(manifests)} manifests, {len(known)} total dependencies, {len(findings)} invalid')
+    if findings:
+        print(f'\n{len(findings)} dangling/invalid requires entry(ies) — a dependency')
+        sys.exit(1)
+    else:
+        sys.exit(0)
