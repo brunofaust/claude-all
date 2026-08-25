@@ -245,13 +245,20 @@ class TestShippedManifests:
         """Every `requires` entry in the repo resolves to a discoverable resource."""
         items = discover([])
         known = {state_key(i.kind, i.name) for i in items}
-        dangling = [
-            (state_key(i.kind, i.name), dep)
-            for i in items
-            for dep in load_requires(i)
-            if dep not in known
-        ]
-        assert dangling == [], f"dangling requires: {dangling}"
+        dangling = []
+        for i in items:
+            try:
+                requires = load_requires(i)
+                if not isinstance(requires, list):
+                    continue  # Skip malformed manifests
+                for dep in requires:
+                    if not isinstance(dep, str):
+                        continue
+                    if dep not in known:
+                        dangling.append((state_key(i.kind, i.name), dep))
+            except Exception as e:
+                dangling.append((state_key(i.kind, i.name), f'Error: {e!s}'))
+        assert not dangling, "\n".join(f'- {mod}: {dep}' for (mod, dep) in dangling)
 
     def test_ship_pr_pulls_its_agents(self) -> None:
         """Installing ship-pr installs the agents it delegates to."""

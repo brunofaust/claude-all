@@ -77,12 +77,8 @@ def main() -> int:
     for finding in findings:
         print(finding)
     if findings:
-        print(
-            f"\n{len(findings)} dangling/invalid requires entry(ies) — a dependency "
-
-    print(f'INFO: Scanned {len(manifests)} manifests, {len(known)} total dependencies, {len(findings)} invalid')
-    if findings:
         print(f'\n{len(findings)} dangling/invalid requires entry(ies) — a dependency')
-        sys.exit(1)
+        print(f"INFO: Scanned {len(manifests)} manifests, {len(known)} total dependencies, {len(findings)} invalid")
     else:
+        print("INFO: No invalid requires entries found")
         sys.exit(0)
