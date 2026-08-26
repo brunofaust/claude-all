@@ -379,12 +379,12 @@ def reverse_scoped_record(installs: dict, entry: dict) -> list[str]:
 
 
 def prune_installs(entries: list[dict]) -> list[str]:
-    """Remove each stale install (symlink + CLAUDE.md block + hook entry) and its companions.
+    """Remove each stale install footprint and its companions.
 
     Symlink-guarded: only unlinks a recorded target when it is actually a symlink,
-    so a recorded real file (e.g. a CLAUDE.md path) is never deleted. Uses the
-    idempotent ``remove_claude_md`` / ``remove_hook`` for the tagged block and the
-    settings hook entry. Drops the primary and its companion records from state.
+    so a recorded real file (for example, an instruction document) is never
+    deleted. Recorded artifacts reverse tagged blocks and settings hook entries,
+    then drop the primary and companion records from state.
 
     Args:
         entries: Primary state entries to prune (from :func:`stale_installs`).
@@ -1897,26 +1897,6 @@ def inject_hook(item: Item, scope: str) -> str | None:
     return f"hook installed → {dest}, registered in {settings_file}"
 
 
-def remove_hook(item: Item, scope: str) -> str | None:
-    """Remove hook entry from settings.json + delete symlink. Idempotent.
-
-    Args:
-        item: The resource item whose hook to remove.
-        scope: Installation scope — ``'user'`` or ``'project'``.
-    """
-    dest = hook_symlink_dest(scope, item)
-    # The settings-entry removal IS `drop_settings_command` — one owner for
-    # "strip this command from settings.json", used by both remove_hook and the
-    # artifact-based prune path.
-    removed_any = bool(drop_settings_command(settings_path(scope), str(dest)))
-
-    if dest.is_symlink() or dest.exists():
-        dest.unlink()
-        removed_any = True
-
-    return "hook removed" if removed_any else None
-
-
 # ---------------------- CLAUDE.md injection ----------------------
 
 
@@ -2008,19 +1988,6 @@ def inject_instruction(item: Item, target: Path, label: str) -> str | None:
     return f"{label} {action} ({target})"
 
 
-def remove_tagged_block(target: Path, item: Item) -> bool:
-    """Remove one resource's managed instruction block when it exists.
-
-    Args:
-        target: Instruction document that may hold the block.
-        item: Resource that owns the managed tags.
-
-    Returns:
-        True when a block was removed.
-    """
-    return write_tagged_block(target, item, None) == "removed"
-
-
 def write_tagged_block(target: Path, item: Item, content: str | None) -> str:
     """Apply one managed-block insertion, replacement, or removal.
 
@@ -2077,19 +2044,6 @@ def inject_claude_md(item: Item, scope: str) -> str | None:
         {"type": "claude_md", "file": str(target), "start": start_tag, "end": end_tag},
     )
     return message
-
-
-def remove_claude_md(item: Item, scope: str) -> str | None:
-    """Strip the resource's tagged block from the target CLAUDE.md.
-
-    Args:
-        item: The resource item whose tagged block to remove.
-        scope: Target CLAUDE.md scope — ``'user'`` or ``'project'``.
-    """
-    target = claude_md_target(scope)
-    if not remove_tagged_block(target, item):
-        return None
-    return f"CLAUDE.md stripped ({target})"
 
 
 def command_hook_basename(cmd: str) -> str:

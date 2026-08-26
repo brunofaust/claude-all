@@ -115,7 +115,7 @@ def test_inject_codex_agents_md_preserves_handwritten_content(tmp_path: Path, mo
     item = cli.Item("instructions", "test", "demo", snippet)
 
     cli.inject_agents_md(item, "project")
-    assert cli.remove_tagged_block(agents, item) is True
+    assert cli.write_tagged_block(agents, item, None) == "removed"
 
     assert agents.read_text(encoding="utf-8") == "# Local rules\n\nKeep this.\n"
 

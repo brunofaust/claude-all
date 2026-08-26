@@ -71,15 +71,11 @@ lint.ignore = [
   "RUF001", # ambiguous unicode — skill content intentionally uses special chars
 ]
 lint.isort.known-first-party = [ "claude_all" ]
-# vulture_whitelist.py is a list of bare identifier names (vulture's whitelist
-# format), not executable code — exempt it from "useless expression" / "undefined
-# name" lints.
-lint.per-file-ignores."vulture_whitelist.py" = [ "B018", "F821" ]
 
 [tool.vulture]
 min_confidence = 60
-paths = [ "src/claude_all/cli.py", "src/claude_all/hooks", "src/claude_all/skills", "vulture_whitelist.py" ]
-exclude = [ ".venv/", ".worktrees/", ".claude/" ]
+paths = [ "src/claude_all/cli.py", "src/claude_all/hooks", "src/claude_all/skills" ]
+exclude = [ ".venv/", ".worktrees/", ".claude/", ".codex/" ]
 
 [tool.typos]
 

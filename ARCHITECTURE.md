@@ -39,7 +39,7 @@ agents/hooks/skills inside whatever project adopted them.
 | `prek.toml` | The full pre-commit/prek hook chain — the project's single lint/quality gate (see "Gates" below). |
 | `codecongruence.toml` | Config for the `codecongruence` semantic-drift hook run via prek. |
 | `pyproject.toml` | Package metadata, `ruff`/`vulture`/`typos`/`markdownlint`/`semantic-release`/`commitizen` config. No runtime dependencies (`dependencies = []`) — the installer only touches the standard library plus dev-only `prek`/`pytest`. |
-| `vendored.json` + `vulture_whitelist.py` | Vendored-resource manifest (see "Vendored resources" below) and vulture's allowlist of intentionally-unused names. |
+| `vendored.json` | Vendored-resource manifest (see "Vendored resources" below). |
 
 ## How the pieces relate
 
@@ -58,7 +58,7 @@ agents/hooks/skills inside whatever project adopted them.
 `prek run --all-files` is the single lint/quality entry point (mirrored in `.github/workflows/ci.yml`, which runs the same command on every PR). It chains a standard `pre-commit-hooks` set (JSON/TOML/YAML validation, whitespace/EOL fixers, large-file and merge-conflict checks, `no-commit-to-branch`) with several checks specific to this repo:
 
 - `ruff-check` / `ruff-format` (Python lint + format, target `py311`), `mypy` (scoped to `cli.py`, `scripts/`, `src/claude_all/hooks/`, `src/claude_all/tools/` — skill-embedded `hook.py` files all share the module name `hook`, which mypy can't batch-check, so ruff + vulture cover those instead), `pyupgrade`, `typos`, `gitleaks`, and `pygrep-hooks` (blanket `# type: ignore`, mock-method mistakes, deprecated `log.warn`, comment-style type annotations).
-- `vulture` (dead-code detection at `min_confidence = 60`, scoped to `cli.py`, `src/claude_all/hooks/`, `src/claude_all/skills/`, `vulture_whitelist.py`).
+- `vulture` (dead-code detection at `min_confidence = 60`, scoped to `cli.py`, `src/claude_all/hooks/`, and `src/claude_all/skills/`).
 - `banned-project-names` — a `pygrep` local hook that fails if any real project name, ticket-prefix artifact, or stray tool-call XML tag leaks into `src/claude_all/{agents,skills,instructions}/`. This is the mechanical enforcement of the "always use generic placeholders" rule in `CLAUDE.md` — skills and agents here are shared tooling and must not encode one specific project's names or architecture.
 - `check-requires` (`scripts/check_requires.py`) — every `claude-all.json` `requires` entry must resolve to a real resource.
 - `check-md-links` (`scripts/check_md_links.py`) — every relative markdown link in the repo must resolve, and every discovered resource (agent/skill/hook/tool/MCP/instruction) must have a row in `README.md`. This is what makes `README.md` the enforced single source of truth for the catalog rather than aspirational documentation.
