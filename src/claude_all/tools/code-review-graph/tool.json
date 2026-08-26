@@ -28,6 +28,6 @@
       ]
     }
   ],
-  "post_install_message": "Please run 'code-review-graph build' inside each project where you want to use it. Separate --platform claude-code and --platform codex installs scope instructions, bundled skills, and hooks to just Claude Code and Codex (code-review-graph's unscoped default also writes configuration for every detected coding tool). This installs a git pre-commit hook running 'update + detect-changes --brief'. It appends after an existing hook rather than overwriting it (verified against its source, skills.py::install_git_hook) — but if prek's own hook hasn't been wired yet in this checkout (run `prek install` — `uv sync --dev` only installs the `prek` binary, it does not wire the git hook), code-review-graph's hook installs alone and becomes the ONLY pre-commit check until you run `prek install` afterward. Run `prek install` in this checkout either way to be sure prek's gate is present.",
+  "post_install_message": "Run 'code-review-graph build' inside each project where you want to use it. Then run 'prek install' in this checkout to ensure the project's full pre-commit gate remains active.",
   "description": "Persistent incremental knowledge graph for token-efficient, context-aware code reviews with Claude Code. Installed via 'uv tool install' from git (extras: communities → igraph for community detection, enrichment → jedi for static analysis)."
 }

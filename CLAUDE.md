@@ -9,7 +9,7 @@ It detects the locally available host CLIs; it never installs either CLI.
 # Install an agent or skill into every available host (positional args are path filters)
 claude-all --all --user <name>     # ~/.claude, ~/.codex, and ~/.agents/skills
 claude-all --all --project <name>  # ./.claude, ./.codex, and ./.agents/skills
-claude-all --rebuild               # refresh the managed Codex build cache only
+claude-all --rebuild               # refresh the internal Codex artifact cache
 
 # Remove installs
 claude-all --prune                 # only what the repo no longer ships
@@ -24,6 +24,14 @@ uv sync --dev
 # Lint (single entry point — runs ruff, mypy, typos)
 prek run --all-files
 ```
+
+### `--rebuild`
+
+`claude-all --rebuild` rebuilds its internal Codex artifact cache from the current
+repository resources. It has no user or project scope and does not install,
+remove, or relink any visible resource. Normal installs refresh the cache when
+needed; use this command only to recover a stale or corrupted cache while
+developing the installer.
 
 ## Commits and releases
 
@@ -84,15 +92,6 @@ across every parallel PR. Release notes are generated from commit/PR history ins
 | `.codex/agents/`                                         | Generated TOML sub-agent definitions scoped to this repo                                                                      |
 | `.codex/hooks.json`                                      | Codex hook registrations scoped to this repo                                                                                  |
 | `.agents/skills/`                                        | Codex-compatible skills scoped to this repo                                                                                   |
-| `~/.claude-all/codex/agents/`                            | Installer-owned generated Codex agent TOML cache; installed Codex agents symlink here                                         |
-
-## Codex agent model mapping
-
-`CODEX_MODEL_MAP` in `src/claude_all/cli.py` is the canonical mapping from the
-Claude `model` field authored in agent Markdown to the generated Codex TOML
-model and reasoning effort. When adding or changing an agent model, update this
-map in the same change and add or adjust its rendering test. Opus aliases map
-to `gpt-5.6-sol` in `codex_model_for`; keep that fallback explicit and tested.
 
 ## Adding a new agent or skill
 
@@ -346,49 +345,3 @@ searches to `Explore`). Install with `claude-all --all --user <name>`.
     a one-off personal change that does not belong in any agent or skill.
 - Do not edit files outside this repo's tree (e.g. `~/.claude/`, `~/.codex/`, other project
     repos) unless the user explicitly requests it.
-
-<!-- code-review-graph MCP tools -->
-## MCP Tools: code-review-graph
-
-**This project has a knowledge graph. Start with the code-review-graph
-MCP tools to narrow scope, then read the source.** The graph is cheaper than scanning files and
-gives you structural context (callers, dependents, test coverage) that file search cannot.
-
-### When to use graph tools FIRST
-
-- **Exploring code**: `semantic_search_nodes_tool` or `query_graph_tool` instead of Grep
-- **Understanding impact**: `get_impact_radius_tool` instead of manually tracing imports
-- **Code review**: `detect_changes_tool` + `get_review_context_tool` instead of reading entire files
-- **Finding relationships**: `query_graph_tool` with callers_of/callees_of/imports_of/tests_for
-- **Architecture questions**: `get_architecture_overview_tool` + `list_communities_tool`
-
-### Verify in the source
-
-- Narrow scope with the graph, then read the source. Do not change code from graph output alone.
-- For any non-trivial change, read the implementation and the relevant tests before concluding.
-- Verify the exact source when touching behavior, database logic, migrations, retries, fallbacks,
-  recovery, or compatibility code.
-- When the graph and the source disagree, the source wins. The graph may be stale or may not
-  model that relationship.
-- An empty graph result can mean "not indexed" or "not statically visible", not "does not exist".
-
-### Key Tools
-
-| Tool | Use when |
-| ------ | ---------- |
-| `detect_changes_tool` | Reviewing code changes — gives risk-scored analysis |
-| `get_review_context_tool` | Need source snippets for review — token-efficient |
-| `get_impact_radius_tool` | Understanding blast radius of a change |
-| `get_affected_flows_tool` | Finding which execution paths are impacted |
-| `query_graph_tool` | Tracing callers, callees, imports, tests, dependencies |
-| `semantic_search_nodes_tool` | Finding functions/classes by name or keyword |
-| `get_architecture_overview_tool` | Understanding high-level codebase structure |
-| `refactor_tool` | Planning renames, finding dead code |
-
-### Workflow
-
-1. The graph auto-updates on file changes (via hooks).
-2. Use `detect_changes_tool` for code review.
-3. Use `get_affected_flows_tool` to understand impact.
-4. Use `query_graph_tool` pattern="tests_for" to check coverage.
-<!-- /code-review-graph MCP tools -->
