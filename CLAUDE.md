@@ -1,11 +1,15 @@
 # claude-all — contribution guidelines
 
+`claude-all` is the single installer command for both Claude Code and Codex.
+It detects the locally available host CLIs; it never installs either CLI.
+
 ## Commands
 
 ```bash
-# Install an agent or skill into Claude Code (positional args are path filters)
-claude-all --all --user <name>     # global (~/.claude)
-claude-all --all --project <name>  # repo-local (./.claude)
+# Install an agent or skill into every available host (positional args are path filters)
+claude-all --all --user <name>     # ~/.claude, ~/.codex, and ~/.agents/skills
+claude-all --all --project <name>  # ./.claude, ./.codex, and ./.agents/skills
+claude-all --rebuild               # refresh the managed Codex build cache only
 
 # Remove installs
 claude-all --prune                 # only what the repo no longer ships
@@ -70,13 +74,25 @@ across every parallel PR. Release notes are generated from commit/PR history ins
 | `src/claude_all/cli.py`                                 | CLI installer — discovers and installs agents/skills/hooks; console script `claude-all`                                       |
 | `src/claude_all/agents/<category>/<name>.md`           | Flat agent definition (no companions) — dispatched by the router                                                              |
 | `src/claude_all/agents/<category>/<name>/agent.md`     | Folder agent (ships companions) — `agent.md` + `claude_md.md` and/or `hook.py`/`hook.json` grouped in one dir                  |
-| `src/claude_all/agents/<category>/<name>.claude_md.md` | Companion snippet injected into `~/.claude/CLAUDE.md` on install (folder agents put it at `<name>/claude_md.md`)               |
+| `src/claude_all/agents/<category>/<name>.claude_md.md` | Companion snippet injected into Claude `CLAUDE.md` and Codex `AGENTS.md` on install (folder agents put it at `<name>/claude_md.md`) |
 | `src/claude_all/skills/<category>/<name>/SKILL.md`     | Skill definitions (invoked via Skill tool)                                                                                    |
-| `src/claude_all/instructions/<name>/claude_md.md`      | Standalone `~/.claude/CLAUDE.md` snippet (no agent/skill to install — e.g. dispatch rules for built-in agents like `Explore`) |
+| `src/claude_all/instructions/<name>/claude_md.md`      | Standalone Claude `CLAUDE.md` and Codex `AGENTS.md` snippet (no agent/skill to install — e.g. dispatch rules for built-in agents like `Explore`) |
 | `src/claude_all/hooks/`                                 | Standalone hook scripts — installable kind, wired per the `hooks/hooks.json` manifest                                          |
 | `.claude/hooks/`                                         | Active hooks for this repo's Claude sessions                                                                                  |
 | `.claude/agents/`                                        | Sub-agent definitions scoped to this repo                                                                                     |
 | `.claude/skills/`                                        | Skills scoped to this repo (used when working ON claude-all, NOT shipped via the installer) — e.g. `vendored-sources`. `.claude/` is tracked in this repo (not git-ignored). |
+| `.codex/agents/`                                         | Generated TOML sub-agent definitions scoped to this repo                                                                      |
+| `.codex/hooks.json`                                      | Codex hook registrations scoped to this repo                                                                                  |
+| `.agents/skills/`                                        | Codex-compatible skills scoped to this repo                                                                                   |
+| `~/.claude-all/codex/agents/`                            | Installer-owned generated Codex agent TOML cache; installed Codex agents symlink here                                         |
+
+## Codex agent model mapping
+
+`CODEX_MODEL_MAP` in `src/claude_all/cli.py` is the canonical mapping from the
+Claude `model` field authored in agent Markdown to the generated Codex TOML
+model and reasoning effort. When adding or changing an agent model, update this
+map in the same change and add or adjust its rendering test. Opus aliases map
+to `gpt-5.6-sol` in `codex_model_for`; keep that fallback explicit and tested.
 
 ## Adding a new agent or skill
 
@@ -102,7 +118,9 @@ across every parallel PR. Release notes are generated from commit/PR history ins
 A skill or agent may ship a `hook.py` + `hook.json` beside its main file
 (`SKILL.md` / folder-agent `agent.md`; a flat agent uses prefixed siblings
 `<name>.hook.{py,json}`). On install the script is symlinked into
-`.claude/hooks/` and merged into `settings.json`. There are **two archetypes** —
+`.claude/hooks/` for Claude and into Codex's hook configuration when supported.
+The hosts have different hook input/output contracts, so a Codex hook must use an
+adapter rather than assuming Claude hook output is portable. There are **two archetypes** —
 pick ONE and obey its firing rule:
 
 | Archetype          | Purpose                                                                                                          | Fires                                                              | Channel                                                                  |
@@ -301,12 +319,13 @@ Summaries are acceptable only when:
 - Omit file paths and line numbers from lint/type errors.
 - Summarise a failing test as "2 tests failed" without the failure bodies.
 
-## CLAUDE.md injection — never edit `~/.claude/CLAUDE.md` directly
+## Managed instruction injection — never edit the installed files directly
 
-`~/.claude/CLAUDE.md` is the user's global Claude config. It is managed by
-the `claude-all` installer via tagged snippet injection. **Do not edit it directly.**
+`~/.claude/CLAUDE.md` (Claude) and `~/.codex/AGENTS.md` (Codex) are the user's
+global instruction files. They are managed by the `claude-all` installer via
+tagged snippet injection. **Do not edit injected blocks directly.**
 
-### How dispatch instructions reach `~/.claude/CLAUDE.md`
+### How dispatch instructions reach the host instruction files
 
 When `claude-all --all --user <agent>` runs, it looks for a
 `<agent>.claude_md.md` file next to the agent's `.md` file and injects its
@@ -322,8 +341,54 @@ searches to `Explore`). Install with `claude-all --all --user <name>`.
 ### Rules
 
 - To add dispatch table rows or anti-patterns for an agent, create or update
-    its `<name>.claude_md.md` — never edit `~/.claude/CLAUDE.md` by hand.
-- Only edit `~/.claude/CLAUDE.md` directly if the user explicitly asks to make
+    its `<name>.claude_md.md` — never edit injected blocks by hand.
+- Only edit a host instruction file directly if the user explicitly asks to make
     a one-off personal change that does not belong in any agent or skill.
-- Do not edit files outside this repo's tree (e.g. `~/.claude/`, other project
+- Do not edit files outside this repo's tree (e.g. `~/.claude/`, `~/.codex/`, other project
     repos) unless the user explicitly requests it.
+
+<!-- code-review-graph MCP tools -->
+## MCP Tools: code-review-graph
+
+**This project has a knowledge graph. Start with the code-review-graph
+MCP tools to narrow scope, then read the source.** The graph is cheaper than scanning files and
+gives you structural context (callers, dependents, test coverage) that file search cannot.
+
+### When to use graph tools FIRST
+
+- **Exploring code**: `semantic_search_nodes_tool` or `query_graph_tool` instead of Grep
+- **Understanding impact**: `get_impact_radius_tool` instead of manually tracing imports
+- **Code review**: `detect_changes_tool` + `get_review_context_tool` instead of reading entire files
+- **Finding relationships**: `query_graph_tool` with callers_of/callees_of/imports_of/tests_for
+- **Architecture questions**: `get_architecture_overview_tool` + `list_communities_tool`
+
+### Verify in the source
+
+- Narrow scope with the graph, then read the source. Do not change code from graph output alone.
+- For any non-trivial change, read the implementation and the relevant tests before concluding.
+- Verify the exact source when touching behavior, database logic, migrations, retries, fallbacks,
+  recovery, or compatibility code.
+- When the graph and the source disagree, the source wins. The graph may be stale or may not
+  model that relationship.
+- An empty graph result can mean "not indexed" or "not statically visible", not "does not exist".
+
+### Key Tools
+
+| Tool | Use when |
+| ------ | ---------- |
+| `detect_changes_tool` | Reviewing code changes — gives risk-scored analysis |
+| `get_review_context_tool` | Need source snippets for review — token-efficient |
+| `get_impact_radius_tool` | Understanding blast radius of a change |
+| `get_affected_flows_tool` | Finding which execution paths are impacted |
+| `query_graph_tool` | Tracing callers, callees, imports, tests, dependencies |
+| `semantic_search_nodes_tool` | Finding functions/classes by name or keyword |
+| `get_architecture_overview_tool` | Understanding high-level codebase structure |
+| `refactor_tool` | Planning renames, finding dead code |
+
+### Workflow
+
+1. The graph auto-updates on file changes (via hooks).
+2. Use `detect_changes_tool` for code review.
+3. Use `get_affected_flows_tool` to understand impact.
+4. Use `query_graph_tool` pattern="tests_for" to check coverage.
+<!-- /code-review-graph MCP tools -->

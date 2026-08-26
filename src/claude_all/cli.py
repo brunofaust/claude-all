@@ -24,12 +24,14 @@ from __future__ import annotations
 import argparse
 import contextlib
 import curses
+import hashlib
 import json
 import os
 import re
 import shutil
 import subprocess
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -41,6 +43,7 @@ REPO_ROOT = Path(__file__).resolve().parent
 USER_CLAUDE_DIR = Path.home() / ".claude"
 STATE_DIR = Path.home() / ".claude-all"
 STATE_FILE = STATE_DIR / "state.json"
+STATE_VERSION = 2
 
 
 # ---------------------- state file ----------------------
@@ -50,13 +53,82 @@ def state_key(kind: str, name: str) -> str:
     return f"{kind}/{name}"
 
 
+def state_scope(path: str | Path | None) -> str:
+    """Return the installation scope that owns one recorded path.
+
+    Args:
+        path: Recorded artifact path, if the installation has a filesystem target.
+
+    Returns:
+        ``"project"`` for paths rooted in the current repository; otherwise
+        ``"user"``.
+    """
+    if path and str(Path.cwd()) in str(path) and str(Path.home()) not in str(path):
+        return "project"
+    return "user"
+
+
+def state_host(path: str | Path | None) -> str:
+    """Return the host that owns one recorded path.
+
+    Args:
+        path: Recorded artifact path, if the installation has a filesystem target.
+
+    Returns:
+        ``"codex"`` for Codex configuration artifacts; otherwise ``"claude"``.
+    """
+    if path and (
+        ".codex" in Path(path).parts
+        or ".agents" in Path(path).parts
+        or Path(path).name == "AGENTS.md"
+    ):
+        return "codex"
+    return "claude"
+
+
+def migrate_state(state: dict) -> dict:
+    """Upgrade legacy install entries to records owned by scope and host.
+
+    Args:
+        state: Parsed installer state that may use the legacy flat record shape.
+
+    Returns:
+        The supplied state with every entry represented by independent scope and
+        host records.
+    """
+    if state.get("version") == STATE_VERSION:
+        return state
+    for entry in state.setdefault("installs", {}).values():
+        if "scopes" in entry:
+            continue
+        target = entry.get("target")
+        scope = state_scope(target)
+        host = state_host(target)
+        entry["scopes"] = {
+            scope: {
+                "hosts": {
+                    host: {
+                        "target": target,
+                        "installed_at": entry.get("installed_at"),
+                        "artifacts": entry.get("artifacts") or [],
+                    }
+                }
+            }
+        }
+        entry.pop("target", None)
+        entry.pop("installed_at", None)
+        entry.pop("artifacts", None)
+    state["version"] = STATE_VERSION
+    return state
+
+
 def load_state() -> dict:
     if not STATE_FILE.exists():
-        return {"version": 1, "installs": {}}
+        return {"version": STATE_VERSION, "installs": {}}
     try:
-        return json.loads(STATE_FILE.read_text())
+        return migrate_state(json.loads(STATE_FILE.read_text()))
     except json.JSONDecodeError:
-        return {"version": 1, "installs": {}}
+        return {"version": STATE_VERSION, "installs": {}}
 
 
 def save_state(state: dict) -> None:
@@ -64,28 +136,34 @@ def save_state(state: dict) -> None:
     STATE_FILE.write_text(json.dumps(state, indent=2))
 
 
-def record_install(kind: str, name: str, target_path: Path | None) -> None:
-    state = load_state()
-    state.setdefault("installs", {})
-    key = state_key(kind, name)
-    prior = state.get("installs", {}).get(key, {})
-    state["installs"][key] = {
-        "kind": kind,
-        "name": name,
-        "target": str(target_path) if target_path else None,
-        "installed_at": datetime.now(UTC).isoformat(),
-        # A re-install replays every artifact-recording call, so start clean each
-        # time rather than accumulating duplicates from the previous install.
-        "artifacts": [],
-    }
-    # Preserve nothing from `prior` — record_install runs FIRST in every install
-    # path, then the artifact-creating steps (claude_md / hook) append via
-    # record_artifact. This reset is what keeps the footprint current, not stale.
-    _ = prior
-    save_state(state)
+def record_install(
+    kind: str,
+    name: str,
+    target_path: Path | None,
+    *,
+    host: str | None = None,
+    scope: str | None = None,
+) -> None:
+    """Start a fresh footprint for one resource on one host and scope.
+
+    Args:
+        kind: Resource category being installed.
+        name: Resource name within its category.
+        target_path: Filesystem target, when the host installation has one.
+        host: Explicit host ownership override.
+        scope: Explicit installation-scope override.
+    """
+    record_footprint(kind, name, target_path, host=host, scope=scope, replace=True)
 
 
-def record_artifact(kind: str, name: str, artifact: dict) -> None:
+def record_artifact(
+    kind: str,
+    name: str,
+    artifact: dict,
+    *,
+    host: str | None = None,
+    scope: str | None = None,
+) -> None:
     """Append one concrete side-effect to a resource's recorded footprint.
 
     The footprint lets ``--prune`` reverse EXACTLY what an install did — a
@@ -99,13 +177,82 @@ def record_artifact(kind: str, name: str, artifact: dict) -> None:
         artifact: A ``{"type": ...}`` record. Types: ``"symlink"`` (``path``),
             ``"claude_md"`` (``file`` / ``start`` / ``end``), ``"settings_hook"``
             (``file`` / ``command``).
+        host: Explicit host ownership override.
+        scope: Explicit installation-scope override.
     """
+    path = artifact.get("path") or artifact.get("file")
+    record_footprint(kind, name, path, artifact=artifact, host=host, scope=scope)
+
+
+def record_footprint(
+    kind: str,
+    name: str,
+    path: Path | str | None,
+    *,
+    artifact: dict | None = None,
+    host: str | None = None,
+    scope: str | None = None,
+    replace: bool = False,
+) -> None:
+    """Persist either an install target or one artifact under its host/scope.
+
+    Args:
+        kind: Resource category.
+        name: Resource name within that category.
+        path: Target or artifact path used to infer ownership.
+        artifact: Optional concrete footprint to append.
+        host: Explicit host override.
+        scope: Explicit installation-scope override.
+        replace: Whether to reset the host record for a fresh install.
+    """
+    record_scope = scope or state_scope(path)
+    record_host = host or state_host(path)
     state = load_state()
-    entry = state.setdefault("installs", {}).get(state_key(kind, name))
-    if entry is None:  # record_install always runs first; defensive only
-        return
-    entry.setdefault("artifacts", []).append(artifact)
+    entry = state_entry(state, state_key(kind, name), kind, name)
+    hosts = host_records(entry, record_scope)
+    if replace:
+        hosts[record_host] = {
+            "target": str(path) if path else None,
+            "installed_at": datetime.now(UTC).isoformat(),
+            "artifacts": [],
+        }
+    elif artifact is not None:
+        hosts.setdefault(
+            record_host,
+            {"target": None, "installed_at": datetime.now(UTC).isoformat(), "artifacts": []},
+        )["artifacts"].append(artifact)
     save_state(state)
+
+
+def state_entry(state: dict, key: str, kind: str, name: str) -> dict:
+    """Return the canonical parent state record for one resource.
+
+    Args:
+        state: Mutable installer state document.
+        key: Resource key under ``installs``.
+        kind: Resource category.
+        name: Resource name.
+
+    Returns:
+        The existing or newly-created parent record.
+    """
+    return state.setdefault("installs", {}).setdefault(
+        key,
+        {"kind": kind, "name": name, "scopes": {}},
+    )
+
+
+def host_records(entry: dict, scope: str) -> dict:
+    """Return the host records belonging to one scope in a state entry.
+
+    Args:
+        entry: Parent resource state record.
+        scope: Installation scope.
+
+    Returns:
+        Mutable records keyed by host name.
+    """
+    return entry.setdefault("scopes", {}).setdefault(scope, {"hosts": {}})["hosts"]
 
 
 # ---------------------- stale-install pruning ----------------------
@@ -140,21 +287,6 @@ def is_companion_key(name: str) -> bool:
     return name.endswith(COMPANION_SUFFIX)
 
 
-def infer_scope(target: str | None) -> str:
-    """Infer the install scope from a recorded target path.
-
-    Args:
-        target: The recorded target path, or ``None``.
-
-    Returns:
-        ``"user"`` when the target is under ``~/.claude`` (or unknown — the
-        common, safe default), else ``"project"``.
-    """
-    if target and str(Path.cwd()) in target and str(Path.home()) not in target:
-        return "project"
-    return "user"
-
-
 def scan_stale() -> list[dict]:
     """Every genuinely-stale PRIMARY install — recorded but no longer shipped.
 
@@ -174,7 +306,7 @@ def scan_stale() -> list[dict]:
         if entry.get("kind") not in kinds_present:  # guard 2
             continue
         if key not in shippable:
-            stale.append(entry)
+            stale.extend(scoped_records(entry))
     return stale
 
 
@@ -192,6 +324,60 @@ def stale_records() -> list[dict]:
     return [e for e in scan_stale() if e.get("kind") in PRUNE_EXCLUDED_KINDS]
 
 
+def scoped_records(entry: dict) -> list[dict]:
+    """Flatten a parent record into independently removable scope records.
+
+    Args:
+        entry: Parent resource state record.
+
+    Returns:
+        One record per installation scope, retaining all host footprints.
+    """
+    return [
+        {
+            "kind": entry["kind"],
+            "name": entry["name"],
+            "scope": scope,
+            "hosts": scope_entry["hosts"],
+        }
+        for scope, scope_entry in entry.get("scopes", {}).items()
+    ]
+
+
+def remove_scoped_record(installs: dict, entry: dict) -> None:
+    """Drop one selected scope and its companion only if no scopes remain.
+
+    Args:
+        installs: Resource records keyed by ``kind/name``.
+        entry: Flattened scope record to remove.
+    """
+    key = state_key(entry["kind"], entry["name"])
+    parent = installs.get(key)
+    if parent is None:
+        return
+    parent["scopes"].pop(entry["scope"], None)
+    if not parent["scopes"]:
+        installs.pop(key, None)
+        installs.pop(state_key(entry["kind"], entry["name"] + COMPANION_SUFFIX), None)
+
+
+def reverse_scoped_record(installs: dict, entry: dict) -> list[str]:
+    """Reverse every host footprint in one scope, then forget that scope.
+
+    Args:
+        installs: Mutable resource records keyed by ``kind/name``.
+        entry: Flattened scope record to reverse.
+
+    Returns:
+        Action labels from the reversed host footprints.
+    """
+    actions = [
+        action for host_entry in entry["hosts"].values() for action in reverse_footprint(host_entry)
+    ]
+    remove_scoped_record(installs, entry)
+    return actions
+
+
 def prune_installs(entries: list[dict]) -> list[str]:
     """Remove each stale install (symlink + CLAUDE.md block + hook entry) and its companions.
 
@@ -206,26 +392,12 @@ def prune_installs(entries: list[dict]) -> list[str]:
     Returns:
         One human-readable line per pruned resource.
     """
-    state = load_state()
-    installs = state.get("installs", {})
-    removed: list[str] = []
-    for entry in entries:
-        kind, name = entry["kind"], entry["name"]
-        actions = reverse_footprint(entry)
-        if not (entry.get("artifacts") or []):
-            # Legacy entry (recorded before footprints): reconstruct from kind/name.
-            item = Item(kind=kind, subcategory="", name=name, src=Path("."))
-            scope = infer_scope(entry.get("target"))
-            if remove_claude_md(item, scope):
-                actions.append("CLAUDE.md block")
-            if remove_hook(item, scope):
-                actions.append("hook")
-        installs.pop(state_key(kind, name), None)
-        installs.pop(state_key(kind, name + COMPANION_SUFFIX), None)
-        removed.append(f"{kind}/{name} ({', '.join(actions) or 'state only'})")
-
-    save_state(state)
-    return removed
+    return reverse_records(
+        entries,
+        lambda entry, actions: (
+            f"{entry['kind']}/{entry['name']} ({', '.join(actions) or 'state only'})"
+        ),
+    )
 
 
 def in_install_scope(path: str | Path) -> bool:
@@ -245,7 +417,17 @@ def in_install_scope(path: str | Path) -> bool:
         True when the path is under the user or project install root.
     """
     candidate = Path(path).expanduser()
-    roots = (USER_CLAUDE_DIR, Path.cwd() / ".claude", claude_md_target("user"))
+    roots = (
+        USER_CLAUDE_DIR,
+        Path.cwd() / ".claude",
+        claude_md_target("user"),
+        Path.home() / ".codex",
+        Path.cwd() / ".codex",
+        agents_md_target("user"),
+        agents_md_target("project"),
+        Path.home() / ".agents" / "skills",
+        Path.cwd() / ".agents" / "skills",
+    )
     return any(candidate == root or root in candidate.parents for root in roots)
 
 
@@ -301,6 +483,35 @@ def undo_artifact(artifact: dict) -> str:
         if not in_install_scope(settings_file):
             return ""
         return drop_settings_command(settings_file, artifact["command"])
+    if kind == "generated_file":
+        path = Path(artifact["path"])
+        if in_install_scope(path) and path.is_file():
+            path.unlink()
+            return "generated file"
+        return ""
+    if kind == "codex_hook":
+        path = Path(artifact["file"])
+        if not in_install_scope(path) or not path.exists():
+            return ""
+        try:
+            document = json.loads(path.read_text())
+        except json.JSONDecodeError:
+            return ""
+        removed = False
+        for event, blocks in list(document.get("hooks", {}).items()):
+            for block in blocks:
+                before = len(block.get("hooks", []))
+                block["hooks"] = [
+                    hook for hook in block["hooks"] if hook.get("command") != artifact["command"]
+                ]
+                removed = removed or len(block["hooks"]) != before
+            document["hooks"][event] = [block for block in blocks if block.get("hooks")]
+            if not document["hooks"][event]:
+                del document["hooks"][event]
+        if removed:
+            path.write_text(json.dumps(document, indent=2) + "\n")
+            return "Codex hook"
+        return ""
     return ""
 
 
@@ -374,17 +585,44 @@ def forget_records(entries: list[dict]) -> list[str]:
     Returns:
         One human-readable line per forgotten record.
     """
+    return reverse_records(
+        entries,
+        lambda entry, _actions: (
+            f"{entry['kind']}/{entry['name']} (record forgotten; binary left in place)"
+        ),
+    )
+
+
+def reverse_records(entries: list[dict], labeler: Callable[[dict, list[str]], str]) -> list[str]:
+    """Reverse selected scopes and return a caller-specific label for each.
+
+    Args:
+        entries: Flattened scope records to reverse.
+        labeler: Callable receiving the record and reversed action labels.
+
+    Returns:
+        One caller-defined label per reversed record.
+    """
     state = load_state()
     installs = state.get("installs", {})
-    forgotten: list[str] = []
-    for entry in entries:
-        kind, name = entry["kind"], entry["name"]
-        reverse_footprint(entry)  # remove any ~/.claude artifact; never the binary
-        installs.pop(state_key(kind, name), None)
-        installs.pop(state_key(kind, name + COMPANION_SUFFIX), None)
-        forgotten.append(f"{kind}/{name} (record forgotten; binary left in place)")
+    labels = [labeler(entry, reverse_scoped_record(installs, entry)) for entry in entries]
     save_state(state)
-    return forgotten
+    return labels
+
+
+def remove_codex_cache_if_unused() -> bool:
+    """Remove the managed Codex cache only after every recorded install is gone.
+
+    Returns:
+        True when the cache was removed, otherwise False.
+    """
+    if load_state().get("installs"):
+        return False
+    cache = codex_cache_root()
+    if not cache.exists():
+        return False
+    shutil.rmtree(cache)
+    return True
 
 
 # ---------------------- full uninstall ----------------------
@@ -402,7 +640,7 @@ def forget_records(entries: list[dict]) -> list[str]:
 #      injected are stripped — everything outside the markers survives.
 
 
-def all_install_records(filters: list[str] | None = None) -> list[dict]:
+def all_install_records(filters: list[str] | None = None, scope: str | None = None) -> list[dict]:
     """Every PRIMARY install record, optionally narrowed by filter tokens.
 
     Mirrors :func:`scan_stale`'s guard 1 — companion sub-records ride their
@@ -410,11 +648,11 @@ def all_install_records(filters: list[str] | None = None) -> list[dict]:
     installed resource's CLAUDE.md block while leaving the resource in place.
 
     Args:
-        filters: Tokens that must each appear in ``"<kind>/<name>"``. Empty or
-            ``None`` selects every recorded install.
+        filters: Optional resource-name tokens that all selected records must match.
+        scope: Optional installation scope to select.
 
     Returns:
-        The matching primary records, in state order.
+        One view per selected resource scope, with all host records preserved.
     """
     records: list[dict] = []
     for entry in load_state().get("installs", {}).values():
@@ -425,7 +663,9 @@ def all_install_records(filters: list[str] | None = None) -> list[dict]:
             token in state_key(entry.get("kind", ""), name) for token in filters
         ):
             continue
-        records.append(entry)
+        records.extend(
+            record for record in scoped_records(entry) if scope is None or scope == record["scope"]
+        )
     return records
 
 
@@ -752,6 +992,174 @@ class Item:
     src: Path  # source path (file for agents, SKILL.md for skills, plugin.json for plugins)
     selected: bool = False
     installed: bool = False
+
+
+# ---------------------- Codex artifact rendering ----------------------
+
+
+CODEX_MODEL_MAP = {
+    "claude-haiku-4-5": ("gpt-5.6-luna", "medium"),
+    "claude-sonnet-5": ("gpt-5.6-terra", "high"),
+}
+
+
+def parse_agent_front_matter(source: Path) -> tuple[dict[str, str], str]:
+    """Read the small YAML subset used by shipped Claude agent files.
+
+    This intentionally avoids a runtime YAML dependency. Agent front matter uses
+    scalar fields plus indented lists and folded description text; only scalar
+    fields are needed to create the Codex custom-agent configuration.
+
+    Args:
+        source: Claude agent Markdown file containing YAML front matter.
+
+    Returns:
+        The scalar front-matter fields and trimmed instruction body.
+
+    Raises:
+        ValueError: If the source does not start with YAML front matter.
+    """
+    text = source.read_text(encoding="utf-8")
+    matched = re.match(r"^---\n(.*?)\n---\n?(.*)$", text, flags=re.DOTALL)
+    if matched is None:
+        raise ValueError(f"agent source has no YAML front matter: {source}")
+    raw, body = matched.groups()
+    fields: dict[str, str] = {}
+    lines = raw.splitlines()
+    index = 0
+    while index < len(lines):
+        line = lines[index]
+        scalar = re.match(r"^([A-Za-z_][A-Za-z0-9_-]*):\s*(.*)$", line)
+        if scalar is None:
+            index += 1
+            continue
+        key, value = scalar.groups()
+        if value in {">-", "|", ">"}:
+            index += 1
+            folded: list[str] = []
+            while index < len(lines) and (lines[index].startswith(" ") or not lines[index]):
+                folded.append(lines[index].strip())
+                index += 1
+            fields[key] = " ".join(part for part in folded if part)
+            continue
+        fields[key] = value.strip().strip('"')
+        index += 1
+    return fields, body.strip()
+
+
+def codex_model_for(claude_model: str, source: Path) -> tuple[str, str]:
+    """Map an authored Claude model alias to its approved Codex equivalent.
+
+    Args:
+        claude_model: Model alias authored in the Claude agent front matter.
+        source: Agent source used to make configuration errors actionable.
+
+    Returns:
+        The approved Codex model and reasoning effort.
+
+    Raises:
+        ValueError: If the authored model has no approved Codex mapping.
+    """
+    if claude_model in CODEX_MODEL_MAP:
+        return CODEX_MODEL_MAP[claude_model]
+    if "opus" in claude_model:
+        return "gpt-5.6-sol", "high"
+    raise ValueError(f"unknown Claude model {claude_model!r} in {source}")
+
+
+def render_codex_agent(source: Path, name: str | None = None) -> str:
+    """Compile one Claude Markdown agent into a Codex custom-agent TOML file.
+
+    Args:
+        source: Claude agent Markdown file to render.
+        name: Optional installed name that overrides the front-matter name.
+
+    Returns:
+        TOML for the corresponding Codex custom agent.
+
+    Raises:
+        ValueError: If required agent metadata or its model mapping is missing.
+    """
+    fields, body = parse_agent_front_matter(source)
+    agent_name = name or fields.get("name")
+    description = fields.get("description")
+    model = fields.get("model")
+    if not agent_name or not description or not model:
+        raise ValueError(f"agent needs name, description, and model: {source}")
+    codex_model, effort = codex_model_for(model, source)
+    values = {
+        "name": agent_name,
+        "description": description,
+        "model": codex_model,
+        "model_reasoning_effort": effort,
+        "developer_instructions": body,
+    }
+    return (
+        "\n".join(
+            f"{key} = {json.dumps(value, ensure_ascii=False)}" for key, value in values.items()
+        )
+        + "\n"
+    )
+
+
+def agents_md_target(scope: str) -> Path:
+    """Return the Codex instruction document for one installation scope.
+
+    Args:
+        scope: ``"user"`` or ``"project"`` installation scope.
+
+    Returns:
+        The scope-specific Codex instruction document.
+    """
+    return scoped_path(
+        scope,
+        Path.home() / ".codex" / "AGENTS.md",
+        Path.cwd() / "AGENTS.md",
+    )
+
+
+def inject_agents_md(item: Item, scope: str) -> str | None:
+    """Inject an installer-owned instruction companion into Codex AGENTS.md.
+
+    Args:
+        item: Resource whose optional companion instruction should be injected.
+        scope: ``"user"`` or ``"project"`` installation scope.
+
+    Returns:
+        A description of the update, or None when no companion exists.
+    """
+    return inject_instruction(item, agents_md_target(scope), "AGENTS.md")
+
+
+def merge_codex_hook(
+    hooks_file: Path, event: str, matcher: str, command: str, timeout_millis: int
+) -> None:
+    """Merge one managed Codex command hook while preserving foreign entries.
+
+    Args:
+        hooks_file: Codex hook configuration file to update.
+        event: Codex lifecycle event for the hook.
+        matcher: Tool-name matcher used for the hook block.
+        command: Managed command to replace or append.
+        timeout_millis: Source timeout in milliseconds, rounded up for Codex.
+    """
+    try:
+        document = json.loads(hooks_file.read_text(encoding="utf-8")) if hooks_file.exists() else {}
+    except json.JSONDecodeError:
+        document = {}
+    hooks = document.setdefault("hooks", {})
+    blocks = hooks.setdefault(event, [])
+    block = next((candidate for candidate in blocks if candidate.get("matcher") == matcher), None)
+    if block is None:
+        block = {"matcher": matcher, "hooks": []}
+        blocks.append(block)
+    entries = block.setdefault("hooks", [])
+    entries[:] = [entry for entry in entries if entry.get("command") != command]
+    entries.append(
+        {"type": "command", "command": command, "timeout": max(1, (timeout_millis + 999) // 1000)}
+    )
+    hooks_file.parent.mkdir(parents=True, exist_ok=True)
+    hooks_file.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
 
 
 def discover(filters: list[str]) -> list[Item]:
@@ -1150,6 +1558,39 @@ def shell_quote(s: str) -> str:
     return "'" + s.replace("'", "'\\''") + "'"
 
 
+def mcp_metadata(item: Item) -> tuple[dict, str, str | None, list, dict]:
+    """Read the common command metadata from an MCP resource.
+
+    Args:
+        item: MCP resource whose manifest should be read.
+
+    Returns:
+        Parsed manifest, effective name, command, arguments, and environment.
+    """
+    meta = json.loads(item.src.read_text())
+    return (
+        meta,
+        meta.get("name") or item.name,
+        meta.get("command"),
+        meta.get("args") or [],
+        meta.get("env") or {},
+    )
+
+
+def has_keychain_reference(args: list, env: dict) -> bool:
+    """Return whether a manifest needs runtime macOS Keychain resolution.
+
+    Args:
+        args: MCP command arguments.
+        env: MCP environment mapping.
+
+    Returns:
+        True if any manifest value uses the ``keychain:`` sentinel.
+    """
+    values = [*args, *env.values()]
+    return any(isinstance(value, str) and value.startswith("keychain:") for value in values)
+
+
 def install_mcp(item: Item, scope: str) -> str:
     """Install MCP via `claude mcp add`.
 
@@ -1162,11 +1603,7 @@ def install_mcp(item: Item, scope: str) -> str:
         item: The MCP item to install (reads mcp.json for name, command, args, env).
         scope: Installation scope — ``'user'`` or ``'project'``.
     """
-    meta = json.loads(item.src.read_text())
-    name = meta.get("name") or item.name
-    command = meta.get("command")
-    raw_args = meta.get("args") or []
-    raw_env = meta.get("env") or {}
+    meta, name, command, raw_args, raw_env = mcp_metadata(item)
     transport = meta.get("transport", "stdio")
 
     if not command:
@@ -1174,9 +1611,7 @@ def install_mcp(item: Item, scope: str) -> str:
     if shutil.which("claude") is None:
         return f"skipped mcp {item.name}: 'claude' CLI not in PATH"
 
-    has_keychain = any(
-        isinstance(v, str) and v.startswith("keychain:") for v in raw_env.values()
-    ) or any(isinstance(a, str) and a.startswith("keychain:") for a in raw_args)
+    has_keychain = has_keychain_reference(raw_args, raw_env)
 
     scope = "user" if scope == "user" else "project"
     cmd = ["claude", "mcp", "add", name, "--scope", scope]
@@ -1503,10 +1938,34 @@ def claude_md_snippet_path(item: Item) -> Path | None:
     return candidate if candidate.exists() else None
 
 
+def scoped_path(scope: str, user_path: Path, project_path: Path) -> Path:
+    """Choose a host-specific path for an installation scope.
+
+    Args:
+        scope: ``"user"`` or ``"project"`` installation scope.
+        user_path: Path in the user's host configuration directory.
+        project_path: Path in the current project configuration directory.
+
+    Returns:
+        ``user_path`` for user scope; otherwise ``project_path``.
+    """
+    return user_path if scope == "user" else project_path
+
+
 def claude_md_target(scope: str) -> Path:
-    if scope == "user":
-        return Path.home() / ".claude" / "CLAUDE.md"
-    return Path.cwd() / "CLAUDE.md"
+    """Return the Claude instruction document for one installation scope.
+
+    Args:
+        scope: ``"user"`` or ``"project"`` installation scope.
+
+    Returns:
+        The scope-specific Claude instruction document.
+    """
+    return scoped_path(
+        scope,
+        Path.home() / ".claude" / "CLAUDE.md",
+        Path.cwd() / "CLAUDE.md",
+    )
 
 
 def snippet_tags(item: Item) -> tuple[str, str]:
@@ -1515,6 +1974,86 @@ def snippet_tags(item: Item) -> tuple[str, str]:
         f"<!-- claude-all:{key}:start -->",
         f"<!-- claude-all:{key}:end -->",
     )
+
+
+def inject_tagged_block(target: Path, item: Item, snippet_path: Path) -> str:
+    """Insert or replace one resource's managed instruction block.
+
+    Args:
+        target: Instruction document to modify.
+        item: Resource that owns the managed tags.
+        snippet_path: Companion content to inject.
+
+    Returns:
+        ``"appended"``, ``"updated"``, or ``"current"``.
+    """
+    return write_tagged_block(target, item, snippet_path.read_text())
+
+
+def inject_instruction(item: Item, target: Path, label: str) -> str | None:
+    """Inject a resource companion into one host instruction document.
+
+    Args:
+        item: Resource whose optional companion should be injected.
+        target: Target instruction document.
+        label: Human-readable target label.
+
+    Returns:
+        A status description, or None when no companion exists.
+    """
+    snippet_path = claude_md_snippet_path(item)
+    if snippet_path is None:
+        return None
+    action = inject_tagged_block(target, item, snippet_path)
+    return f"{label} {action} ({target})"
+
+
+def remove_tagged_block(target: Path, item: Item) -> bool:
+    """Remove one resource's managed instruction block when it exists.
+
+    Args:
+        target: Instruction document that may hold the block.
+        item: Resource that owns the managed tags.
+
+    Returns:
+        True when a block was removed.
+    """
+    return write_tagged_block(target, item, None) == "removed"
+
+
+def write_tagged_block(target: Path, item: Item, content: str | None) -> str:
+    """Apply one managed-block insertion, replacement, or removal.
+
+    Args:
+        target: Instruction document to modify.
+        item: Resource that owns the managed tags.
+        content: Replacement content, or None to remove the existing block.
+
+    Returns:
+        ``"appended"``, ``"updated"``, ``"current"``, ``"removed"``, or
+        ``"missing"``.
+    """
+    start_tag, end_tag = snippet_tags(item)
+    existing = target.read_text(encoding="utf-8") if target.exists() else ""
+    if start_tag not in existing or end_tag not in existing:
+        if content is None:
+            return "missing"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        block = f"\n{start_tag}\n{content.rstrip()}\n{end_tag}\n"
+        target.write_text((existing.rstrip() + "\n" + block).lstrip("\n"), encoding="utf-8")
+        return "appended"
+    before = existing.split(start_tag, 1)[0].rstrip()
+    after = existing.split(end_tag, 1)[1].lstrip("\n")
+    if content is None:
+        text = f"{before}\n{after}".strip()
+        target.write_text(f"{text}\n" if text else "", encoding="utf-8")
+        return "removed"
+    block = f"\n{start_tag}\n{content.rstrip()}\n{end_tag}\n"
+    updated = f"{before}\n{block}\n{after}".rstrip() + "\n"
+    if updated == existing:
+        return "current"
+    target.write_text(updated, encoding="utf-8")
+    return "updated"
 
 
 def inject_claude_md(item: Item, scope: str) -> str | None:
@@ -1527,36 +2066,17 @@ def inject_claude_md(item: Item, scope: str) -> str | None:
         item: The resource item whose claude_md snippet to inject.
         scope: Target CLAUDE.md scope — ``'user'`` or ``'project'``.
     """
-    snippet_path = claude_md_snippet_path(item)
-    if snippet_path is None:
-        return None
-
     target = claude_md_target(scope)
-    target.parent.mkdir(parents=True, exist_ok=True)
-
+    message = inject_instruction(item, target, "CLAUDE.md")
+    if message is None:
+        return None
     start_tag, end_tag = snippet_tags(item)
-    snippet_body = snippet_path.read_text().rstrip()
-    block = f"\n{start_tag}\n{snippet_body}\n{end_tag}\n"
-
-    existing = target.read_text() if target.exists() else ""
-
-    if start_tag in existing and end_tag in existing:
-        before = existing.split(start_tag, 1)[0].rstrip()
-        after = existing.split(end_tag, 1)[1].lstrip("\n")
-        new_text = f"{before}\n{block}\n{after}".rstrip() + "\n"
-        action = "updated"
-    else:
-        # Append, ensuring single blank line separator
-        new_text = (existing.rstrip() + "\n" + block).lstrip("\n")
-        action = "appended"
-
-    target.write_text(new_text)
     record_artifact(
         item.kind,
         item.name,
         {"type": "claude_md", "file": str(target), "start": start_tag, "end": end_tag},
     )
-    return f"CLAUDE.md {action} ({target})"
+    return message
 
 
 def remove_claude_md(item: Item, scope: str) -> str | None:
@@ -1567,15 +2087,8 @@ def remove_claude_md(item: Item, scope: str) -> str | None:
         scope: Target CLAUDE.md scope — ``'user'`` or ``'project'``.
     """
     target = claude_md_target(scope)
-    if not target.exists():
+    if not remove_tagged_block(target, item):
         return None
-    start_tag, end_tag = snippet_tags(item)
-    text = target.read_text()
-    if start_tag not in text or end_tag not in text:
-        return None
-    before = text.split(start_tag, 1)[0].rstrip()
-    after = text.split(end_tag, 1)[1].lstrip("\n")
-    target.write_text((before + "\n" + after).rstrip() + "\n")
     return f"CLAUDE.md stripped ({target})"
 
 
@@ -1725,7 +2238,16 @@ def install_standalone_hook(item: Item, scope: str) -> str:
     return f"installed hook {item.name} → {dest} ({event}/{matcher or '*'})"
 
 
-def install_item(item: Item, target_root: Path) -> str:
+def install_claude_item(item: Item, target_root: Path) -> str:
+    """Install one resource into the selected Claude configuration root.
+
+    Args:
+        item: Resource to install for Claude.
+        target_root: Claude root that determines the user or project scope.
+
+    Returns:
+        A description of the Claude installation result.
+    """
     scope = "user" if target_root == USER_CLAUDE_DIR else "project"
 
     if item.kind == "hooks":
@@ -1790,6 +2312,370 @@ def install_item(item: Item, target_root: Path) -> str:
         print(f"  ↳ {hk}")
 
     return f"{'replaced' if replaced else 'linked'} {item.kind}/{item.name}"
+
+
+def codex_root(scope: str) -> Path:
+    """Return the Codex configuration root for one scope.
+
+    Args:
+        scope: ``"user"`` or ``"project"`` installation scope.
+
+    Returns:
+        The scope-specific Codex configuration root.
+    """
+    return scoped_path(scope, Path.home() / ".codex", Path.cwd() / ".codex")
+
+
+def codex_cache_root() -> Path:
+    """Return the single installer-owned cache for generated Codex artifacts.
+
+    Returns:
+        The state-directory cache shared by all Codex installation scopes.
+    """
+    return STATE_DIR / "codex"
+
+
+def codex_skill_root(scope: str) -> Path:
+    """Return Codex's user or project skill discovery directory.
+
+    Args:
+        scope: ``"user"`` or ``"project"`` installation scope.
+
+    Returns:
+        The scope-specific Codex-compatible skill directory.
+    """
+    return scoped_path(
+        scope,
+        Path.home() / ".agents" / "skills",
+        Path.cwd() / ".agents" / "skills",
+    )
+
+
+def replace_with_symlink(destination: Path, source: Path) -> bool:
+    """Point a Codex-visible artifact at its source.
+
+    Existing symlinks are safely refreshed. A prior generated regular file is
+    migrated only when it has exactly the same content as the new source file;
+    any other user-authored file or directory is left untouched.
+
+    Args:
+        destination: Codex-visible path that should point at ``source``.
+        source: Installer-owned source path for the symlink.
+
+    Returns:
+        True when a link was created or refreshed, otherwise False.
+    """
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if destination.is_symlink():
+        destination.unlink()
+    elif destination.exists():
+        if (
+            not source.is_file()
+            or not destination.is_file()
+            or destination.read_bytes() != source.read_bytes()
+        ):
+            return False
+        destination.unlink()
+    os.symlink(source, destination)
+    return True
+
+
+def cache_codex_item(item: Item) -> None:
+    """Build one generated Codex agent without exposing it to Codex.
+
+    Args:
+        item: Discovered resource to cache when it is an agent.
+    """
+    if item.kind != "agents":
+        return
+    cache = codex_cache_root()
+    destination = cache / "agents" / f"{item.name}.toml"
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(render_codex_agent(item.src, item.name), encoding="utf-8")
+
+
+def codex_cache_fingerprint(items: list[Item]) -> str:
+    """Return a stable digest of inputs that can affect the generated cache.
+
+    Args:
+        items: Discovered resources whose agent sources may be rendered.
+
+    Returns:
+        SHA-256 digest of the renderer and every relevant agent source file.
+    """
+    digest = hashlib.sha256()
+    # The renderer and CODEX_MODEL_MAP live in this module. Including it makes
+    # editable/local installs refresh cached TOML when either changes, without
+    # requiring a package-version bump.
+    digest.update(Path(__file__).read_bytes())
+    cache = codex_cache_root()
+    for item in sorted(
+        (item for item in items if item.kind == "agents"), key=lambda item: item.name
+    ):
+        source_root = item.src.parent if item.src.name == "agent.md" else item.src
+        paths = (
+            [source_root]
+            if source_root.is_file()
+            else sorted(path for path in source_root.rglob("*") if path.is_file())
+        )
+        for path in paths:
+            if cache == path or cache in path.parents:
+                continue
+            digest.update(str(path).encode("utf-8"))
+            digest.update(path.read_bytes())
+    return digest.hexdigest()
+
+
+def build_codex_cache(items: list[Item], fingerprint: str | None = None) -> Path:
+    """Render every available Codex artifact into the managed cache.
+
+    Args:
+        items: Discovered resources whose agents should be rendered.
+        fingerprint: Precomputed input digest to record in the cache manifest.
+
+    Returns:
+        The rebuilt installer-owned cache directory.
+    """
+    cache = codex_cache_root()
+    if cache.exists():
+        shutil.rmtree(cache)
+    for item in items:
+        cache_codex_item(item)
+    cache.mkdir(parents=True, exist_ok=True)
+    write_codex_cache_manifest(cache, fingerprint or codex_cache_fingerprint(items))
+    return cache
+
+
+def write_codex_cache_manifest(cache: Path, fingerprint: str) -> None:
+    """Record the cache input fingerprint after a successful build.
+
+    Args:
+        cache: Managed cache directory.
+        fingerprint: Digest of the cache inputs.
+    """
+    (cache / "manifest.json").write_text(
+        json.dumps({"version": 1, "fingerprint": fingerprint}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
+def codex_cache_is_current(cache: Path, fingerprint: str) -> bool:
+    """Return whether a cache manifest matches the requested input digest.
+
+    Args:
+        cache: Managed cache directory.
+        fingerprint: Digest expected for this build.
+
+    Returns:
+        True when the manifest is valid and current.
+    """
+    try:
+        current = json.loads((cache / "manifest.json").read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError):
+        return False
+    return current.get("version") == 1 and current.get("fingerprint") == fingerprint
+
+
+def ensure_codex_cache(items: list[Item]) -> bool:
+    """Build the managed cache only when its content fingerprint has changed.
+
+    Args:
+        items: Discovered resources whose agents may affect the cache.
+
+    Returns:
+        True when the cache was rebuilt, otherwise False.
+    """
+    cache = codex_cache_root()
+    fingerprint = codex_cache_fingerprint(items)
+    if codex_cache_is_current(cache, fingerprint):
+        return False
+    build_codex_cache(items, fingerprint)
+    return True
+
+
+def install_codex_mcp(item: Item, scope: str) -> str:
+    """Register a shared MCP definition with the installed Codex CLI.
+
+    Args:
+        item: MCP resource definition to register.
+        scope: ``"user"`` or ``"project"`` installation scope.
+
+    Returns:
+        A description of the completed or skipped registration.
+    """
+    _, name, command, raw_args, raw_env = mcp_metadata(item)
+    if not command:
+        return f"skipped Codex mcp {item.name}: missing 'command'"
+    has_keychain = has_keychain_reference(raw_args, raw_env)
+    cmd = ["codex", "mcp", "add", name, "--"]
+    if has_keychain:
+        env_parts = [
+            f"{key}={keychain_subst(value)}"
+            if isinstance(value, str) and value.startswith("keychain:")
+            else f"{key}={shell_quote(str(value))}"
+            for key, value in raw_env.items()
+        ]
+        exec_parts = [shell_quote(command), *(shell_quote(str(arg)) for arg in raw_args)]
+        cmd.extend(["sh", "-c", " ".join([*env_parts, "exec", *exec_parts])])
+    else:
+        for key, value in raw_env.items():
+            cmd.extend(["--env", f"{key}={value}"])
+        cmd.append(command)
+        cmd.extend(str(arg) for arg in raw_args)
+    subprocess.run(cmd, check=True)
+    record_install(item.kind, item.name, None, host="codex", scope=scope)
+    return f"added Codex mcp {name} (scope: {scope})"
+
+
+def install_codex_hook(item: Item, scope: str) -> str | None:
+    """Install the shared hook script and register its Codex lifecycle entry.
+
+    Args:
+        item: Hook-bearing resource to install.
+        scope: ``"user"`` or ``"project"`` installation scope.
+
+    Returns:
+        A description of the hook installation, or None without hook metadata.
+    """
+    if item.kind == "hooks":
+        metadata = json.loads((REPO_ROOT / "hooks" / "hooks.json").read_text()).get(item.name, {})
+    else:
+        files = hook_files(item)
+        if files is None:
+            return None
+        metadata_path, source = files
+        metadata = json.loads(metadata_path.read_text())
+    if item.kind == "hooks":
+        source = item.src
+    root = codex_root(scope)
+    destination = root / "hooks" / f"{item.kind}-{item.name}.py"
+    if not replace_with_symlink(destination, source):
+        return f"skipped Codex hook {item.name}: destination is user-owned"
+    merge_codex_hook(
+        root / "hooks.json",
+        metadata.get("event", "PreToolUse"),
+        metadata.get("matcher", "Edit|Write"),
+        str(destination),
+        int(metadata.get("timeout", 2000)),
+    )
+    record_artifact(item.kind, item.name, {"type": "symlink", "path": str(destination)})
+    record_artifact(
+        item.kind,
+        item.name,
+        {"type": "codex_hook", "file": str(root / "hooks.json"), "command": str(destination)},
+    )
+    return f"Codex hook installed → {destination}"
+
+
+def install_codex_item(item: Item, scope: str) -> str:
+    """Create the Codex artifact corresponding to one selected source resource.
+
+    Args:
+        item: Resource to install for Codex.
+        scope: ``"user"`` or ``"project"`` installation scope.
+
+    Returns:
+        A description of the Codex installation result.
+    """
+    root = codex_root(scope)
+    if item.kind == "instructions":
+        message = inject_agents_md(item, scope)
+        if message:
+            start, end = snippet_tags(item)
+            record_artifact(
+                item.kind,
+                item.name,
+                {
+                    "type": "claude_md",
+                    "file": str(agents_md_target(scope)),
+                    "start": start,
+                    "end": end,
+                },
+            )
+        return message or f"instructions/{item.name}: no Codex companion found"
+    if item.kind == "agents":
+        destination = root / "agents" / f"{item.name}.toml"
+        cache_codex_item(item)
+        cached_source = codex_cache_root() / "agents" / f"{item.name}.toml"
+        if not replace_with_symlink(destination, cached_source):
+            return f"skipped Codex agent {item.name}: destination is user-owned"
+        record_artifact(item.kind, item.name, {"type": "generated_file", "path": str(destination)})
+        message = inject_agents_md(item, scope)
+        if message:
+            start, end = snippet_tags(item)
+            record_artifact(
+                item.kind,
+                item.name,
+                {
+                    "type": "claude_md",
+                    "file": str(agents_md_target(scope)),
+                    "start": start,
+                    "end": end,
+                },
+            )
+        return f"linked Codex agent {destination}" + (f"; {message}" if message else "")
+    if item.kind == "skills":
+        destination = codex_skill_root(scope) / item.name
+        if not replace_with_symlink(destination, item.src.parent):
+            return f"skipped Codex skill {item.name}: destination is user-owned"
+        record_artifact(item.kind, item.name, {"type": "symlink", "path": str(destination)})
+        message = inject_agents_md(item, scope)
+        if message:
+            start, end = snippet_tags(item)
+            record_artifact(
+                item.kind,
+                item.name,
+                {
+                    "type": "claude_md",
+                    "file": str(agents_md_target(scope)),
+                    "start": start,
+                    "end": end,
+                },
+            )
+        hook = install_codex_hook(item, scope)
+        return (
+            f"linked Codex skill {destination}"
+            + (f"; {message}" if message else "")
+            + (f"; {hook}" if hook else "")
+        )
+    if item.kind == "mcps":
+        return install_codex_mcp(item, scope)
+    if item.kind == "plugins":
+        meta = json.loads(item.src.read_text())
+        codex = meta.get("codex")
+        if not isinstance(codex, dict) or not isinstance(codex.get("command"), list):
+            return f"skipped Codex plugin {item.name}: no codex installation metadata"
+        subprocess.run(codex["command"], check=True)
+        return f"installed Codex plugin {item.name}"
+    if item.kind == "tools":
+        return f"tool {item.name} is shared; installed once"
+    if item.kind == "hooks":
+        return install_codex_hook(item, scope) or f"hooks/{item.name}: no Codex hook metadata"
+    return f"unknown Codex kind: {item.kind}"
+
+
+def install_item(item: Item, target_root: Path) -> str:
+    """Install one resource for every locally available supported host.
+
+    Args:
+        item: Resource to install for each detected host.
+        target_root: Claude root that determines the user or project scope.
+
+    Returns:
+        Per-host installation results joined into one message.
+    """
+    scope = "user" if target_root == USER_CLAUDE_DIR else "project"
+    messages: list[str] = []
+    if shutil.which("claude"):
+        messages.append(install_claude_item(item, target_root))
+    else:
+        messages.append("Claude skipped: CLI not on PATH")
+        record_install(item.kind, item.name, codex_root(scope))
+    if shutil.which("codex"):
+        messages.append(install_codex_item(item, scope))
+    else:
+        messages.append("Codex skipped: CLI not on PATH")
+    return " | ".join(messages)
 
 
 # ---------------------- update ----------------------
@@ -2157,7 +3043,7 @@ def cmd_uninstall(*, filters: list[str], scope: str, assume_yes: bool) -> int:
     Returns:
         0 on success or a no-op, 1 when the user declined.
     """
-    records = all_install_records(filters)
+    records = all_install_records(filters, scope)
     if not records:
         target = f" matching {' '.join(filters)}" if filters else ""
         print(f"Nothing to uninstall — no claude-all installs recorded{target}.")
@@ -2190,6 +3076,7 @@ def cmd_uninstall(*, filters: list[str], scope: str, assume_yes: bool) -> int:
     forgotten = forget_records(external)
     leftovers, advisory = scan_leftovers(scope)
     cleaned = remove_leftovers(leftovers)
+    cache_removed = remove_codex_cache_if_unused()
 
     for line in removed:
         print(f"  ✓ {line}")
@@ -2197,6 +3084,8 @@ def cmd_uninstall(*, filters: list[str], scope: str, assume_yes: bool) -> int:
         print(f"  ✓ {line}")
     for line in cleaned:
         print(f"  ✓ leftover: {line}")
+    if cache_removed:
+        print("  ✓ managed Codex cache")
     if remove_state_file():
         print("  ✓ removed state file (nothing recorded any more)")
     if advisory:
@@ -2246,6 +3135,11 @@ def main(argv: list[str]) -> int:
         help="Remove installs that are no longer shipped by the repo (no confirmation)",
     )
     ap.add_argument(
+        "--rebuild",
+        action="store_true",
+        help="Rebuild the managed Codex artifact cache",
+    )
+    ap.add_argument(
         "--uninstall",
         action="store_true",
         help="Remove EVERY recorded install (symlinks, CLAUDE.md blocks, hook entries). "
@@ -2258,6 +3152,15 @@ def main(argv: list[str]) -> int:
     )
     ap.add_argument("filters", nargs="*", help="Filter tokens (each must appear in path)")
     args = ap.parse_args(argv)
+
+    if args.rebuild:
+        if args.user or args.project:
+            ap.error("--rebuild has no scope; run it without --user or --project")
+        all_items = discover([])
+        rebuilt = ensure_codex_cache(all_items)
+        state = "Rebuilt" if rebuilt else "Already current"
+        print(f"{state} Codex artifact cache: {codex_cache_root()}")
+        return 0
 
     if args.uninstall:
         return cmd_uninstall(
@@ -2358,7 +3261,11 @@ def main(argv: list[str]) -> int:
 
     target_root = USER_CLAUDE_DIR if scope == "user" else (Path.cwd() / ".claude")
 
-    print(f"\nInstalling {len(chosen)} item(s) → {target_root}\n")
+    rebuilt = ensure_codex_cache(discover([]))
+    cache_state = "rebuilt" if rebuilt else "current"
+
+    print(f"\nCodex artifact cache {cache_state}: {codex_cache_root()}")
+    print(f"Installing {len(chosen)} item(s) → {target_root}\n")
     failures = 0
     for it in chosen:
         try:

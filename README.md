@@ -1,6 +1,6 @@
 # claude-all
 
-Agents, skills, and hooks that customize how Claude Code works — install them into any project with one command.
+Agents, skills, and hooks that customize Claude Code and Codex — install them into any project with one command.
 
 ## Requirements
 
@@ -18,7 +18,23 @@ Then, inside any project:
 claude-all
 ```
 
-This opens an interactive picker — choose items, then install them user-wide (`~/.claude/`) or just for this project (`./.claude/`).
+This opens an interactive picker — choose items, then install them user-wide or just for this project. When the corresponding CLI is already installed, each selected item is installed automatically for both hosts:
+
+| Scope | Claude Code | Codex |
+| --- | --- | --- |
+| User | `~/.claude/` | `~/.codex/` and `~/.agents/skills/` |
+| Project | `./.claude/` | `./.codex/` and `./.agents/skills/` |
+
+`claude-all` never installs either CLI. If one host is not available on `PATH`, it installs the other and reports the skipped host. Claude agents remain authored as Markdown; the installer generates Codex `.toml` custom agents from those sources. Claude Haiku, Sonnet, and Opus aliases map to Codex Luna, Terra, and Sol respectively. Codex hooks require the normal Codex `/hooks` review-and-trust step before they execute.
+
+Generated Codex agent TOML files are built under `~/.claude-all/codex/agents/` and linked
+into Codex's standard locations only for agents you install. Every `claude-all`
+install checks a content fingerprint and rebuilds that agent cache only when its
+agent sources or renderer changed. Skills and hooks are already source artifacts,
+and instruction snippets are injected directly into `AGENTS.md`. Run `claude-all --rebuild` after an
+external tool update to refresh that cache only; it never creates, replaces, or
+relinks Codex-visible artifacts. A later resource install safely migrates any
+previous installer-generated Codex agent files to cache symlinks.
 
 Prefer scripting it? Skip the picker:
 
@@ -40,7 +56,7 @@ claude-all --uninstall agents aws      # or just the ones matching a filter
 
 `--uninstall` prints the full plan and asks before it removes anything (`--yes` skips the
 prompt; a non-TTY run answers *no* by default, so a piped invocation can't wipe a setup by
-accident). It removes the resource symlinks, the `CLAUDE.md` blocks this tool injected, and its
+accident). It removes the resource symlinks, the `CLAUDE.md`/`AGENTS.md` blocks this tool injected, and its
 `settings.json` hook entries — **hand-written `CLAUDE.md` content outside those markers is left
 alone**, and a `tools`/`plugins` record is forgotten without touching the real binary.
 
@@ -239,7 +255,7 @@ Scripts Claude Code runs automatically around tool calls — mostly quiet remind
 
 ## Plugins
 
-A plugin is a third-party tool installed via `claude plugin install` (Claude Code marketplace) or `pipx` (a plain pip package). Each lives at `src/claude_all/plugins/<name>/plugin.json` with a `type` field of `claude-marketplace` or `pip`. None are currently installed — `code-review-graph` moved to Tools below.
+A plugin is a third-party tool installed via `claude plugin install` (Claude Code marketplace) or `pipx` (a plain pip package). Each lives at `src/claude_all/plugins/<name>/plugin.json` with a `type` field of `claude-marketplace` or `pip`. A plugin that also supports Codex declares a `codex.command` array with its verified native Codex installation command; when `codex` is installed, `claude-all` runs that command too. A missing `codex` object means the plugin is Claude-only and is reported as such. None are currently installed — `code-review-graph` moved to Tools below.
 
 ## MCPs
 

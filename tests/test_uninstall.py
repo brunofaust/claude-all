@@ -116,6 +116,52 @@ def test_removes_symlink_and_claude_md_block(home: Path) -> None:
     assert cli.load_state().get("installs") == {}
 
 
+def test_removes_recorded_codex_agents_md_block(
+    home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Uninstall strips only the managed AGENTS.md block recorded for a Codex item.
+
+    Args:
+        home: Isolated project directory.
+        monkeypatch: Changes the project root to the isolated directory.
+    """
+    monkeypatch.chdir(home)
+    agents_md = home / "AGENTS.md"
+    start = "<!-- claude-all:agents/demo:start -->"
+    end = "<!-- claude-all:agents/demo:end -->"
+    agents_md.write_text(f"# Local rules\n\n{start}\nmanaged\n{end}\n", encoding="utf-8")
+    cli.record_install("agents", "demo", home / ".codex" / "agents" / "demo.toml")
+    cli.record_artifact(
+        "agents",
+        "demo",
+        {"type": "claude_md", "file": str(agents_md), "start": start, "end": end},
+    )
+
+    assert cli.cmd_uninstall(filters=[], scope="project", assume_yes=True) == 0
+    assert agents_md.read_text(encoding="utf-8") == "# Local rules\n"
+
+
+def test_uninstall_removes_the_managed_codex_cache_only_after_the_last_install(
+    home: Path,
+) -> None:
+    """A narrowed uninstall preserves the shared cache until no installs remain.
+
+    Args:
+        home: Isolated installer state directory.
+    """
+    install_record(home, name="first")
+    install_record(home, name="second")
+    cache = cli.codex_cache_root()
+    cache.mkdir(parents=True)
+    (cache / "manifest.json").write_text("{}\n", encoding="utf-8")
+
+    assert cli.cmd_uninstall(filters=["first"], scope="user", assume_yes=True) == 0
+    assert cache.exists()
+
+    assert cli.cmd_uninstall(filters=["second"], scope="user", assume_yes=True) == 0
+    assert not cache.exists()
+
+
 def test_declining_removes_nothing(home: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Answering no leaves every artifact and the state record intact.
 
@@ -216,6 +262,37 @@ def test_filters_narrow_the_selection(home: Path) -> None:
     assert not drop.is_symlink(), "the filtered-in record was not removed"
     assert keep.is_symlink(), "a record outside the filter was removed"
     assert "skills/keeper" in cli.load_state()["installs"]
+
+
+def test_project_uninstall_preserves_user_state(
+    home: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Project uninstall does not erase the same resource at user scope.
+
+    Args:
+        home: Isolated home-directory fixture.
+        monkeypatch: Pytest fixture for current-directory isolation.
+    """
+    monkeypatch.chdir(home)
+    user_link = home / ".claude" / "skills" / "demo"
+    user_source = home / "user-source"
+    user_source.mkdir()
+    user_link.symlink_to(user_source)
+    project_link = home / ".codex" / "agents" / "demo.toml"
+    project_source = home / "project-source"
+    project_source.mkdir()
+    project_link.parent.mkdir(parents=True)
+    project_link.symlink_to(project_source)
+    cli.record_install("skills", "demo", user_link, host="claude", scope="user")
+    cli.record_install("skills", "demo", project_link, host="codex", scope="project")
+
+    assert cli.cmd_uninstall(filters=[], scope="project", assume_yes=True) == 0
+
+    state = cli.load_state()["installs"]["skills/demo"]
+    assert user_link.is_symlink()
+    assert "user" in state["scopes"]
+    assert "project" not in state["scopes"]
 
 
 def test_state_file_survives_a_partial_uninstall(home: Path) -> None:
