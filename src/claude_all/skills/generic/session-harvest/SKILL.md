@@ -101,6 +101,43 @@ find ~/.claude/projects -name '*.jsonl' -mtime -365 -print0 \
 gzip -9 -c "$OUT" > "$OUT.gz"        # compact, shareable artifact
 ```
 
+### Codex — extraction template
+
+Codex rollout files wrap each event in a `response_item`. Keep user and assistant
+messages plus tool-call names and inputs; exclude tool outputs, encrypted content,
+and reasoning records. Defaults to the **last 1 year** (`-mtime -365` — change the
+number of days to re-window):
+
+```bash
+OUT="${TMPDIR:-/tmp}/codex-insights-1y.jsonl"
+find ~/.codex/sessions -name 'rollout-*.jsonl' -mtime -365 -print0 \
+| xargs -0 cat \
+| jq -rc '
+    def compact: tostring | gsub("\\n"; " ") | .[0:800];
+    select(.type == "response_item")
+    | .payload as $item
+    | if $item.type == "message" and ($item.role == "user" or $item.role == "assistant") then
+        {
+          t: .timestamp,
+          role: $item.role,
+          text: ([
+            $item.content[]?
+            | select(.type == "input_text" or .type == "output_text")
+            | .text
+          ] | join(" ") | .[0:3000])
+        }
+      elif $item.type == "custom_tool_call" then
+        {t: .timestamp, role: "tool", text: ("«" + $item.name + ": " + ($item.input | compact) + "»")}
+      else empty
+      end
+    | select(.text != "")
+  ' \
+> "$OUT"
+
+wc -l "$OUT"
+gzip -9 -c "$OUT" > "$OUT.gz"        # compact, shareable artifact
+```
+
 ### Cursor — extraction template
 
 Newer Cursor stores per-message "bubbles" in `cursorDiskKV` (`bubbleId:` keys); older versions used

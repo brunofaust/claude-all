@@ -203,8 +203,7 @@ hooks = [
 ]
 
 # ── Dead code (vulture) ──────────────────────────────────────────────────────
-# Local hook: scans the paths in [tool.vulture] (pyproject.toml) at min_confidence
-# 60. False positives / intentionally-retained names live in vulture_whitelist.py.
+# Local hook: scans the paths in [tool.vulture] (pyproject.toml) at min_confidence 60.
 [[repos]]
 repo = "local"
 hooks = [

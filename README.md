@@ -1,6 +1,6 @@
 # claude-all
 
-Agents, skills, and hooks that customize how Claude Code works — install them into any project with one command.
+Agents, skills, and hooks that customize Claude Code and Codex — install them into any project with one command.
 
 ## Requirements
 
@@ -18,7 +18,11 @@ Then, inside any project:
 claude-all
 ```
 
-This opens an interactive picker — choose items, then install them user-wide (`~/.claude/`) or just for this project (`./.claude/`).
+This opens an interactive picker — choose items, then install them user-wide or just for this project. When available, selected items are installed for Claude Code and Codex. Companion instructions are added to Claude's `CLAUDE.md` and Codex's `AGENTS.md`.
+
+`claude-all --rebuild` refreshes its internal Codex artifact cache. It does not install, remove, or change any selected items.
+
+`claude-all` never installs either CLI. If one host is not available, it installs the other and reports the skipped host.
 
 Prefer scripting it? Skip the picker:
 
@@ -40,8 +44,8 @@ claude-all --uninstall agents aws      # or just the ones matching a filter
 
 `--uninstall` prints the full plan and asks before it removes anything (`--yes` skips the
 prompt; a non-TTY run answers *no* by default, so a piped invocation can't wipe a setup by
-accident). It removes the resource symlinks, the `CLAUDE.md` blocks this tool injected, and its
-`settings.json` hook entries — **hand-written `CLAUDE.md` content outside those markers is left
+accident). It removes the resource symlinks, the `CLAUDE.md`/`AGENTS.md` blocks this tool injected, and its
+`settings.json` hook entries — **hand-written `CLAUDE.md` or `AGENTS.md` content outside those markers is left
 alone**, and a `tools`/`plugins` record is forgotten without touching the real binary.
 
 It does not remove the CLI itself; finish with `uv tool uninstall claude-all`.
