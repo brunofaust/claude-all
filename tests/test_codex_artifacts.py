@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import sys
 import tomllib
+from importlib.metadata import version
 from pathlib import Path
 
 import pytest
@@ -1103,6 +1104,7 @@ def test_codex_skill_links_directly_to_its_compatible_source(tmp_path: Path, mon
     """
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(cli, "STATE_DIR", tmp_path / "home" / ".claude-all")
+    monkeypatch.setattr(cli, "STATE_FILE", tmp_path / "home" / ".claude-all" / "state.json")
     skill_source = tmp_path / "source" / "SKILL.md"
     skill_source.parent.mkdir(parents=True)
     skill_source.write_text("# Demo\n", encoding="utf-8")
@@ -1173,6 +1175,21 @@ def test_rebuild_rejects_scope_flags() -> None:
     """The one managed cache cannot be narrowed to an installation scope."""
     with pytest.raises(SystemExit, match="2"):
         cli.main(["--rebuild", "--user"])
+
+
+def test_version_flag_reports_installed_distribution_version(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The CLI reports the version supplied by installed package metadata.
+
+    Args:
+        capsys: Captures the CLI's version output.
+    """
+    with pytest.raises(SystemExit) as exited:
+        cli.main(["--version"])
+
+    assert exited.value.code == 0
+    assert capsys.readouterr().out == f"claude-all {version('claude-all')}\n"
 
 
 def test_install_migrates_a_previous_generated_agent_to_a_cache_symlink(
