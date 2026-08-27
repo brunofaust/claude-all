@@ -14,8 +14,34 @@ Two failures this repo has actually shipped, now mechanical:
 Vendored files are exempt from check 1: they are kept byte-identical to upstream,
 so their upstream-relative links legitimately do not resolve in this tree. Files
 listed under a vendored entry's `local_only` are OURS and stay checked.
+
+## `--json` output
+
+An opt-in `--json` flag replaces the human report with a single machine-readable
+object on stdout (diagnostics, if any, still go to stderr), so another tool can
+consume the gate without re-parsing prose. Field names are stable:
+
+- `passed` — overall gate result (true when there are no findings).
+- `markdown_files_scanned` — non-vendored markdown files that existed on disk and
+  were actually inspected. `0` is the vacuous-pass signal a caller should treat
+  as suspect even though the exit code is 0.
+- `files_skipped_vendored` — markdown files exempted because they are upstream-vendored.
+- `links_inspected` — relative link targets extracted and examined (after images,
+  absolute URLs, anchors, code spans and fenced blocks are filtered).
+- `links_resolved` — subset of `links_inspected` whose target existed on disk.
+- `links_broken` — subset of `links_inspected` that did not resolve.
+- `broken_links` — one object per broken link, with `file` (repo-relative POSIX),
+  `line`, `raw_target` (the link text as written) and `resolved_path` (the target
+  the link pointed at but which did not exist, repo-relative POSIX when in-tree).
+- `resources_checked` — resources discovered against the README.
+- `resources_unlinked` — discovered resources with no README row linking their source.
+- `unlinked_resources` — one object per unlinked resource, with `path`
+  (repo-relative POSIX), `kind` and `name`.
+
+Exit codes are identical to the default human mode.
 """
 
+import argparse
 import json
 import re
 import subprocess
