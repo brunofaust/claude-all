@@ -116,4 +116,5 @@ Postgres in a container, a localstack/SDK sandbox), pinned to the **production v
 the other 95% fast; the one real test is what catches the drift mocks can't see.
 
 Pairs with `adversarial-verification` (revert-and-rerun to prove a test actually fails when the code
-is wrong), `test-author` / `react-testing` (write the tests), and `test-runner` (run them).
+is wrong), `test-author` / the `brunofaust-frontend-style` testing reference (write the tests), and
+`test-runner` (run them).

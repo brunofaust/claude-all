@@ -20,6 +20,13 @@ claude-all
 
 This opens an interactive picker — choose items, then install them user-wide or just for this project. When available, selected items are installed for Claude Code and Codex. Companion instructions are added to Claude's `CLAUDE.md` and Codex's `AGENTS.md`.
 
+Claude Code artifacts are the source of truth: agent models, skill names, hook events,
+and hook timeouts use Claude's native contracts. The installer converts only the
+Codex-facing artifacts, skips Claude-only approval hooks there, and removes their
+legacy Codex wiring on upgrade. A skill's `SKILL.md` frontmatter name is canonical;
+historical directory-name filters remain accepted and migrate to that canonical name
+(`claude-hooks`, for example, remains a filter alias for `hook-authoring`).
+
 `claude-all --rebuild` refreshes its internal Codex artifact cache. It does not install, remove, or change any selected items.
 
 `claude-all` never installs either CLI. If one host is not available, it installs the other and reports the skipped host.
@@ -44,8 +51,9 @@ claude-all --uninstall agents aws      # or just the ones matching a filter
 
 `--uninstall` prints the full plan and asks before it removes anything (`--yes` skips the
 prompt; a non-TTY run answers *no* by default, so a piped invocation can't wipe a setup by
-accident). It removes the resource symlinks, the `CLAUDE.md`/`AGENTS.md` blocks this tool injected, and its
-`settings.json` hook entries — **hand-written `CLAUDE.md` or `AGENTS.md` content outside those markers is left
+accident). It removes resource symlinks only while they still point to the source this
+tool recorded, plus the `CLAUDE.md`/`AGENTS.md` blocks it injected and its `settings.json`
+hook entries — **replaced symlinks and hand-written content outside those markers are left
 alone**, and a `tools`/`plugins` record is forgotten without touching the real binary.
 
 It does not remove the CLI itself; finish with `uv tool uninstall claude-all`.
@@ -164,9 +172,9 @@ Reusable know-how Claude loads on demand — a checklist, a workflow, or a style
 | Skill | What it does |
 | --- | --- |
 | [brunofaust-frontend-style](src/claude_all/skills/frontend/brunofaust-frontend-style/SKILL.md) | Modern React/frontend rules Claude follows when writing your code. |
-| [react-best-practices](src/claude_all/skills/frontend/react-best-practices/SKILL.md) *(vendored)* | React/Next.js performance patterns. |
-| [composition-patterns](src/claude_all/skills/frontend/composition-patterns/SKILL.md) *(vendored)* | Cleaner ways to compose React components. |
-| [react-view-transitions](src/claude_all/skills/frontend/react-view-transitions/SKILL.md) *(vendored)* | Animate route and state changes with the View Transition API. |
+| [vercel-react-best-practices](src/claude_all/skills/frontend/react-best-practices/SKILL.md) *(vendored)* | React/Next.js performance patterns. |
+| [vercel-composition-patterns](src/claude_all/skills/frontend/composition-patterns/SKILL.md) *(vendored)* | Cleaner ways to compose React components. |
+| [vercel-react-view-transitions](src/claude_all/skills/frontend/react-view-transitions/SKILL.md) *(vendored)* | Animate route and state changes with the View Transition API. |
 | [web-design-guidelines](src/claude_all/skills/frontend/web-design-guidelines/SKILL.md) *(vendored)* | UI/UX/accessibility review checklist. |
 
 ### AWS
@@ -202,7 +210,7 @@ Reusable know-how Claude loads on demand — a checklist, a workflow, or a style
 | [diff-retrospective](src/claude_all/skills/generic/diff-retrospective/SKILL.md) | Turn recently merged PRs into new guardrails. |
 | [research-before-build](src/claude_all/skills/generic/research-before-build/SKILL.md) | Check nothing like this already exists before building it. |
 | [security-audit](src/claude_all/skills/generic/security-audit/SKILL.md) | Whole-stack security review — app, secrets, dependencies, CI/CD, cloud. |
-| [claude-hooks](src/claude_all/skills/generic/claude-hooks/SKILL.md) | How to write and debug Claude Code hooks. |
+| [hook-authoring](src/claude_all/skills/generic/claude-hooks/SKILL.md) | How to write and debug Claude Code hooks. |
 | [wait-for-ready](src/claude_all/skills/generic/wait-for-ready/SKILL.md) | Poll until a service is ready instead of a fixed sleep. |
 | [humanink](src/claude_all/skills/generic/humanink/SKILL.md) | Detects AI-sounding writing and rewrites it to sound human. |
 | [repo-audit](src/claude_all/skills/generic/repo-audit/SKILL.md) | Full repo quality scorecard and improvement roadmap. |
@@ -221,8 +229,8 @@ Scripts Claude Code runs automatically around tool calls — mostly quiet remind
 
 | Hook | Event | What it does |
 | --- | --- | --- |
-| [`config-protection.py`](src/claude_all/hooks/config-protection.py) | PreToolUse | Asks before editing lint config or hook settings. |
-| [`worktree-isolation-guard.py`](src/claude_all/hooks/worktree-isolation-guard.py) | PreToolUse | Asks before editing files directly on `main`. |
+| [`config-protection.py`](src/claude_all/hooks/config-protection.py) | PreToolUse (Claude only) | Asks before editing lint config or hook settings. |
+| [`worktree-isolation-guard.py`](src/claude_all/hooks/worktree-isolation-guard.py) | PreToolUse (Claude only) | Asks before editing files directly on `main`. |
 | [`mock-spec-guard.py`](src/claude_all/hooks/mock-spec-guard.py) | PreToolUse | Reminds you to spec a mock instead of leaving it bare. |
 | [`test-data-isolation-guard.py`](src/claude_all/hooks/test-data-isolation-guard.py) | PreToolUse | Reminds you not to hardcode tenant IDs in tests. |
 | [`python-orjson-guard.py`](src/claude_all/hooks/python-orjson-guard.py) | PreToolUse | Blocks stdlib `json` in favor of `orjson`. |

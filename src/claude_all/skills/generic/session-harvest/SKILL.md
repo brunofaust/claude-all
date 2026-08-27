@@ -195,7 +195,7 @@ extended to all five types):
 
 | Choose… | When the pattern is… | Built with |
 | --- | --- | --- |
-| **Hook** | a deterministic, mechanical mistake a script can block or auto-fix with no model judgment | `claude-hooks` skill → `hooks/` |
+| **Hook** | a deterministic, mechanical mistake a script can block or auto-fix with no model judgment | `hook-authoring` skill → `hooks/` |
 | **CLAUDE.md instruction** | a recurring convention/gotcha expressible as a short always-on rule (incl. dispatch rules for built-in agents) | `instructions/<name>/claude_md.md` |
 | **Agent** | a recurring, well-scoped, output-heavy task to offload from the main session | `agents/<cat>/<name>/` (`subagent-prompting`) |
 | **Skill** | a recurring multi-step methodology done inconsistently, invoked on demand | `skills/<cat>/<name>/SKILL.md` |
@@ -257,7 +257,7 @@ Report-only stops here. To *act* on it, create each resource per this repo's con
 `CLAUDE.md` and `claude-all`): add the file under the right `...` path, then
 `./claude-all --all --user <name>`. Confirm before creating any **hook**, **settings** change, or
 **CLAUDE.md instruction** — those alter automatic behaviour (`config-protection`). Build the proposed
-resource with its matching skill: `claude-hooks` (hooks), `subagent-prompting` (agents),
+resource with its matching skill: `hook-authoring` (hooks), `subagent-prompting` (agents),
 `update-config` (settings).
 
 ______________________________________________________________________
@@ -267,7 +267,7 @@ ______________________________________________________________________
 | Resource | Relationship |
 | --- | --- |
 | `friction-analyzer` agent | single Claude transcript → one preventative rule; this skill is the cross-assistant, multi-resource-type **superset** (delegate the Claude-only deep dive to it) |
-| `claude-hooks` | builds the proposed hooks |
+| `hook-authoring` | builds the proposed hooks |
 | `subagent-prompting` | builds the proposed agents |
 | `update-config` / `fewer-permission-prompts` | builds the proposed settings/allowlist changes |
 | `research-before-build` | check a proposal doesn't duplicate an existing skill/agent before filing it |

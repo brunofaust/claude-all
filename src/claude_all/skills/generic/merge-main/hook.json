@@ -1,5 +1,5 @@
 {
   "event": "PreToolUse",
   "matcher": "Bash",
-  "timeout": 2000
+  "timeout": 2
 }

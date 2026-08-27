@@ -46,14 +46,14 @@ requirement — no speculative abstraction, no prop-drilling ceremony, no wrappe
 | Rendering user content, handling tokens/sessions/env vars, setting a CSP, embedding third-party scripts | [`references/web-security.md`](references/web-security.md) |
 | Auditing a changed file before shipping (the judgment checklist `/ship` + `/ship-pr` run) | [`references/audit.md`](references/audit.md) |
 | Reference hook config — a complete, commented `prek.toml` wiring repo hygiene + the tsc/eslint/prettier/knip/audit gates this skill assumes are running. Copy it to your repo root **and rename it to `prek.toml`** | [`prek.toml.example`](prek.toml.example) |
-| **Performance** — memoization, bundle size, data fetching, Server Components, streaming | the **`react-best-practices`** skill *(vendored from Vercel — kept in place so upstream updates keep flowing; 75 rule files under its `rules/`)* |
-| **Composition** — compound components, render props, context providers, flexible component APIs | the **`composition-patterns`** skill *(vendored)* |
-| **Animation** — the View Transition API, `<ViewTransition>`, `addTransitionType`, Next.js integration | the **`react-view-transitions`** skill *(vendored)* |
+| **Performance** — memoization, bundle size, data fetching, Server Components, streaming | the **`vercel-react-best-practices`** skill *(vendored from Vercel — kept in place so upstream updates keep flowing; 75 rule files under its `rules/`)* |
+| **Composition** — compound components, render props, context providers, flexible component APIs | the **`vercel-composition-patterns`** skill *(vendored)* |
+| **Animation** — the View Transition API, `<ViewTransition>`, `addTransitionType`, Next.js integration | the **`vercel-react-view-transitions`** skill *(vendored)* |
 | **Accessibility / UX review** — the Web Interface Guidelines checklist | the **`web-design-guidelines`** skill *(vendored)* |
 
 **Why four are referenced, not folded.** Those skills are **vendored** — kept byte-identical to
 upstream so `scripts/vendor_sync.py` can pull improvements (Vercel actively updates
-`react-best-practices` for new React versions). Copying their bodies here would fork them permanently.
+`vercel-react-best-practices` for new React versions). Copying their bodies here would fork them permanently.
 They stay installed alongside this skill (declared in `claude-all.json`, so installing this one
 installs them), and this skill is the single entry point that routes to them.
 

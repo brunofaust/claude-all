@@ -1,8 +1,8 @@
 {
   "requires": [
-    "skills/react-best-practices",
-    "skills/composition-patterns",
-    "skills/react-view-transitions",
+    "skills/vercel-react-best-practices",
+    "skills/vercel-composition-patterns",
+    "skills/vercel-react-view-transitions",
     "skills/web-design-guidelines"
   ]
 }

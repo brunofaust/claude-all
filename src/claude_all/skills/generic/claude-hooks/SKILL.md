@@ -1,5 +1,5 @@
 ---
-name: claude-hooks
+name: hook-authoring
 description: >-
   Authoring and debugging Claude Code hooks — the scripts Claude Code runs automatically around tool
   calls and lifecycle events. Use when: writing a new hook (a PreToolUse guard, a PostToolUse reaction,
@@ -89,14 +89,15 @@ exit_code=$(jq -r '.tool_response.exit_code // 0' <<<"$PAYLOAD")
   "hooks": {
     "PreToolUse": [
       { "matcher": "Bash",
-        "hooks": [{ "type": "command", "timeout": 5000,
+        "hooks": [{ "type": "command", "timeout": 5,
                     "command": "python3 /abs/path/to/my-hook.py" }] }
     ]
   }
 }
 ```
 
-`--user` → `~/.claude/settings.json`; `--project` → `./.claude/settings.json`. In this repo, hook
+`timeout` is measured in **seconds**. `--user` → `~/.claude/settings.json`; `--project` →
+`./.claude/settings.json`. In this repo, hook
 scripts live in `hooks/`; the installer wires them in (see README "Hooks").
 
 ## Test a hook before shipping it

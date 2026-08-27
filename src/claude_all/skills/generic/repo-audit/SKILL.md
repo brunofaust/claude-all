@@ -103,7 +103,7 @@ ls .claude/hooks/ .claude/settings.json 2>/dev/null   # session-time guards
 ```
 
 Record, per gate: **wired & blocking / wired but advisory / absent**, across commit-time gates and
-session-time guards (the `.claude/hooks/` stack — see `claude-hooks`). A boundary with no gate is the
+session-time guards (the `.claude/hooks/` stack — see `hook-authoring`). A boundary with no gate is the
 highest-leverage fix.
 
 ### Phase 1 — Measure each dimension (count-only, NEVER fix)
@@ -157,9 +157,9 @@ translation* table below to pick the actual tool. (`<src>` = the source root.)
 | 15 | **Right resources installed for the stack** | profile the project → recommend claude-all resources + net-new (see *Project profiling*) |
 
 > **Frontend repos** add UI lenses that are dimensions 1–12 specialised for the view layer — delegate
-> them to the dedicated skills: `react-correctness` (hooks rules, effect deps, keys, render safety),
-> `react-testing`, `composition-patterns`, `web-design-guidelines` (design-system adherence + a11y),
-> `web-security` (XSS / CSP / secrets in bundles), `seo` (Core Web Vitals, meta, structured data).
+> them to `brunofaust-frontend-style` (correctness, testing, and security references),
+> `vercel-composition-patterns`, `web-design-guidelines` (design-system adherence + a11y), and
+> `seo` (Core Web Vitals, meta, structured data).
 > Plus: no `any` across component boundaries, bounded component size, no business logic in components.
 
 > Per-layer coverage targets (dimension 10): pure utils ≥ 90%, domain/services ≥ 85%, handlers/
@@ -232,8 +232,8 @@ CFN/SAM/CDK, `serverless.yml`), data/DB (ORM, migrations), async/messaging, test
 | --- | --- |
 | Python | `brunofaust-python-style`, `prek`, `verification-loop`, `code-review-discipline`, `lint-fixer`, `test-runner` |
 | TypeScript / JS (any) | `prek` (or husky), `verification-loop`, `code-review-discipline`, `lint-fixer` |
-| React / frontend | `react-correctness`, `react-testing`, `composition-patterns`, `web-design-guidelines`, `web-security`, `seo` |
-| FastAPI / any API surface | `web-security`, `security-audit` |
+| React / frontend | `brunofaust-frontend-style`, `vercel-composition-patterns`, `web-design-guidelines`, `seo` |
+| FastAPI / any API surface | `security-audit` |
 | AWS resources | `aws-architecture`, `aws-cost-optimization`, `iam-auditor`, `cloudformation-reviewer`, relevant `*-inspector` agents |
 | Terraform / CloudFormation | `cloudformation-reviewer` / `terraform-reviewer` agents, `aws-architecture` |
 | SQLAlchemy + Alembic | `alembic-migration` |
@@ -255,8 +255,8 @@ PROJECT PROFILE & RECOMMENDATIONS
 Profile: TypeScript · Next.js/React · Vercel · Postgres(Prisma) · vitest · eslint (no strict tsc)
 
 Install now (existing claude-all resources):
-  ✓ react-correctness, react-testing, composition-patterns   — React layer
-  ✓ web-design-guidelines, web-security, seo                  — UI / public surface
+  ✓ brunofaust-frontend-style, vercel-composition-patterns   — React layer
+  ✓ web-design-guidelines, seo                               — UI / public surface
   ✓ verification-loop, code-review-discipline, lint-fixer     — review + gate baseline
 
 Create (project-specific, no existing fit):
@@ -350,7 +350,7 @@ ______________________________________________________________________
 | Detect the stack; inventory layout / where SDK calls live (Phase 0 recon) | `Explore` agent | broad fan-out search, returns conclusions not dumps — do NOT build a dedicated agent for this |
 | Deep correctness review of hot subsystems (recent churn, uncommitted diffs, tricky domain logic) | `bug-hunter` agent | reasoning-based bug classes linters can't see; severity-tagged, read-only |
 | Run lint/type/test count commands (any stack) | `test-runner` / `code-quality` agents | absorb large output, return counts + verbatim errors |
-| Frontend / UI dimensions | `react-correctness` / `react-testing` / `web-design-guidelines` / `web-security` / `seo` | UI-layer specialists |
+| Frontend / UI dimensions | `brunofaust-frontend-style` / `web-design-guidelines` / `seo` | UI-layer specialists |
 | The security dimension (12) | `security-audit` skill | full six-layer + secrets-history pass |
 | The IaC dimension (13) | `cloudformation-reviewer` + `iam-auditor` agents, `aws-architecture` skill | CFN/Terraform correctness, IAM, cost |
 | Graph-based structural evidence (dims 4, 9, 10 — optional) | `code-review-graph-analyst` agent | hub/bridge chokepoints, surprise-scoring, dead-code cross-check, knowledge-gaps — only if the graph is already set up for this repo |
@@ -388,7 +388,7 @@ ______________________________________________________________________
 | `prek` | how to wire gates + baseline-and-ratchet without a backlog (applies to every stack's gate) |
 | `code-review-discipline` | severity model, size/complexity gates, report-only rule |
 | `verification-loop` | the per-PR gate the roadmap leads toward — repo-audit is the macro, one-time map |
-| `react-correctness` / `react-testing` / `composition-patterns` / `web-design-guidelines` / `web-security` / `seo` | own the frontend/UI lenses (dims 1–12 for the view layer) |
+| `brunofaust-frontend-style` / `vercel-composition-patterns` / `web-design-guidelines` / `seo` | own the frontend/UI lenses (dims 1–12 for the view layer) |
 | `security-audit` | owns dimension 12 (delegate, don't reimplement) |
 | `aws-architecture` / `aws-cost-optimization` / `iam-auditor` / `cloudformation-reviewer` | own dimension 13 (IaC) |
 | `code-review-graph-analyst` | optional graph-based evidence for dims 4/9/10 — see the note under *Audit dimensions*; report-only, never a gate here |

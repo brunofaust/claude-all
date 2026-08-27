@@ -58,7 +58,7 @@ jq -rc 'select(.message.content) | .message.content[]? | select(type=="object" a
 
 ## For each recurring pattern, propose ONE mechanism
 
-- **Guard hook** (mechanical, prevents the action) — emit it in `claude-hooks` shape:
+- **Guard hook** (mechanical, prevents the action) — emit it in `hook-authoring` shape:
   `{event, matcher, pattern, action: block|warn, message}`. Use this for "never do X" patterns.
 - **CLAUDE.md rule** (steers behavior) — a tight "STOP — do X instead" or a dispatch-table row.
 - **Agent / skill improvement** — broaden an agent's trigger, add a gotcha to a skill, fix a

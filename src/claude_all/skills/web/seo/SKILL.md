@@ -37,7 +37,7 @@ ______________________________________________________________________
 - **Full audit** — all categories below, grouped + actionable, ≤ 300 lines
 - **Specific category** — when user names one (e.g. "audit my structured data")
 
-**Handoff:** end the audit with a numbered prioritized fix list. If the fix needs design / copy / accessibility work, suggest the related skill (`web-design-guidelines` for a11y, `react-best-practices` for Next.js metadata API).
+**Handoff:** end the audit with a numbered prioritized fix list. If the fix needs design / copy / accessibility work, suggest the related skill (`web-design-guidelines` for a11y, `vercel-react-best-practices` for Next.js metadata API).
 
 ______________________________________________________________________
 
@@ -372,8 +372,8 @@ ______________________________________________________________________
 Hand off to these when their domain is more specific:
 
 - `web-design-guidelines` — a11y, contrast, focus, motion (overlaps with mobile SEO)
-- `react-best-practices` — Next.js metadata API, performance for CWV
-- `react-view-transitions` — animation patterns (CLS-friendly transitions)
+- `vercel-react-best-practices` — Next.js metadata API, performance for CWV
+- `vercel-react-view-transitions` — animation patterns (CLS-friendly transitions)
 - Agents: static SEO review of page source (HTML/JSX/TSX, robots, sitemap) → `seo-reviewer`; live-URL audits (PageSpeed, Observatory, on-page scrape) → `seo-runner`
 
 ______________________________________________________________________

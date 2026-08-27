@@ -9,7 +9,8 @@ description: >-
   leaked secrets, or DESIGNING a tool/agent/automation that takes a side-effecting action to be safe by
   default (schema validation, dry-run default, bounded params, rollback, confirmation gates). Two modes:
   a daily zero-noise high-confidence gate, and a periodic deep audit.
-  Complements web-security (frontend XSS/CSP), iam-auditor (AWS IAM), and code-review-discipline
+  Complements the security reference in brunofaust-frontend-style (frontend XSS/CSP), iam-auditor
+  (AWS IAM), and code-review-discipline
   (output shape). Use the built-in `/security-review` for a quick diff pass; use this for the
   whole-system view.
 disable-model-invocation: false
@@ -46,7 +47,8 @@ findings with the `code-review-discipline` severity model (CRITICAL→BLOCK … 
 
 1. **Application** (OWASP Top 10) — broken access control (authz on *every* server endpoint, not the
    UI), injection (SQL/NoSQL/command/template), SSRF, insecure deserialization, auth/session, mass
-   assignment. (Frontend XSS/CSP/Server-Actions → `web-security`.) **Validate every input at the
+   assignment. (Frontend XSS/CSP/Server-Actions → the
+   [`brunofaust-frontend-style` security reference](../../frontend/brunofaust-frontend-style/references/web-security.md).) **Validate every input at the
    trust boundary**; rate-limit every endpoint.
 2. **Secrets** — no secret in code, logs, or client bundles. **Secrets archaeology**: scan full git
    *history* (`gitleaks detect`, `trufflehog`), not just HEAD. Vault/Secrets-Manager + rotation;
@@ -138,4 +140,4 @@ secret leak → **rotate first**, then purge from history, then sweep for simila
 - Secrets: `gitleaks` (history), `trufflehog`. Code: `semgrep` (rulesets), `bandit` (Python),
   `codeql`. Deps: `osv-scanner`/`pip-audit`/`npm audit`/`cargo audit`, Dependabot/Renovate.
   Containers/IaC: `trivy`, `checkov`/`tfsec`. Wire the high-signal ones into CI (and prek where it
-  fits). AWS IAM → `iam-auditor` agent; frontend → `web-security` skill.
+  fits). AWS IAM → `iam-auditor` agent; frontend → the `brunofaust-frontend-style` security reference.

@@ -9,6 +9,8 @@ made the first version of this checker report 18 findings, all of them wrong.
 
 from __future__ import annotations
 
+import json
+import re
 import sys
 from pathlib import Path
 
@@ -23,6 +25,46 @@ from check_md_links import (
     is_vendored,
     strip_code_blocks,
 )
+from vendor_sync import clone_upstream
+
+ROOT = Path(__file__).resolve().parent.parent
+
+
+def test_vendor_clone_supports_pinned_commit_refs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A coherent vendor bundle can be pinned to an exact upstream commit.
+
+    Args:
+        tmp_path: Isolated clone destination.
+        monkeypatch: Pytest fixture for replacing git execution.
+    """
+    commit = "4ec6f84b61cd3c931046c3e6e398f3ae7de372f7"
+    destination = tmp_path / "upstream"
+    calls: list[tuple[list[str], Path | None]] = []
+
+    def record_git(args: list[str], cwd: Path | None = None) -> str:
+        calls.append((args, cwd))
+        return commit if args == ["rev-parse", "HEAD"] else ""
+
+    monkeypatch.setattr("vendor_sync.run_git", record_git)
+
+    assert clone_upstream("https://example.com/myorg/myapp", commit, destination) == commit
+    assert calls == [
+        (
+            [
+                "clone",
+                "--filter=blob:none",
+                "--no-checkout",
+                "https://example.com/myorg/myapp",
+                str(destination),
+            ],
+            None,
+        ),
+        (["fetch", "--depth", "1", "origin", commit], destination),
+        (["checkout", "--detach", "FETCH_HEAD"], destination),
+        (["rev-parse", "HEAD"], destination),
+    ]
 
 
 def targets(line: str) -> list[str]:
@@ -109,3 +151,79 @@ class TestCheckLinks:
         missing = tmp_path / "GONE.md"
         monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [missing])
         assert check_links(registry=[]) == []
+
+
+def test_non_vendored_routes_use_discoverable_skill_names() -> None:
+    """Local routing prose names active Claude skills, not retired aliases."""
+    registry = json.loads((ROOT / "vendored.json").read_text(encoding="utf-8"))["vendored"]
+    retired_names = {"react-correctness", "react-testing", "web-security"}
+    canonical_aliases: dict[str, str] = {}
+    for entry in registry:
+        if entry.get("kind") != "skill" or entry.get("vendor_mode") != "dir":
+            continue
+        skill_path = ROOT / entry["path"] / "SKILL.md"
+        frontmatter_name = next(
+            line.removeprefix("name:").strip()
+            for line in skill_path.read_text(encoding="utf-8").splitlines()
+            if line.startswith("name:")
+        )
+        directory_name = Path(entry["path"]).name
+        if directory_name != frontmatter_name:
+            canonical_aliases[directory_name] = frontmatter_name
+
+    stale_names = retired_names | canonical_aliases.keys()
+    findings: list[str] = []
+    for path in sorted((ROOT / "src" / "claude_all").rglob("*.md")):
+        if is_vendored(path, registry):
+            continue
+        text = path.read_text(encoding="utf-8")
+        for stale_name in sorted(stale_names):
+            if f"`{stale_name}`" in text:
+                findings.append(f"{path.relative_to(ROOT)} routes to `{stale_name}`")
+
+    assert findings == []
+
+
+def test_readme_uses_vendored_skill_frontmatter_names() -> None:
+    """README labels match the Claude frontmatter names users can invoke."""
+    registry = json.loads((ROOT / "vendored.json").read_text(encoding="utf-8"))["vendored"]
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    findings: list[str] = []
+    for entry in registry:
+        if entry.get("kind") != "skill" or entry.get("vendor_mode") != "dir":
+            continue
+        skill_path = ROOT / entry["path"] / "SKILL.md"
+        frontmatter_name = next(
+            line.removeprefix("name:").strip()
+            for line in skill_path.read_text(encoding="utf-8").splitlines()
+            if line.startswith("name:")
+        )
+        if f"[{frontmatter_name}]({entry['path']}/SKILL.md)" not in readme:
+            findings.append(frontmatter_name)
+
+    assert findings == []
+
+
+def test_vendored_local_only_entries_exist() -> None:
+    """The vendoring registry does not promise sidecars that are absent on disk."""
+    registry = json.loads((ROOT / "vendored.json").read_text(encoding="utf-8"))["vendored"]
+    missing = [
+        f"{entry['id']}:{relative_path}"
+        for entry in registry
+        for relative_path in entry.get("local_only", [])
+        if not (ROOT / entry["path"] / relative_path).exists()
+    ]
+
+    assert missing == []
+
+
+def test_claude_hook_examples_use_timeout_seconds() -> None:
+    """Authored Claude settings examples do not encode millisecond-scale values."""
+    timeout_field = re.compile(r'"timeout"\s*:\s*(\d+)')
+    findings: list[str] = []
+    for path in sorted((ROOT / "src" / "claude_all").rglob("*.md")):
+        for value in timeout_field.findall(path.read_text(encoding="utf-8")):
+            if int(value) > 600:
+                findings.append(f"{path.relative_to(ROOT)}: timeout={value}")
+
+    assert findings == []

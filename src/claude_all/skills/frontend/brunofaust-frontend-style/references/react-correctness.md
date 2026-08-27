@@ -1,7 +1,7 @@
 # React Correctness
 
 Most React bugs come from misusing `useEffect`, putting state in the wrong place, or stale closures.
-This skill is the correctness layer; for render/bundle performance see `react-best-practices`.
+This skill is the correctness layer; for render/bundle performance see `vercel-react-best-practices`.
 
 ## `useEffect` — when NOT to use it
 
@@ -82,7 +82,8 @@ easily testable). Presentational components shouldn't fetch or know about stores
 ## Enforcement
 
 - ESLint `react-hooks/rules-of-hooks` (error) + `react-hooks/exhaustive-deps` (error in CI for new
-  code). `eslint-plugin-react` for keys + common mistakes. Verify behavior with `react-testing`.
+  code). `eslint-plugin-react` for keys + common mistakes. Verify behavior with the
+  [frontend testing reference](react-testing.md).
 
 ## References (track for updates)
 
