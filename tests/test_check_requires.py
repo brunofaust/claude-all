@@ -39,9 +39,7 @@ def synthetic_src(tmp_path: Path) -> Path:
 class TestFindViolations:
     """Discovery and validation counts, independent of the CLI wrapper."""
 
-    def test_clean_manifests_report_inspected_counts(
-        self, synthetic_src: Path
-    ) -> None:
+    def test_clean_manifests_report_inspected_counts(self, synthetic_src: Path) -> None:
         """A clean graph returns zero findings and truthful manifest/entry counts.
 
         Args:
@@ -77,9 +75,7 @@ class TestFindViolations:
         assert "no such resource" in findings[0]
         assert "a/claude-all.json" in findings[0]
 
-    def test_zero_discovery_yields_zero_manifest_count(
-        self, synthetic_src: Path
-    ) -> None:
+    def test_zero_discovery_yields_zero_manifest_count(self, synthetic_src: Path) -> None:
         """No matching manifests → count 0, no findings: the vacuous-pass trap.
 
         Args:

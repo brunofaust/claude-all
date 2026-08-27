@@ -39,9 +39,7 @@ def load_resource_keys() -> set[str]:
     return {state_key(it.kind, it.name) for it in discover([])}
 
 
-def find_violations(
-    known: set[str], src_dir: Path | None = None
-) -> tuple[int, int, list[str]]:
+def find_violations(known: set[str], src_dir: Path | None = None) -> tuple[int, int, list[str]]:
     """Return one finding per dangling/malformed ``requires`` entry.
 
 Discovery is by glob under the manifests root (``claude_all`` on the real
@@ -60,9 +58,7 @@ Discovery is by glob under the manifests root (``claude_all`` on the real
         stable ``path: message`` findings (empty when the graph is clean).
     """
     base = (src_dir or (SRC / "claude_all")).resolve()
-    manifests = sorted(base.rglob("claude-all.json")) + sorted(
-        base.rglob("*.claude-all.json")
-    )
+    manifests = sorted(base.rglob("claude-all.json")) + sorted(base.rglob("*.claude-all.json"))
     findings: list[str] = []
     requires_count = 0
     for manifest in manifests:
