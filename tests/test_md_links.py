@@ -18,10 +18,13 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
+import check_md_links
+
 from check_md_links import (
     CODE_SPAN,
     LINK,
     check_links,
+    format_human,
     is_vendored,
     strip_code_blocks,
 )
@@ -140,17 +143,20 @@ class TestIsVendored:
         assert not is_vendored(root / "README.md", registry)
 
 
-class TestCheckLinks:
-    def test_tracked_file_missing_from_disk_is_skipped(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
-        # `git ls-files` lists a tracked file even after it's deleted from the
-        # working tree but not yet re-staged — check_links() must skip it instead
-        # of crashing on read_text(). Regression for the CHANGELOG.md removal,
-        # which crashed exactly this way.
-        missing = tmp_path / "GONE.md"
-        monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [missing])
-        assert check_links(registry=[]) == []
+def test_tracked_file_missing_from_disk_is_skipped(
+    self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # `git ls-files` lists a tracked file even after it's deleted from the
+    # working tree but not yet re-staged — check_links() must skip it instead
+    # of crashing on read_text(). Regression for the CHANGELOG.md removal,
+    # which crashed exactly this way.
+    missing = tmp_path / "GONE.md"
+    monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [missing])
+    result = check_links(registry=[])
+    assert result["broken_links"] == []
+    assert result["markdown_files_scanned"] == 0
+    assert result["links_resolved"] == 0
+    assert result["files_skipped_vendored"] == 0
 
 
 def test_non_vendored_routes_use_discoverable_skill_names() -> None:
@@ -227,3 +233,137 @@ def test_claude_hook_examples_use_timeout_seconds() -> None:
                 findings.append(f"{path.relative_to(ROOT)}: timeout={value}")
 
     assert findings == []
+
+
+def _stub_run(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    broken: list[dict] | None = None,
+    scanned: int = 0,
+    links_resolved: int = 0,
+    skipped_vendored: int = 0,
+    unlinked: list[dict] | None = None,
+    resources_checked: int = 0,
+) -> None:
+    """Point main()'s two checkers at controlled structured results."""
+    monkeypatch.setattr(
+        check_md_links,
+        "check_links",
+        lambda registry: {
+            "broken_links": broken or [],
+            "markdown_files_scanned": scanned,
+            "links_resolved": links_resolved,
+            "files_skipped_vendored": skipped_vendored,
+        },
+    )
+    monkeypatch.setattr(
+        check_md_links,
+        "check_readme_coverage",
+        lambda: {
+            "unlinked_resources": unlinked or [],
+            "resources_checked": resources_checked,
+        },
+    )
+        check_md_links,
+        "check_readme_coverage",
+        lambda: {
+            "unlinked_resources": unlinked or [],
+            "resources_checked": resources_checked,
+        },
+    )
+
+
+class TestJsonMode:
+    def test_json_clean_tree(self, capsys: pytest.CaptureFixture, monkeypatch) -> None:
+        """--json on a clean tree emits a passing machine-readable object and exits 0."""
+        _stub_run(
+            monkeypatch,
+            scanned=7,
+            links_resolved=12,
+            skipped_vendored=3,
+            resources_checked=5,
+        )
+        code = check_md_links.main(["--json"])
+        captured = capsys.readouterr()
+        assert code == 0
+        data = json.loads(captured.out)  # sole stdout line is valid JSON
+        assert data["pass"] is True
+        assert data["broken_links"] == []
+        assert data["unlinked_resources"] == []
+        assert data["counts"] == {
+            "markdown_files_scanned": 7,
+            "links_resolved": 12,
+            "resources_checked": 5,
+            "files_skipped_vendored": 3,
+        }
+        assert captured.err == ""
+
+    def test_json_with_broken_link(
+        self, capsys: pytest.CaptureFixture, monkeypatch
+    ) -> None:
+        """--json carries the containing file, raw target and unresolved path."""
+        broken = [
+            {
+                "containing_file": "src/a/b.md",
+                "line_no": 4,
+                "target": "refs/audit.md",
+                "resolved_path": "src/a/refs/audit.md",
+            }
+        ]
+        _stub_run(monkeypatch, broken=broken, scanned=1, links_resolved=0)
+        code = check_md_links.main(["--json"])
+        captured = capsys.readouterr()
+        assert code == 1
+        data = json.loads(captured.out)
+        assert data["pass"] is False
+        assert data["broken_links"] == broken
+        assert "1 finding(s)" in captured.err  # the diagnostic goes to stderr
+
+    def test_json_with_unlinked_resource(
+        self, capsys: pytest.CaptureFixture, monkeypatch
+    ) -> None:
+        """--json reports each unlinked resource's path."""
+        unlinked = [{"path": "src/a/SKILL.md", "kind": "skills", "name": "a"}]
+        _stub_run(monkeypatch, unlinked=unlinked, resources_checked=1)
+        code = check_md_links.main(["--json"])
+        captured = capsys.readouterr()
+        assert code == 1
+        data = json.loads(captured.out)
+        assert data["pass"] is False
+        assert data["unlinked_resources"] == unlinked
+        assert data["broken_links"] == []
+
+    def test_default_output_is_unaffected(
+        self, capsys: pytest.CaptureFixture, monkeypatch
+    ) -> None:
+        """Without --json, stdout stays the human report and exit codes match --json."""
+        broken = [
+            {
+                "containing_file": "src/a/b.md",
+                "line_no": 4,
+                "target": "refs/audit.md",
+                "resolved_path": "src/a/refs/audit.md",
+            }
+        ]
+        unlinked = [{"path": "src/c/SKILL.md", "kind": "skills", "name": "c"}]
+        _stub_run(monkeypatch, broken=broken, unlinked=unlinked, resources_checked=1)
+        code = check_md_links.main([])
+        captured = capsys.readouterr()
+        assert code == 1
+        expected = format_human(broken, unlinked)
+        assert captured.out == "\n".join(expected) + "\n"
+        assert f"\n{len(expected)} finding(s)." in captured.err
+
+        # Same input under --json must agree on the exit code.
+        code_json = check_md_links.main(["--json"])
+        capsys.readouterr()
+        assert code_json == code
+
+    def test_json_exit_zero_matches_default(
+        self, capsys: pytest.CaptureFixture, monkeypatch
+    ) -> None:
+        """A clean run exits 0 in both modes."""
+        _stub_run(monkeypatch, scanned=1, links_resolved=1, resources_checked=1)
+        assert check_md_links.main(["--json"]) == 0
+        capsys.readouterr()
+        assert check_md_links.main([]) == 0
