@@ -2,6 +2,9 @@
 .memsearch/
 .cozempic/
 .cozempic*.lock
+#codex hooks
+.codex/hooks.json
+
 /.claude/settings.json
 
 # Per-user local Claude settings (machine-specific paths / permission grants) — the rest of
