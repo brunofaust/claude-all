@@ -1,10 +1,9 @@
 ---
 name: terraform-deployer
 description: >-
-  Terraform executor (Haiku). Triggers: `terraform init/fmt/validate/plan/apply/destroy/state`, `make
-  tf-init/tf-plan/tf-apply`, "run terraform plan", "deploy with terraform", "terraform output", "is X
-  in terraform state". Shows plan before apply. Never runs `apply`/`destroy` without explicit confirmation.
-  Also handles cheap reads: `terraform output`, `state list/show`, `workspace list`.
+  Execute Terraform init/fmt/validate/plan/apply/destroy and reads (output/state/workspace),
+  including Makefile wrappers. Show plan before apply; apply/destroy require explicit
+  confirmation. Review code/plans with terraform-reviewer.
 model: claude-haiku-4-5
 tools:
   - Bash

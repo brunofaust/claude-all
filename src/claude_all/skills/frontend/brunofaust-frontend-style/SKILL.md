@@ -1,13 +1,7 @@
 ---
 name: brunofaust-frontend-style
 description: >-
-  Modern React/frontend standards — correctness, performance, composition, testing, security, a11y and
-  view transitions in ONE entry point. Use when: writing or reviewing React components and hooks,
-  reaching for useEffect, deciding where state lives, memoizing, building compound components or a
-  reusable component API, writing frontend tests (RTL/Vitest/Playwright/MSW), rendering user content or
-  handling tokens/env vars in the browser, setting a CSP, auditing UI for accessibility, or animating
-  route/state changes. Enforce for all frontend work: new components, refactors, bug fixes, perf passes,
-  test authoring, and pre-deploy UI review.
+  Use before frontend edits or reviews involving React components, hooks, state, tests, browser security, accessibility, performance or animation.
 disable-model-invocation: false
 user-invocable: true
 ---

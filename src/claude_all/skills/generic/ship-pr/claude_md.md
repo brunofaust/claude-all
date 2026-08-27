@@ -1,2 +1,1 @@
-## Opening a PR — use the `/ship-pr` workflow
-When opening a PR ("open/raise a PR", "ship for review", or finishing a change going out for review), run **`/ship-pr`** instead of an ad-hoc `git commit` + PR-open — it gates lint → tests → verification-loop → code-review → docs-updater before the commit, then opens a PR ready for review. For a quick local commit with no review/PR, use `/ship`. Never enable auto-merge.
+Before opening a PR, load `ship-pr`; local commit only: `ship`. Never enable auto-merge.

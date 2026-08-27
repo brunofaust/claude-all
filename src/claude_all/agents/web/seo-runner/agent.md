@@ -1,10 +1,9 @@
 ---
 name: seo-runner
 description: >-
-  Live URL SEO auditor (Haiku). Triggers: "audit seo for URL", "seo audit", "lighthouse audit", "core
-  web vitals", "pagespeed insights", "structured data check", "robots.txt check", "llms.txt",
-  "audit domain". Runs PageSpeed Insights, Mozilla Observatory, W3C validator, on-page meta scrape,
-  robots/sitemap/llms.txt fetch. Returns severity-scored report. Never modifies the target site.
+  Audit live URLs with PageSpeed/Lighthouse, Observatory, W3C, metadata, robots/sitemap/llms.txt
+  and headers. Report severity and failed checks without modifying the site. Source review goes
+  to seo-reviewer.
 model: claude-haiku-4-5
 tools:
   - Bash

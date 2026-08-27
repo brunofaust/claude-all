@@ -1,10 +1,9 @@
 ---
 name: frontend-builder
 description: >-
-  Frontend build runner (Haiku). Triggers: `npm/pnpm/yarn run build`, `vite build`, `next build`,
-  `astro build`, `nuxt build`, `tsc -b`, `webpack/rollup/esbuild`, "build the app", "is the build
-  passing". Returns success status + output dir + bundle size + top chunks + duration, or tight error
-  chain. Never starts a dev server or modifies source/config.
+  Run frontend production builds: npm/pnpm/yarn build, Vite/Next/Astro/Nuxt, tsc -b,
+  webpack/rollup/esbuild. Return output directory, bundle sizes and failures. Never start dev
+  servers or edit source/config.
 model: claude-haiku-4-5
 tools:
   - Bash

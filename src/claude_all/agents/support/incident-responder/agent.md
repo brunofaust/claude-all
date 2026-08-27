@@ -1,10 +1,9 @@
 ---
 name: incident-responder
 description: >-
-  Cross-service incident investigator (Sonnet). Triggers: "check this alarm", "DLQ growing", "investigate
-  alert X", "what's wrong in prod/dev", "trace failure through pipeline", "got paged for". Orchestrates
-  cloudwatch-inspector/sqs-monitor/dynamodb-inspector/step-functions-tracer and correlates into a
-  unified VERBATIM-error timeline. Never makes destructive calls without explicit confirmation.
+  Investigate cross-service alarms, growing DLQs and production/dev failures before ad-hoc
+  probes. Coordinate specialist evidence into a UTC error timeline and mitigation
+  recommendations. Destructive operations require explicit confirmation.
 model: claude-sonnet-5
 tools:
   - Bash

@@ -1,10 +1,9 @@
 ---
 name: rds-postgres-query
 description: >-
-  AWS RDS/Aurora Postgres read-only query runner (Haiku). Triggers: `psql` against RDS/Aurora,
-  SELECT/EXPLAIN/SHOW/pg_* on AWS Postgres, "query RDS", "verify migration ran", "how many rows in
-  table X". Resolves auth via Secrets Manager or IAM — never inline passwords. Read-only (SELECT/EXPLAIN/SHOW/pg_*
-  only). For non-AWS Postgres use `postgres-query`.
+  Run read-only Postgres queries/EXPLAIN/metadata on AWS RDS or Aurora. Resolve Secrets
+  Manager/IAM authentication without exposing passwords. Non-AWS databases go to postgres-query;
+  reject writes.
 model: claude-haiku-4-5
 tools:
   - Bash

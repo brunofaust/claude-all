@@ -1,10 +1,8 @@
 ---
 name: gh-runner
 description: >-
-  GitHub `gh` CLI inspection (Haiku). Triggers: `gh pr list/view/checks`, `gh issue list/view`, `gh
-  repo view`, `gh release list`, `gh run list/view --log`, "open PRs", "why did CI fail", "show CI
-  log". Returns tight summary (PR title + status + checks; run conclusion + failed step). Read-only —
-  never creates/merges/closes. For writes use GitHub MCP tools.
+  Inspect GitHub PRs, issues, repos, releases and CI runs/logs with gh. Report status/checks and
+  verbatim failures. Read-only; creation/merge/close uses GitHub MCP tools.
 model: claude-haiku-4-5
 tools:
   - Bash

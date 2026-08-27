@@ -1,12 +1,9 @@
 ---
 name: docker-log-inspector
 description: >-
-  Docker container log reader + bug hunter (Haiku). Triggers: `docker logs`, `docker compose logs`,
-  "read the container logs", "why did the container crash", "find errors in the app container",
-  "is the container crash-looping", "OOMKilled?", "tail the worker logs". Pulls logs from running OR
-  stopped containers, filters for errors/exceptions, and returns VERBATIM error blocks (timestamp,
-  exception class, traceback top 3 frames) + crash diagnosis (exit code, OOM, restart count).
-  Read-only — never build/run/up/down/restart/exec. For running docker commands use `docker-runner`.
+  Fetch running/stopped Docker or Compose logs and diagnose crashes, OOM and restart loops.
+  Return redacted verbatim exceptions plus exit/restart evidence. Read-only; operations go to
+  docker-runner, supplied logs to log-filter.
 model: claude-haiku-4-5
 tools:
   - Bash

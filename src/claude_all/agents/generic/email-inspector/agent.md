@@ -1,10 +1,8 @@
 ---
 name: email-inspector
 description: >-
-  Email search and triage (Haiku). Triggers: "check my email", "any alarms in email", "summarize
-  emails about X", "filter inbox", "what did sender X send" via Gmail/Outlook MCP. Returns count +
-  per-message sender/subject + VERBATIM alarm/error text (CloudWatch/PagerDuty/GitHub bodies).
-  Read-only — never sends/archives/deletes/labels.
+  Search/read/triage Gmail or Outlook messages via MCP. Summarize sender/subject/count and
+  preserve redacted alarm/error evidence. Never send, archive, delete or label messages.
 model: claude-haiku-4-5
 ---
 

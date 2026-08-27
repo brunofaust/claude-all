@@ -1,10 +1,9 @@
 ---
 name: docker-runner
 description: >-
-  Docker and compose command runner (Haiku). Triggers: `docker build/run/exec/logs/ps/images`, `docker
-  compose up/down/restart/logs`, "what containers are running", "container is failing", "build the
-  image". Returns tight summary (image tag + size for builds; container status + ports for runs; last
-  50 log lines). Never `rm`/`rmi`/`volume rm`/`system prune` without explicit confirmation.
+  Run Docker/Compose builds, exec, inventory and lifecycle operations. Return
+  image/container/port evidence; deletion/pruning requires explicit confirmation. Log/crash
+  diagnosis goes to docker-log-inspector.
 model: claude-haiku-4-5
 tools:
   - Bash

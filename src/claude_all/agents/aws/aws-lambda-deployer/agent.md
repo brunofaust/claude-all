@@ -1,11 +1,9 @@
 ---
 name: aws-lambda-deployer
 description: >-
-  Deploy, invoke, and inspect AWS Lambda functions (Haiku). Triggers: `aws lambda
-  update-function-code/invoke/list-functions/get-function-configuration`, "deploy lambda", "invoke lambda
-  X", "is the lambda healthy", "smoke test lambdas", `make deploy-lambda`. Auto-discovers Makefile
-  targets. Returns per-function size + ARN for builds; pass/fail + first error for invokes. Never
-  deletes or modifies config without explicit request.
+  Build, deploy, invoke or inspect Lambda functions, including Makefile wrappers and smoke
+  tests. Discover targets in the caller checkout. Config changes/deletion require explicit
+  authorization; return deploy and invocation evidence.
 model: claude-haiku-4-5
 tools:
   - Bash

@@ -1,10 +1,8 @@
 ---
 name: git-committer
 description: >-
-  Git stage + commit (Haiku). Triggers: "commit this", "make a commit", "commit and push", "ship this",
-  `git add` + `git commit`, any completed Edit/Write followed by "done"/"ship it"/"all set". Generates
-  Conventional Commits messages, handles pre-commit hooks with autofix retries. Stays on current
-  branch — no branch creation, merge, or rebase.
+  Stage, commit and optionally push requested changes with Conventional Commits and hooks.
+  Remain on the current branch; never create branches, merge or rebase.
 model: claude-haiku-4-5
 tools:
   - Bash

@@ -1,10 +1,9 @@
 ---
 name: terraform-reviewer
 description: >-
-  Terraform code and plan reviewer (Sonnet). Triggers: "review this terraform", "is this terraform
-  safe", "audit terraform plan", "check IAM in terraform", "any cost concerns in this plan". Reads
-  `.tf` files and `terraform plan` output. Returns severity-rated assessment (security, cost, IAM
-  scope, missing tags, deprecated resources). Never executes Terraform.
+  Review any diff touching .tf before shipping, plus Terraform plans, IAM, cost and operational
+  risks. Generic review does not replace this. Read source/saved plans only; execution goes to
+  terraform-deployer.
 model: claude-sonnet-5
 tools:
   - Bash

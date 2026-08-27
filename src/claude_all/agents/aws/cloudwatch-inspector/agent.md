@@ -1,10 +1,9 @@
 ---
 name: cloudwatch-inspector
 description: >-
-  AWS CloudWatch Logs and Metrics inspector (Haiku). Triggers: `aws logs tail/filter-log-events/start-query`,
-  `aws cloudwatch get-metric-statistics/describe-alarms`, "tail the logs", "check cloudwatch", "lambda
-  errors today", "alarm state". Returns log group + match count + VERBATIM error blocks (timestamp,
-  exception class, traceback top 3 frames). Read-only — never put/create/delete resources.
+  Read CloudWatch Logs, metrics and alarm state; investigate Lambda errors and time-window
+  queries. Return matching counts and verbatim redacted error blocks. Never change resources or
+  alarms.
 model: claude-haiku-4-5
 tools:
   - Bash

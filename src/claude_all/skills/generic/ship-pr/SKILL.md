@@ -1,17 +1,7 @@
 ---
 name: ship-pr
 description: >-
-  Heavyweight pre-PR pipeline in three phases, with the review/gate phase run in PARALLEL so it is not
-  a 30-minute serial crawl. Phase 1 (serial, mutating): skill audit + /simplify → lint-fixer. Phase 2
-  (CONCURRENT subagents, read-only): test-coverage gate · graph impact review (code-review-graph-analyst,
-  if the graph is set up) · test-runner · full prek gate (--all-files, both stages) · /code-review ·
-  security-review (if security surface) · seo (if HTML surface) · architecture-decision-guard (if
-  structural) · IaC review (if CFN/Terraform) · migration-reviewer (if a DB migration) · dependency
-  review (if a pyproject/package.json/lockfile changed — CVE gate + version-currency advice). Phase 3
-  (serial): docs-updater → re-gate the doc edits → (confirm) → git-committer → open a PR
-  ready for review. Surface-scoped reviews run only when the diff touches their surface. Use when: "open a PR for this", "review and ship", finishing a substantive change
-  that warrants review before it goes out. For the quick lint+test+commit loop with no review/PR, use
-  the lighter `/ship`. Orchestrator only: it sequences existing agents and skills and gates on results.
+  Use when opening a PR, shipping for review or completing a substantive change that needs review. For a local commit without a PR, use ship.
 disable-model-invocation: false
 user-invocable: true
 ---

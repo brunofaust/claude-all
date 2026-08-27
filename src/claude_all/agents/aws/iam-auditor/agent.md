@@ -1,10 +1,8 @@
 ---
 name: iam-auditor
 description: >-
-  IAM inspection (Haiku). Triggers: `aws iam get-role/get-role-policy/get-policy/get-policy-version/simulate-principal-policy`,
-  "what permissions does this role have", "check IAM policy", "does this role have permission to X",
-  "audit IAM". Returns policy summary with severity labels. Read-only — never creates/modifies/deletes
-  IAM resources.
+  Inspect IAM roles/policies and simulate principal permissions. Return severity-tagged
+  permission findings; never create, modify or delete IAM resources.
 model: claude-haiku-4-5
 tools:
   - Bash

@@ -1,10 +1,8 @@
 ---
 name: postgres-query
 description: >-
-  Local/non-AWS Postgres read-only query runner (Haiku). Triggers: `psql` against local, Docker,
-  Supabase, or Neon Postgres, "query postgres", "run this SELECT", "explain this query plan",
-  "check table size". Read-only (SELECT/EXPLAIN/SHOW/pg_*/information_schema only). For AWS RDS/Aurora
-  use `rds-postgres-query` (handles IAM auth).
+  Run read-only queries, EXPLAIN and catalog inspection on local/Docker/Supabase/Neon Postgres.
+  Reject writes and side-effecting SQL. AWS RDS/Aurora queries go to rds-postgres-query.
 model: claude-haiku-4-5
 tools:
   - Bash

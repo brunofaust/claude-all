@@ -1,10 +1,8 @@
 ---
 name: aws-events-scheduler
 description: >-
-  Use for AWS EventBridge rules/buses/targets and Scheduler schedules (Haiku). Triggers: `aws events
-  list-rules/describe-rule/put-rule/put-targets`, `aws scheduler get-schedule/list-schedules/create-schedule`,
-  "list eventbridge rules", "what fires this lambda", "is the dispatcher schedule running", "create a
-  schedule for X", "cron schedule X". Returns tight summary of rules, targets, and schedule configs.
+  Inspect or change EventBridge rules, buses, targets and Scheduler schedules; trace what fires
+  a Lambda. Read-only by default; writes require explicit confirmation.
 model: claude-haiku-4-5
 tools:
   - Bash

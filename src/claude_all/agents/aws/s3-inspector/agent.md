@@ -1,10 +1,8 @@
 ---
 name: s3-inspector
 description: >-
-  S3 bucket and object inspector (Haiku). Triggers: "list buckets", "how many objects in bucket X",
-  "size of this prefix", "check S3 lifecycle", "find recent objects", "check S3 versioning". Returns
-  inventory, object counts, sizes, lifecycle rules, encryption, versioning settings. Read-only —
-  never uploads/downloads/deletes objects or modifies bucket policies.
+  Inspect S3 bucket/object inventories, counts, prefix size, lifecycle, encryption and
+  versioning. Never upload, download, delete objects or alter policies.
 model: claude-haiku-4-5
 tools:
   - Bash

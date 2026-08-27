@@ -320,6 +320,13 @@ Summaries are acceptable only when:
 
 ## Managed instruction injection — never edit the installed files directly
 
+Write injected snippets for model execution: concise triggers, mandatory routing,
+caller obligations and global safety constraints. Do not repeat resource descriptions
+or procedures. Put selection criteria in frontmatter and details in the owning
+agent/skill; preserve a reachable owner for every unique rule. Keep the complete
+rendered catalog within the 14,500-byte test budget, including ownership markers.
+Preserve personal content and existing `AGENTS.md` → `CLAUDE.md` symlinks on refresh.
+
 `~/.claude/CLAUDE.md` (Claude) and `~/.codex/AGENTS.md` (Codex) are the user's
 global instruction files. They are managed by the `claude-all` installer via
 tagged snippet injection. **Do not edit injected blocks directly.**

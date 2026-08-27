@@ -1,4 +1,1 @@
-### `python-deps` (Haiku) — dependency managers
-| `uv sync/add/remove/lock/upgrade`, `uv pip install`, `pip install/uninstall`, `poetry add/remove/update/lock`, `pipx install/upgrade`, "bump the dependency versions", "update pyproject to latest" | `python-deps` |
-⛔ `Bash(uv sync)`, `Bash(pip install ...)`, `Bash(poetry lock)`, `Bash(uv lock --upgrade)` inline
-Note: on an explicit version bump it updates the declared version NUMBER in `pyproject.toml` (keeping each specifier's operator/signal — `==`, `>=`, `^`, `~=` — plus extras and markers unchanged; number only), not just the lockfile, then relocks and validates the result for dependency / Python-version conflicts (reverting the edit if the resolver rejects it). For `uv run pytest` use `test-runner`; for `uv run mypy`/`ruff` use `code-quality`/`lint-fixer`.
+Delegate Python dependency changes to `python-deps`.

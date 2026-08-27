@@ -1,7 +1,7 @@
 ---
 name: alembic-migration
 description: >-
-  Generate Alembic migrations following myapp patterns — naming, backfill safety, merge resolution, ENUM handling, asyncpg query syntax. Use when: creating a new alembic revision, adding/dropping/renaming columns, adding/altering ENUM types, backfilling data, merging divergent branches, resolving migration drift, running `alembic upgrade/downgrade`, debugging failed migrations, reviewing migration PRs.
+  Use when creating, reviewing, applying or debugging Alembic migrations, backfills, ENUM changes, divergent heads or schema drift.
 disable-model-invocation: false
 user-invocable: true
 ---

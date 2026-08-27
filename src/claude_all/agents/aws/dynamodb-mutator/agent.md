@@ -1,10 +1,9 @@
 ---
 name: dynamodb-mutator
 description: >-
-  DynamoDB write operations (Sonnet). Triggers: `aws dynamodb put-item/update-item/delete-item/batch-write-item`,
-  "delete the run-lock", "clear the lock", "reset step_progress for X", "DDB write". Requires explicit
-  confirmation ("yes delete", "yes write", "yes reset") in the prompt. Shows exact key + table +
-  region before executing. Refuses writes on `*-prod*` tables without "prod delete confirmed".
+  Execute explicitly confirmed DynamoDB put/update/delete, batch or transactional writes,
+  including lock resets. Preview exact key/table/region and capture BEFORE state. Production
+  requires prod delete confirmed plus backup and justification.
 model: claude-sonnet-5
 tools:
   - Bash

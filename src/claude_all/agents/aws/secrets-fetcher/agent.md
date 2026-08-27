@@ -1,10 +1,9 @@
 ---
 name: secrets-fetcher
 description: >-
-  Secrets Manager inspector (Haiku). Triggers: `aws secretsmanager get-secret-value/list-secrets/describe-secret`,
-  "get the secret", "what's in secret X", "look up the API key". Returns ARN + last-rotated + top-level
-  JSON KEY NAMES only — NEVER echoes secret values. Read-only. If downstream code needs the value,
-  emits a shell recipe for the caller to run privately.
+  Inspect Secrets Manager metadata and secret JSON key names. Return ARN/rotation/key names
+  only; never expose secret values. For consumers needing values, provide a private point-of-use
+  recipe. Read-only.
 model: claude-haiku-4-5
 tools:
   - Bash

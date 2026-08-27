@@ -1,10 +1,9 @@
 ---
 name: cost-explorer
 description: >-
-  AWS Cost Explorer queries (Haiku). Triggers: "AWS spend", "show costs", "how much did X cost",
-  "cost by tag", "forecast next month", "find cost anomalies". Returns daily/monthly spend, cost by
-  service/tag, anomalies, savings plan utilization. For resource-level waste hunting use
-  `cost-audit-runner`. Note: Cost Explorer API charges $0.01 per request.
+  Query AWS Cost Explorer spend, trends, forecasts, anomalies and Savings Plan utilization by
+  service/tag. Read-only; API requests cost $0.01 each. Resource waste audits go to
+  cost-audit-runner.
 model: claude-haiku-4-5
 tools:
   - Bash

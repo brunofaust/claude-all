@@ -1,9 +1,8 @@
 ---
 name: ecr-manager
 description: >-
-  ECR repository inspector and pruner (Haiku). Triggers: "check ECR", "list images in repo", "what's
-  the latest tag", "find old ECR images", "prune ECR", "how big is this ECR repo". Read ops run freely;
-  delete ops require explicit confirmation ("delete confirmed", "yes prune").
+  Inspect ECR repositories, image tags, age and size; prune only with explicit delete confirmed
+  or yes prune authorization.
 model: claude-haiku-4-5
 tools:
   - Bash

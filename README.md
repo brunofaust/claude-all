@@ -20,6 +20,12 @@ claude-all
 
 This opens an interactive picker — choose items, then install them user-wide or just for this project. When available, selected items are installed for Claude Code and Codex. Companion instructions are added to Claude's `CLAUDE.md` and Codex's `AGENTS.md`.
 
+Injected instructions are compact model-facing triggers and safety constraints.
+Resource descriptions guide selection; detailed procedures stay in the agent or
+skill and load when needed. Tests cap the full rendered instruction catalog at
+14,500 bytes, including ownership markers. Reinstalling replaces managed blocks
+while preserving personal content and existing `AGENTS.md` → `CLAUDE.md` symlinks.
+
 Claude Code artifacts are the source of truth: agent models, skill names, hook events,
 and hook timeouts use Claude's native contracts. The installer converts only the
 Codex-facing artifacts, skips Claude-only approval hooks there, and removes their

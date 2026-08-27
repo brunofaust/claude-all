@@ -1,2 +1,1 @@
-## SEO / GEO / AEO — `seo` skill
-Key checks: title 50-60 chars, meta description 150-160 chars, exactly one `<h1>`, canonical tag on every indexable page, JSON-LD (not Microdata), LCP ≤2.5s / INP ≤200ms / CLS ≤0.1. **Do NOT block** `GPTBot`, `ClaudeBot`, `PerplexityBot`, `Google-Extended` in robots.txt — they feed AI citations.
+For search-facing web changes or SEO audits, load `seo`.

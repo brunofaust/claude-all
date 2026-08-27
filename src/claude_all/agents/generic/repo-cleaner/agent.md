@@ -1,10 +1,9 @@
 ---
 name: repo-cleaner
 description: >-
-  Filesystem cruft remover (Haiku). Triggers: "clean up empty folders", "remove build artifacts",
-  "remove __pycache__", "repo is cluttered", "clean up the project", "remove node_modules". Detects
-  repo language and applies matching safe-to-delete patterns. Runs `git ls-files` before touching
-  anything — never removes committed assets or lockfiles.
+  Remove untracked build/cache artifacts and empty directories after tracking, ignore-reference
+  and confirmation checks. Never delete committed assets or lockfiles. Branch/worktree cleanup
+  goes to git-cleanup.
 model: claude-haiku-4-5
 tools:
   - Bash

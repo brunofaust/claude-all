@@ -9,6 +9,15 @@
 > going flaky. Adopt the pieces that fit; the data-isolation half is the
 > non-negotiable core, the rest are remedies for specific shared-infra failures.
 
+## Assertion source: requirements, not implementation
+
+E2E and integration tests verify the business need. Derive assertions from the initial
+request, brainstorming decisions and approved plan/tasks recorded before coding. For each
+scenario, name the requirement and the observable user outcome it proves. Read code to
+learn how to drive the system, not to choose its expected result. Implementation details
+belong in unit tests; an assertion copied from current behavior cannot establish that the
+user received what they requested.
+
 ## Core principle — isolate data, accept shared infrastructure, never confuse the two
 
 Two *different* classes of flakiness, two *different* remedies. Diagnose every

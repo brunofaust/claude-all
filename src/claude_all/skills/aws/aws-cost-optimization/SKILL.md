@@ -1,14 +1,7 @@
 ---
 name: aws-cost-optimization
 description: >-
-  AWS cost optimization + FinOps playbook. Use when: auditing an AWS bill, hunting idle/orphaned/
-  over-provisioned resources, deciding between on-demand vs Savings Plans vs Reserved Instances vs
-  Spot, right-sizing EC2/Lambda/RDS/EBS, choosing Graviton, designing storage lifecycle (S3/EBS/
-  snapshots), cutting data-transfer/NAT cost, setting budgets + anomaly detection, or building a
-  FinOps practice. The core rule: query AWS's OWN recommendation engines (Cost Optimization Hub,
-  Compute Optimizer, Trusted Advisor, Cost Explorer) BEFORE hand-rolling describe-loops — AWS already
-  computes idle/rightsizing/commitment recommendations with dollar estimates. Pairs with the
-  cost-audit-runner agent (resource-level waste hunt) and cost-explorer agent (spend totals/trends).
+  Use when auditing AWS spend or waste, rightsizing resources, choosing commitments, reducing storage/network costs or setting cost controls.
 disable-model-invocation: false
 user-invocable: true
 ---

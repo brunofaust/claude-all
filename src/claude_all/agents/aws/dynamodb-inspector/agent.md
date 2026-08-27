@@ -1,10 +1,9 @@
 ---
 name: dynamodb-inspector
 description: >-
-  DynamoDB read-only inspector (Haiku). Triggers: `aws dynamodb get-item/query/scan/describe-table/list-tables`,
-  "check DynamoDB", "is X in DDB", "query table", "item count for table". Returns table + matched
-  items + key/value summary; verbatim AWS error code on failure. For writes use `dynamodb-mutator`
-  (requires explicit confirmation).
+  Read DynamoDB items, tables, indexes, counts and metadata with
+  get-item/query/scan/describe/list. Report evidence and AWS errors; never write. Confirmed
+  mutations go to dynamodb-mutator.
 model: claude-haiku-4-5
 tools:
   - Bash

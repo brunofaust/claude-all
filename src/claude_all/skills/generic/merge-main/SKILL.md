@@ -1,19 +1,7 @@
 ---
 name: merge-main
 description: >-
-  Merge origin/main into the current branch and resolve BOTH textual and SEMANTIC conflicts — for
-  parallel sessions, where one session lands work on main and another must pull it in. Calling the
-  skill IS the decision to merge; it does not stop to ask for permission. A clean `git merge` (zero
-  textual conflicts) can still be semantically broken: main touched a file this branch deleted,
-  renamed/changed a contract this branch still calls, or removed a symbol this branch references.
-  Sequence: check the incoming changes → check them semantically → merge → resolve textual conflicts →
-  resolve semantic conflicts (validated by the lint/test gates) → summarize to the user. It only STOPS
-  to ask when the semantic check finds huge differences or high-risk impacts (large-scale logic
-  divergence, security-relevant contract changes, or a genuinely ambiguous either-side resolution).
-  Use when: "pull origin main and merge it", "merge main into this branch", "sync with main", "I
-  merged main in the other session — bring it in here". Orchestrator only: it sequences git plus
-  existing agents/skills; it never re-implements them. For opening a PR use `/ship-pr`; for a quick
-  lint+test+commit use `/ship`.
+  Use when merging origin/main into the current branch or syncing work landed by another session. Includes semantic conflicts; excludes pushing and PR creation.
 disable-model-invocation: false
 user-invocable: true
 ---

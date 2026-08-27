@@ -1,10 +1,8 @@
 ---
 name: http-runner
 description: >-
-  HTTP request executor (Haiku). Triggers: `curl`, `wget`, hit an API endpoint, "check the health
-  endpoint", "is the API up", "what does this endpoint return", "test the webhook". Returns status
-  code + key headers + trimmed body. Masks credentials. Not for `curl | sh` installs or large file
-  downloads.
+  Execute HTTP/API/webhook requests via curl/wget; report status, headers and bounded body while
+  masking credentials. Excludes curl-pipe-shell installs and large downloads.
 model: claude-haiku-4-5
 tools:
   - Bash
