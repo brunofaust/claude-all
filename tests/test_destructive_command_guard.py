@@ -1,6 +1,6 @@
 """Tests for the `destructive-command-guard.py` PreToolUse hook.
 
-Drives the hook the way `claude-hooks/SKILL.md` documents testing it: pipe a
+Drives the hook the way `hook-authoring` documents testing it: pipe a
 synthetic `{"tool_name": "Bash", "tool_input": {"command": ...}}` payload on
 stdin and assert the exit code (0 = allow, 2 = block) — no live session
 needed. This suite pins the `git stash` addition: the most important

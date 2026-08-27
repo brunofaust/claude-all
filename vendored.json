@@ -46,7 +46,6 @@
       "author": "Vercel",
       "local_only": [
         "ATTRIBUTION.md",
-        "claude_md.md",
         "hook.py",
         "hook.json"
       ],
@@ -70,7 +69,6 @@
       "author": "Vercel",
       "local_only": [
         "ATTRIBUTION.md",
-        "claude_md.md",
         "hook.py",
         "hook.json"
       ],
@@ -87,20 +85,19 @@
       "vendor_mode": "dir",
       "source": {
         "repo": "https://github.com/vercel-labs/agent-skills",
-        "ref": "main",
+        "ref": "4ec6f84b61cd3c931046c3e6e398f3ae7de372f7",
         "path": "skills/react-view-transitions"
       },
       "license": "MIT",
       "author": "Vercel",
       "local_only": [
         "ATTRIBUTION.md",
-        "claude_md.md",
         "hook.py",
         "hook.json"
       ],
       "frontmatter_inject": {},
       "last_synced": {
-        "date": "2026-06-06",
+        "date": "2026-08-26",
         "commit": "4ec6f84b61cd3c931046c3e6e398f3ae7de372f7"
       }
     },

@@ -33,7 +33,7 @@ in one file, exactly like its backend equivalent.
 - [ ] **No false seam** — if splitting would force lifting shared state or exporting internals just to satisfy the split, the cohesion is real: don't.
 - [ ] **LOC drove no decision** — length prompted the question, never answered it. (A container/page component may legitimately be large.)
 
-## Composition & API shape → the `composition-patterns` skill
+## Composition & API shape → the `vercel-composition-patterns` skill
 
 - [ ] **No boolean-prop proliferation** — a component sprouting `isX`/`hasY`/`showZ` flags wants composition (children/slots/compound components), not another flag.
 - [ ] **No prop drilling past ~2 levels** without a deliberate decision (composition first, context only when it earns it).
@@ -60,7 +60,7 @@ in one file, exactly like its backend equivalent.
 - [ ] **Network mocked at the network layer** (MSW) — not by stubbing the component's own module.
 - [ ] **Assertions are behavioural** — what the user sees/does, not internal state or a snapshot blob.
 
-## Performance → the `react-best-practices` skill
+## Performance → the `vercel-react-best-practices` skill
 
 - [ ] **No obvious waterfall** — sequential awaits that could be parallel; data fetched in a child that the parent should have started.
 - [ ] **Nothing heavy imported eagerly** that a dynamic import would defer (charting, editors, markdown).

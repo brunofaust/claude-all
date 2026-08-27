@@ -76,7 +76,8 @@ surface the diff doesn't touch); a skipped review is not a failure.
   `(no files to check) Skipped` on input it should inspect is a vacuous pass, not green).
 - **Code review — `/code-review` (gate).** Block findings are a hard stop.
 - **Security review — `security-review` (if a security surface: auth, secrets, input handling, IaC/IAM,
-  shelling out, tenant-scoped state).** Gate on Block findings. `web-security` (frontend XSS/CSP) rides
+  shelling out, tenant-scoped state).** Gate on Block findings. The
+  `brunofaust-frontend-style` security reference (frontend XSS/CSP) rides
   the Phase-1 frontend audit; this is the cross-stack `security-audit`.
 - **SEO review — `seo` (if the diff renders crawler-visible HTML** — a frontend page, an SSR template,
   `<head>`/meta, JSON-LD, `sitemap.xml`/`robots.txt`). Scoped by *surface*, not stack; a JSON API is

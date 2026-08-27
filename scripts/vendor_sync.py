@@ -26,6 +26,7 @@ Requires ``git`` and network access. Review the diff and commit the result.
 import argparse
 import filecmp
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -48,7 +49,12 @@ def run_git(args: list[str], cwd: Path | None = None) -> str:
 
 def clone_upstream(repo: str, ref: str, dest: Path) -> str:
     """Shallow-clone ``repo`` at ``ref`` into ``dest``; return the HEAD commit."""
-    run_git(["clone", "--depth", "1", "--branch", ref, repo, str(dest)])
+    if re.fullmatch(r"[0-9a-fA-F]{40}", ref):
+        run_git(["clone", "--filter=blob:none", "--no-checkout", repo, str(dest)])
+        run_git(["fetch", "--depth", "1", "origin", ref], cwd=dest)
+        run_git(["checkout", "--detach", "FETCH_HEAD"], cwd=dest)
+    else:
+        run_git(["clone", "--depth", "1", "--branch", ref, repo, str(dest)])
     return run_git(["rev-parse", "HEAD"], cwd=dest)
 
 

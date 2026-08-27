@@ -48,7 +48,7 @@ Write into the repo's own `.claude/` (these are what session-history mining usua
   `model` — haiku for mechanical, sonnet for judgment — and a focused `tools` list).
 - **hook** → a script in `.claude/hooks/<name>.py` + an entry merged into `.claude/settings.json`
   (`event`, `matcher`, `timeout`). Follow the two archetypes (guard → exit 2; utility → exit 0 + JSON
-  `additionalContext`) — see the `claude-hooks` skill.
+  `additionalContext`) — see the `hook-authoring` skill.
 - **instruction** → a tagged block appended to the project `CLAUDE.md`.
 
 ## claude-all layout (target = `claude-all`)
@@ -83,4 +83,4 @@ only the approved generic placeholders. Then `./claude-all --all --user <name>` 
    surface the suggestion. Project-specific resources stay local.
 
 Pairs with the propose-only resources (it's their build phase) and with `subagent-prompting` /
-`claude-hooks` (authoring detail) and `regression-gates` (when the proposal is a new gate).
+`hook-authoring` (authoring detail) and `regression-gates` (when the proposal is a new gate).

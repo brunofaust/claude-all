@@ -24,7 +24,7 @@ def main() -> int:
         return 0
     if "/node_modules/" in file_path or "/dist/" in file_path:
         return 0
-    # Test files are owned by the react-testing hook — bail so the two reminders
+    # Test files are owned by the frontend-style hook — bail so the two reminders
     # don't stack on the same edit.
     base = file_path.rsplit("/", 1)[-1]
     if ".test." in base or ".spec." in base or "/__tests__/" in file_path:

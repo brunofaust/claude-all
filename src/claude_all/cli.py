@@ -136,6 +136,48 @@ def save_state(state: dict) -> None:
     STATE_FILE.write_text(json.dumps(state, indent=2))
 
 
+def symlink_source(path: Path) -> str | None:
+    """Return a symlink's normalized source without requiring it to exist.
+
+    Args:
+        path: Possible symlink whose current source should be captured.
+
+    Returns:
+        The normalized absolute source, or None for non-links and unresolvable links.
+    """
+    if not path.is_symlink():
+        return None
+    try:
+        return str(path.resolve(strict=False))
+    except (OSError, RuntimeError):
+        return None
+
+
+def unlink_recorded_symlink(
+    path: Path,
+    recorded_source: object,
+    *,
+    allow_dangling: bool = False,
+) -> bool:
+    """Unlink a managed symlink only while it still points at its recorded source.
+
+    Args:
+        path: Recorded install destination.
+        recorded_source: Source captured when the installer created the link.
+        allow_dangling: Whether an explicitly detected broken link may be removed.
+
+    Returns:
+        True when the still-managed link was removed, otherwise False.
+    """
+    current_source = symlink_source(path)
+    is_known_dangling = allow_dangling and path.is_symlink() and not path.exists()
+    source_matches = isinstance(recorded_source, str) and current_source == recorded_source
+    if not source_matches and not is_known_dangling:
+        return False
+    path.unlink()
+    return True
+
+
 def record_install(
     kind: str,
     name: str,
@@ -211,16 +253,28 @@ def record_footprint(
     entry = state_entry(state, state_key(kind, name), kind, name)
     hosts = host_records(entry, record_scope)
     if replace:
+        recorded_source = symlink_source(Path(path)) if path is not None else None
         hosts[record_host] = {
             "target": str(path) if path else None,
+            "source": recorded_source,
             "installed_at": datetime.now(UTC).isoformat(),
             "artifacts": [],
         }
     elif artifact is not None:
+        recorded_artifact = dict(artifact)
+        if recorded_artifact.get("type") == "symlink" and "source" not in recorded_artifact:
+            artifact_path = recorded_artifact.get("path")
+            if isinstance(artifact_path, str):
+                recorded_artifact["source"] = symlink_source(Path(artifact_path))
         hosts.setdefault(
             record_host,
-            {"target": None, "installed_at": datetime.now(UTC).isoformat(), "artifacts": []},
-        )["artifacts"].append(artifact)
+            {
+                "target": None,
+                "source": None,
+                "installed_at": datetime.now(UTC).isoformat(),
+                "artifacts": [],
+            },
+        )["artifacts"].append(recorded_artifact)
     save_state(state)
 
 
@@ -448,10 +502,52 @@ def reverse_footprint(entry: dict) -> list[str]:
     """
     actions: list[str] = []
     target = entry.get("target")
-    if target and in_install_scope(target) and Path(target).is_symlink():
-        Path(target).unlink()
+    if (
+        target
+        and in_install_scope(target)
+        and unlink_recorded_symlink(Path(target), entry.get("source"))
+    ):
         actions.append("symlink")
     actions.extend(a for a in (undo_artifact(x) for x in entry.get("artifacts") or []) if a)
+    return actions
+
+
+def remove_install_host(kind: str, name: str, scope: str, host: str) -> list[str]:
+    """Reverse and forget one host footprint without disturbing the other host.
+
+    Args:
+        kind: Resource category.
+        name: Resource name within its category.
+        scope: Installation scope containing the host record.
+        host: Host footprint to remove (``"claude"`` or ``"codex"``).
+
+    Returns:
+        Action labels from the reversed host footprint.
+    """
+    state = load_state()
+    installs = state.get("installs", {})
+    actions: list[str] = []
+    changed = False
+    for key in (state_key(kind, name), state_key(kind, name + COMPANION_SUFFIX)):
+        parent = installs.get(key)
+        if not isinstance(parent, dict):
+            continue
+        scopes = parent.get("scopes", {})
+        scope_entry = scopes.get(scope)
+        if not isinstance(scope_entry, dict):
+            continue
+        hosts = scope_entry.get("hosts", {})
+        host_entry = hosts.pop(host, None)
+        if not isinstance(host_entry, dict):
+            continue
+        actions.extend(reverse_footprint(host_entry))
+        changed = True
+        if not hosts:
+            scopes.pop(scope, None)
+        if not scopes:
+            installs.pop(key, None)
+    if changed:
+        save_state(state)
     return actions
 
 
@@ -468,9 +564,12 @@ def undo_artifact(artifact: dict) -> str:
     kind = artifact.get("type")
     if kind == "symlink":
         path = Path(artifact["path"])
-        # Only unlink a symlink (never a real file), and only inside our own scope.
-        if in_install_scope(path) and path.is_symlink():
-            path.unlink()
+        # Only unlink the exact link we created, while it remains inside our scope.
+        if in_install_scope(path) and unlink_recorded_symlink(
+            path,
+            artifact.get("source"),
+            allow_dangling=artifact.get("dangling") is True,
+        ):
             return "hook symlink"
         return ""
     if kind == "claude_md":
@@ -485,7 +584,7 @@ def undo_artifact(artifact: dict) -> str:
         return drop_settings_command(settings_file, artifact["command"])
     if kind == "generated_file":
         path = Path(artifact["path"])
-        if in_install_scope(path) and path.is_file():
+        if in_install_scope(path) and path.is_file() and not path.is_symlink():
             path.unlink()
             return "generated file"
         return ""
@@ -496,6 +595,8 @@ def undo_artifact(artifact: dict) -> str:
         try:
             document = json.loads(path.read_text())
         except json.JSONDecodeError:
+            return ""
+        if hook_document_error(document) is not None:
             return ""
         removed = False
         for event, blocks in list(document.get("hooks", {}).items()):
@@ -775,7 +876,7 @@ def check_links(scope: str) -> list[dict]:
                 findings.append(
                     {
                         "label": f"dangling link  {sub}/{link.name} -> {os.readlink(link)}",
-                        "artifact": {"type": "symlink", "path": str(link)},
+                        "artifact": {"type": "symlink", "path": str(link), "dangling": True},
                     }
                 )
                 continue
@@ -1000,7 +1101,10 @@ class Item:
 CODEX_MODEL_MAP = {
     "claude-haiku-4-5": ("gpt-5.6-luna", "medium"),
     "claude-sonnet-5": ("gpt-5.6-terra", "high"),
+    "claude-opus-5": ("gpt-5.6-sol", "high"),
 }
+CLAUDE_SKILL_NAME = re.compile(r"^[a-z0-9-]{1,64}$")
+CLAUDE_SKILL_RESERVED_WORDS = ("anthropic", "claude")
 
 
 def parse_agent_front_matter(source: Path) -> tuple[dict[str, str], str]:
@@ -1062,8 +1166,6 @@ def codex_model_for(claude_model: str, source: Path) -> tuple[str, str]:
     """
     if claude_model in CODEX_MODEL_MAP:
         return CODEX_MODEL_MAP[claude_model]
-    if "opus" in claude_model:
-        return "gpt-5.6-sol", "high"
     raise ValueError(f"unknown Claude model {claude_model!r} in {source}")
 
 
@@ -1102,6 +1204,87 @@ def render_codex_agent(source: Path, name: str | None = None) -> str:
     )
 
 
+def hook_document_error(document: object) -> str | None:
+    """Return a structural error for a Claude/Codex hook document, if any.
+
+    Args:
+        document: Parsed host hook configuration.
+
+    Returns:
+        A concise validation error, or None when managed hook operations are safe.
+    """
+    if not isinstance(document, dict):
+        return "expected a JSON object"
+    hooks = document.get("hooks", {})
+    if not isinstance(hooks, dict):
+        return "'hooks' must be an object"
+    for event, blocks in hooks.items():
+        if not isinstance(event, str):
+            return "hook event names must be strings"
+        if not isinstance(blocks, list):
+            return f"hook event {event!r} must contain a list of matcher blocks"
+        for block in blocks:
+            if not isinstance(block, dict):
+                return f"hook event {event!r} contains a non-object matcher block"
+            entries = block.get("hooks", [])
+            if not isinstance(entries, list):
+                return f"hook event {event!r} matcher 'hooks' must be a list"
+            if any(not isinstance(entry, dict) for entry in entries):
+                return f"hook event {event!r} contains a non-object hook entry"
+            for entry in entries:
+                command = entry.get("command")
+                if command is not None and not isinstance(command, str):
+                    return f"hook event {event!r} contains a non-string command"
+    return None
+
+
+def validate_claude_skill_name(name: str, source: Path) -> str:
+    """Validate a Claude skill's canonical single-component identity.
+
+    Args:
+        name: Frontmatter name or directory fallback.
+        source: Skill source used to make failures actionable.
+
+    Returns:
+        The validated name.
+
+    Raises:
+        ValueError: If the name violates Claude's lowercase 64-character slug contract.
+    """
+    if CLAUDE_SKILL_NAME.fullmatch(name) is None:
+        raise ValueError(
+            f"invalid Claude skill name {name!r} in {source}: "
+            "use 1-64 lowercase letters, numbers, or hyphens"
+        )
+    reserved = next((word for word in CLAUDE_SKILL_RESERVED_WORDS if word in name), None)
+    if reserved is not None:
+        raise ValueError(
+            f"invalid Claude skill name {name!r} in {source}: "
+            f"reserved word {reserved!r} is not allowed"
+        )
+    return name
+
+
+def skill_destination(skill_root: Path, item: Item) -> Path:
+    """Return a validated skill destination contained by its exact host root.
+
+    Args:
+        skill_root: Claude or Codex skill installation root.
+        item: Skill resource being installed.
+
+    Returns:
+        Safe host-visible destination path.
+
+    Raises:
+        ValueError: If the canonical skill name is invalid or escapes the root.
+    """
+    name = validate_claude_skill_name(item.name, item.src)
+    destination = skill_root / name
+    if destination.parent != skill_root:
+        raise ValueError(f"invalid Claude skill name {name!r}: destination escapes {skill_root}")
+    return destination
+
+
 def agents_md_target(scope: str) -> Path:
     """Return the Codex instruction document for one installation scope.
 
@@ -1132,7 +1315,7 @@ def inject_agents_md(item: Item, scope: str) -> str | None:
 
 
 def merge_codex_hook(
-    hooks_file: Path, event: str, matcher: str, command: str, timeout_millis: int
+    hooks_file: Path, event: str, matcher: str, command: str, timeout_seconds: int
 ) -> None:
     """Merge one managed Codex command hook while preserving foreign entries.
 
@@ -1141,12 +1324,13 @@ def merge_codex_hook(
         event: Codex lifecycle event for the hook.
         matcher: Tool-name matcher used for the hook block.
         command: Managed command to replace or append.
-        timeout_millis: Source timeout in milliseconds, rounded up for Codex.
+        timeout_seconds: Source timeout in seconds, shared by Claude Code and Codex.
     """
-    try:
-        document = json.loads(hooks_file.read_text(encoding="utf-8")) if hooks_file.exists() else {}
-    except json.JSONDecodeError:
-        document = {}
+    document = json.loads(hooks_file.read_text(encoding="utf-8")) if hooks_file.exists() else {}
+    error = hook_document_error(document)
+    if error is not None:
+        raise ValueError(f"invalid Codex hook config {hooks_file}: {error}")
+    assert isinstance(document, dict)
     hooks = document.setdefault("hooks", {})
     blocks = hooks.setdefault(event, [])
     block = next((candidate for candidate in blocks if candidate.get("matcher") == matcher), None)
@@ -1155,9 +1339,7 @@ def merge_codex_hook(
         blocks.append(block)
     entries = block.setdefault("hooks", [])
     entries[:] = [entry for entry in entries if entry.get("command") != command]
-    entries.append(
-        {"type": "command", "command": command, "timeout": max(1, (timeout_millis + 999) // 1000)}
-    )
+    entries.append({"type": "command", "command": command, "timeout": max(1, timeout_seconds)})
     hooks_file.parent.mkdir(parents=True, exist_ok=True)
     hooks_file.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
 
@@ -1199,11 +1381,16 @@ def discover(filters: list[str]) -> list[Item]:
             parts = rel.parts
             if len(parts) < 3:
                 continue
+            try:
+                fields, _ = parse_agent_front_matter(p)
+            except ValueError:
+                fields = {}
+            name = validate_claude_skill_name(fields.get("name") or parts[2], p)
             items.append(
                 Item(
                     kind="skills",
                     subcategory=parts[1],
-                    name=parts[2],
+                    name=name,
                     src=p,
                 )
             )
@@ -1296,7 +1483,8 @@ def discover(filters: list[str]) -> list[Item]:
 
         def matches(it: Item) -> bool:
             rel = str(it.src.relative_to(REPO_ROOT))
-            return all(f in rel for f in filters)
+            identity = f"{rel}\n{it.name}"
+            return all(f in identity for f in filters)
 
         items = [it for it in items if matches(it)]
 
@@ -1802,6 +1990,50 @@ def settings_path(scope: str) -> Path:
     return Path.cwd() / ".claude" / "settings.json"
 
 
+def hook_install_preflight(item: Item, scope: str, host: str) -> str | None:
+    """Validate a companion hook and host document before any install mutation.
+
+    Args:
+        item: Hook-bearing resource being installed.
+        scope: Installation scope for the host configuration.
+        host: Target host (``"claude"`` or ``"codex"``).
+
+    Returns:
+        A concise error when installation must remain a no-op, otherwise None.
+    """
+    files = hook_files(item)
+    if files is None:
+        return None
+    metadata_path, _ = files
+    try:
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as error:
+        return f"invalid hook.json: {error}"
+    if not isinstance(metadata, dict):
+        return "invalid hook.json: expected a JSON object"
+    if not isinstance(metadata.get("event", "PreToolUse"), str):
+        return "invalid hook.json: 'event' must be a string"
+    if not isinstance(metadata.get("matcher", "Edit|Write"), str):
+        return "invalid hook.json: 'matcher' must be a string"
+    try:
+        int(metadata.get("timeout", 2))
+    except (TypeError, ValueError):
+        return "invalid hook.json: 'timeout' must be an integer"
+
+    config_path = settings_path(scope) if host == "claude" else codex_root(scope) / "hooks.json"
+    config_name = "settings.json" if host == "claude" else "hooks.json"
+    if not config_path.exists():
+        return None
+    try:
+        document = json.loads(config_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as error:
+        return f"invalid {config_name}: {error}"
+    shape_error = hook_document_error(document)
+    if shape_error is not None:
+        return f"invalid {config_name}: {shape_error}"
+    return None
+
+
 def hook_symlink_dest(scope: str, item: Item) -> Path:
     if scope == "user":
         base = Path.home() / ".claude" / "hooks"
@@ -1833,7 +2065,20 @@ def inject_hook(item: Item, scope: str) -> str | None:
 
     event = hook_meta.get("event", "PreToolUse")
     matcher = hook_meta.get("matcher", "Edit|Write")
-    timeout = int(hook_meta.get("timeout", 2000))
+    timeout = int(hook_meta.get("timeout", 2))
+
+    settings_file = settings_path(scope)
+    if settings_file.exists():
+        try:
+            settings = json.loads(settings_file.read_text())
+        except json.JSONDecodeError as e:
+            return f"hook skipped (invalid settings.json: {e})"
+    else:
+        settings = {}
+    error = hook_document_error(settings)
+    if error is not None:
+        return f"hook skipped (invalid settings.json: {error} in {settings_file})"
+    assert isinstance(settings, dict)
 
     # Symlink hook script
     dest = hook_symlink_dest(scope, item)
@@ -1849,15 +2094,7 @@ def inject_hook(item: Item, scope: str) -> str | None:
     py_path.chmod(mode | 0o111)
 
     # Merge into settings.json
-    settings_file = settings_path(scope)
     settings_file.parent.mkdir(parents=True, exist_ok=True)
-    if settings_file.exists():
-        try:
-            settings = json.loads(settings_file.read_text())
-        except json.JSONDecodeError:
-            settings = {}
-    else:
-        settings = {}
 
     settings.setdefault("hooks", {})
     # Drop any prior entry for this hook anywhere — the hook.json's event or
@@ -2141,7 +2378,20 @@ def install_standalone_hook(item: Item, scope: str) -> str:
     meta = manifest.get(item.name, {})
     event = meta.get("event", "PreToolUse")
     matcher = meta.get("matcher", "Edit|Write")
-    timeout = int(meta.get("timeout", 2000))
+    timeout = int(meta.get("timeout", 2))
+
+    settings_file = settings_path(scope)
+    if settings_file.exists():
+        try:
+            settings = json.loads(settings_file.read_text())
+        except json.JSONDecodeError as e:
+            return f"hook skipped (invalid settings.json: {e})"
+    else:
+        settings = {}
+    error = hook_document_error(settings)
+    if error is not None:
+        return f"hook skipped (invalid settings.json: {error} in {settings_file})"
+    assert isinstance(settings, dict)
 
     base = (USER_CLAUDE_DIR if scope == "user" else Path.cwd() / ".claude") / "hooks"
     base.mkdir(parents=True, exist_ok=True)
@@ -2159,14 +2409,7 @@ def install_standalone_hook(item: Item, scope: str) -> str:
     cmd_str = str(dest)
     target_basename = f"{item.name}.py"
 
-    settings_file = settings_path(scope)
     settings_file.parent.mkdir(parents=True, exist_ok=True)
-    settings: dict = {}
-    if settings_file.exists():
-        try:
-            settings = json.loads(settings_file.read_text())
-        except json.JSONDecodeError:
-            settings = {}
     settings.setdefault("hooks", {})
 
     # Drop any prior entry for this hook anywhere (basename match), then re-add fresh.
@@ -2240,23 +2483,25 @@ def install_claude_item(item: Item, target_root: Path) -> str:
         src = item.src
     elif item.kind == "skills":
         target_dir = target_root / "skills"
-        target_path = target_dir / item.name
+        try:
+            target_path = skill_destination(target_dir, item)
+        except ValueError as error:
+            return f"skipped skills/{item.name}: {error}"
         src = item.src.parent
     else:
         return f"unknown kind: {item.kind}"
 
+    preflight_error = hook_install_preflight(item, scope, "claude")
+    if preflight_error is not None:
+        return f"skipped {item.kind}/{item.name}: {preflight_error}"
+
     target_dir.mkdir(parents=True, exist_ok=True)
 
-    replaced = False
-    if target_path.is_symlink() or target_path.exists():
-        if target_path.is_symlink() or target_path.is_file():
-            target_path.unlink()
-        else:
-            shutil.rmtree(target_path)
-        replaced = True
-
-    os.symlink(src, target_path)
+    replaced = target_path.is_symlink() or target_path.exists()
+    if not replace_with_symlink(target_path, src, allow_identical_file=False):
+        return f"skipped {item.kind}/{item.name}: destination is user-owned"
     record_install(item.kind, item.name, target_path)
+    migrate_legacy_skill_host(item, scope, "claude", target_root / "skills")
 
     md = inject_claude_md(item, scope)
     if md:
@@ -2305,33 +2550,69 @@ def codex_skill_root(scope: str) -> Path:
     )
 
 
-def replace_with_symlink(destination: Path, source: Path) -> bool:
+def replace_with_symlink(
+    destination: Path,
+    source: Path,
+    *,
+    allow_identical_file: bool = True,
+) -> bool:
     """Point a Codex-visible artifact at its source.
 
-    Existing symlinks are safely refreshed. A prior generated regular file is
-    migrated only when it has exactly the same content as the new source file;
-    any other user-authored file or directory is left untouched.
+    A symlink is refreshed only when it still points at the intended source. A
+    prior generated regular file can optionally be migrated when it has exactly
+    the same content as the new source file. User-authored files, directories,
+    and repointed symlinks are left untouched.
 
     Args:
         destination: Codex-visible path that should point at ``source``.
         source: Installer-owned source path for the symlink.
+        allow_identical_file: Whether an identical legacy file may be replaced.
 
     Returns:
         True when a link was created or refreshed, otherwise False.
     """
     destination.parent.mkdir(parents=True, exist_ok=True)
     if destination.is_symlink():
+        if destination.resolve() != source.resolve():
+            return False
         destination.unlink()
     elif destination.exists():
         if (
-            not source.is_file()
+            not allow_identical_file
             or not destination.is_file()
+            or not source.is_file()
             or destination.read_bytes() != source.read_bytes()
         ):
             return False
         destination.unlink()
     os.symlink(source, destination)
     return True
+
+
+def migrate_legacy_skill_host(item: Item, scope: str, host: str, skill_root: Path) -> None:
+    """Remove a directory-named skill footprint after canonical installation.
+
+    Claude's ``SKILL.md`` frontmatter is the identity source. Vendored directories
+    can retain an upstream path that differs from that name, so reinstalling the
+    canonical identity must retire only the same host's historical alias.
+
+    Args:
+        item: Canonically named skill being installed.
+        scope: Installation scope containing the legacy footprint.
+        host: Host whose legacy record should be removed.
+        skill_root: Host skill directory containing installed links.
+
+    """
+    if item.kind != "skills" or item.src.parent.name == item.name:
+        return
+    legacy_name = item.src.parent.name
+    remove_install_host(item.kind, legacy_name, scope, host)
+    legacy_destination = skill_root / legacy_name
+    if (
+        legacy_destination.is_symlink()
+        and legacy_destination.resolve() == item.src.parent.resolve()
+    ):
+        legacy_destination.unlink()
 
 
 def cache_codex_item(item: Item) -> None:
@@ -2502,15 +2783,36 @@ def install_codex_hook(item: Item, scope: str) -> str | None:
     if item.kind == "hooks":
         source = item.src
     root = codex_root(scope)
+    hooks_file = root / "hooks.json"
+    if hooks_file.exists():
+        try:
+            document = json.loads(hooks_file.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as e:
+            return f"skipped Codex hook {item.name}: invalid hooks.json: {e}"
+        error = hook_document_error(document)
+        if error is not None:
+            return f"skipped Codex hook {item.name}: invalid hooks.json: {error}"
     destination = root / "hooks" / f"{item.kind}-{item.name}.py"
+    if metadata.get("codex") is False:
+        actions = remove_install_host(item.kind, item.name, scope, "codex")
+        fallback = undo_artifact(
+            {"type": "codex_hook", "file": str(hooks_file), "command": str(destination)}
+        )
+        if fallback:
+            actions.append(fallback)
+        if destination.is_symlink() and destination.resolve() == source.resolve():
+            destination.unlink()
+            actions.append("hook symlink")
+        suffix = "; removed legacy Codex wiring" if actions else ""
+        return f"skipped Codex hook {item.name}: Claude-only approval hook{suffix}"
     if not replace_with_symlink(destination, source):
         return f"skipped Codex hook {item.name}: destination is user-owned"
     merge_codex_hook(
-        root / "hooks.json",
+        hooks_file,
         metadata.get("event", "PreToolUse"),
         metadata.get("matcher", "Edit|Write"),
         str(destination),
-        int(metadata.get("timeout", 2000)),
+        int(metadata.get("timeout", 2)),
     )
     record_artifact(item.kind, item.name, {"type": "symlink", "path": str(destination)})
     record_artifact(
@@ -2553,7 +2855,7 @@ def install_codex_item(item: Item, scope: str) -> str:
         cached_source = codex_cache_root() / "agents" / f"{item.name}.toml"
         if not replace_with_symlink(destination, cached_source):
             return f"skipped Codex agent {item.name}: destination is user-owned"
-        record_artifact(item.kind, item.name, {"type": "generated_file", "path": str(destination)})
+        record_artifact(item.kind, item.name, {"type": "symlink", "path": str(destination)})
         message = inject_agents_md(item, scope)
         if message:
             start, end = snippet_tags(item)
@@ -2569,10 +2871,16 @@ def install_codex_item(item: Item, scope: str) -> str:
             )
         return f"linked Codex agent {destination}" + (f"; {message}" if message else "")
     if item.kind == "skills":
-        destination = codex_skill_root(scope) / item.name
+        preflight_error = hook_install_preflight(item, scope, "codex")
+        if preflight_error is not None:
+            return f"skipped Codex skill {item.name}: {preflight_error}"
+        try:
+            destination = skill_destination(codex_skill_root(scope), item)
+        except ValueError as error:
+            return f"skipped Codex skill {item.name}: {error}"
         if not replace_with_symlink(destination, item.src.parent):
             return f"skipped Codex skill {item.name}: destination is user-owned"
-        record_artifact(item.kind, item.name, {"type": "symlink", "path": str(destination)})
+        record_install(item.kind, item.name, destination, host="codex", scope=scope)
         message = inject_agents_md(item, scope)
         if message:
             start, end = snippet_tags(item)
@@ -2587,6 +2895,7 @@ def install_codex_item(item: Item, scope: str) -> str:
                 },
             )
         hook = install_codex_hook(item, scope)
+        migrate_legacy_skill_host(item, scope, "codex", codex_skill_root(scope))
         return (
             f"linked Codex skill {destination}"
             + (f"; {message}" if message else "")

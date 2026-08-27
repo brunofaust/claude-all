@@ -250,7 +250,7 @@ five focused passes don't. Lenses:
 
 - **Factual / correctness** — does it do what it claims? Logic, edge cases, error paths.
 - **Senior-engineer** — design, naming, simplicity, the size/complexity gates above.
-- **Security** — the `web-security` / threat lenses (inputs, authz, secrets, injection).
+- **Security** — the `brunofaust-frontend-style` security reference and threat lenses (inputs, authz, secrets, injection).
 - **Consistency** — does it match the existing patterns/conventions in this codebase?
 - **Redundancy / reuse** — is this reinventing something that already exists? (see `research-before-build`)
 
