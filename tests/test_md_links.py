@@ -254,16 +254,9 @@ def _stub_run(
             "markdown_files_scanned": scanned,
             "links_resolved": links_resolved,
             "files_skipped_vendored": skipped_vendored,
-        },
+},
     )
     monkeypatch.setattr(
-        check_md_links,
-        "check_readme_coverage",
-        lambda: {
-            "unlinked_resources": unlinked or [],
-            "resources_checked": resources_checked,
-        },
-    )
         check_md_links,
         "check_readme_coverage",
         lambda: {
