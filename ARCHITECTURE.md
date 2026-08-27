@@ -63,6 +63,10 @@ use the same snippets and ownership tags, including when `AGENTS.md` symlinks to
 the shared-file test covers personal/foreign content, symlinks and repeat installs.
 This is a deterministic file-size budget, not a tokenizer-specific token limit.
 
+CI runs `uv run pytest -p no:cacheprovider` with the project installed so CLI
+version metadata is available. Host-specific artifact tests declare detected hosts
+explicitly; they do not require Claude or Codex executables on the runner.
+
 `prek run --all-files` is the single lint/quality entry point (mirrored in `.github/workflows/ci.yml`, which runs the same command on every PR). It chains a standard `pre-commit-hooks` set (JSON/TOML/YAML validation, whitespace/EOL fixers, large-file and merge-conflict checks, `no-commit-to-branch`) with several checks specific to this repo:
 
 - `ruff-check` / `ruff-format` (Python lint + format, target `py311`), `mypy` (scoped to `cli.py`, `scripts/`, `src/claude_all/hooks/`, `src/claude_all/tools/` — skill-embedded `hook.py` files all share the module name `hook`, which mypy can't batch-check, so ruff + vulture cover those instead), `pyupgrade`, `typos`, `gitleaks`, and `pygrep-hooks` (blanket `# type: ignore`, mock-method mistakes, deprecated `log.warn`, comment-style type annotations).

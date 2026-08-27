@@ -1168,7 +1168,13 @@ def test_install_item_creates_claude_and_codex_agent_artifacts(tmp_path: Path, m
     source = agent_source(tmp_path, "claude-haiku-4-5")
     item = cli.Item("agents", "test", "sample-agent", source)
 
-    cli.install_item(item, tmp_path / ".claude")
+    with pytest.MonkeyPatch.context() as hosts:
+        hosts.setattr(
+            cli.shutil,
+            "which",
+            {"claude": "/test-bin/claude", "codex": "/test-bin/codex"}.get,
+        )
+        cli.install_item(item, tmp_path / ".claude")
 
     assert (tmp_path / ".claude" / "agents" / "sample-agent.md").is_symlink()
     generated = tmp_path / ".codex" / "agents" / "sample-agent.toml"
