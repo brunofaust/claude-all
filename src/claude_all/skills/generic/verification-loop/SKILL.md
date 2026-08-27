@@ -1,7 +1,7 @@
 ---
 name: verification-loop
 description: >-
-  Structured pre-PR verification with explicit PASS/FAIL per gate and a formal report. Six phases (lint/format → types → tests → coverage → security/secrets → diff review) culminating in a READY / NOT READY verdict. Complements adversarial-verification (which is about claim verification) by enforcing a uniform gate format before any PR opens. Use when: finishing a feature or significant change, before opening a PR, after refactoring, or any time you want to declare "ready to ship" with evidence. Adapt the commands to the project stack (Python/Node/Go/etc.).
+  Use before opening or updating a PR, after significant changes or refactors, and before declaring a diff ready to ship.
 user-invocable: true
 ---
 
@@ -145,7 +145,7 @@ Rules for the report:
 - Numbers are **counts**, not adjectives ("3 errors" not "some errors").
 - `SKIP` requires a one-line reason next to it.
 - `NOT READY` if ANY phase failed.
-- `READY` only when all six are PASS or justifiably SKIP.
+- `READY` only when all six are PASS. A skipped gate is unverified, not green.
 
 ______________________________________________________________________
 
@@ -171,6 +171,16 @@ ______________________________________________________________________
 - ❌ Running this on every keystroke — it's a gate, not a watch.
 
 ______________________________________________________________________
+
+## Load the skills required by the diff
+
+- Python: `brunofaust-python-style`; delegate test gaps to `test-author`;
+  migrations also require `alembic-migration`.
+- Frontend: `brunofaust-frontend-style`, `vercel-composition-patterns` and
+  `web-design-guidelines`; user-facing web also requires its security reference and `seo`.
+- AWS/IaC: `aws-architecture`; new resources also require `aws-cost-optimization`.
+- New non-trivial code: `research-before-build`.
+- Every review/verification: `code-review-discipline` and `adversarial-verification`.
 
 ## Integration with other skills
 

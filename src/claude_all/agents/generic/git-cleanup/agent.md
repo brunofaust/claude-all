@@ -1,13 +1,9 @@
 ---
 name: git-cleanup
 description: >-
-  End-of-session git cleanup (Haiku). Triggers: "session cleanup", "clean up branches/worktrees",
-  "too many branches/worktrees", "end of session cleanup". Runs safety scan first, then reconciles every
-  "has changes" item against `origin/main` (squash-merge aware): worktrees/branches whose uncommitted or
-  unpushed content is already in main become deletable — only ones with a REAL difference vs main are
-  reported. One confirmation, then removes safe worktrees + merged and stale branches, prunes dead refs,
-  pulls latest main. For a read-mostly overview/report use `git-audit`; for filesystem cruft (build
-  artifacts) use `repo-cleaner`.
+  Clean branches/worktrees after safety scan, content-in-main reconciliation and user
+  confirmation. Include uncommitted/unpushed content; force removal requires containment proof.
+  Reports go to git-audit; filesystem artifacts to repo-cleaner.
 model: claude-haiku-4-5
 tools:
   - Bash

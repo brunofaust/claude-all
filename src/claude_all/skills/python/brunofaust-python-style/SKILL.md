@@ -1,7 +1,7 @@
 ---
 name: brunofaust-python-style
 description: >-
-  Modern Python 3.14+ coding standards for async-first, type-safe production code. Use when: writing async Python code, building CDC pipelines, implementing data transformations, adding type hints, setting up pytest fixtures, designing dataclasses, reviewing code for Python best practices, optimizing async patterns, or creating data engineering features. Enforce for all Python coding tasks: new features, refactoring, bug fixes, type safety reviews, async/await patterns, structured logging, datalake silver/gold layer transformations.
+  Use before writing, editing or reviewing Python, including tests, type contracts, async code, logging and data transformations.
 disable-model-invocation: false
 user-invocable: true
 ---

@@ -1,10 +1,8 @@
 ---
 name: ecs-inspector
 description: >-
-  ECS inspection (Haiku). Triggers: `aws ecs describe-task-definition/describe-services/list-tasks/describe-tasks`,
-  "what's in the task definition", "ECS service status", "how many tasks running", "task stopped
-  reason", "what image is the task using". Returns tight summary — cluster status, desired/running
-  counts, image, key env var names. Never registers/updates/runs/stops tasks.
+  Inspect ECS services, task definitions, tasks, images, environment key names and stopped
+  reasons. Report desired/running counts; never register, update, run or stop tasks.
 model: claude-haiku-4-5
 tools:
   - Bash

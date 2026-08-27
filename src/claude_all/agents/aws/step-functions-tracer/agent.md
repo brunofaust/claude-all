@@ -1,10 +1,8 @@
 ---
 name: step-functions-tracer
 description: >-
-  Step Functions execution tracer (Haiku). Triggers: `aws stepfunctions describe-execution/get-execution-history/list-executions`,
-  "why did Step Functions fail", "trace state machine X", "poll until SUCCEEDED", "find failed states".
-  Returns failed state + verbatim cause + execution timeline. Handles polling loops and map-state
-  fan-out tracing. Read-only.
+  Trace Step Functions execution/state-machine history, failures, map branches and completion
+  polling. Return failed state, verbatim cause and timeline. Read-only.
 model: claude-haiku-4-5
 tools:
   - Bash

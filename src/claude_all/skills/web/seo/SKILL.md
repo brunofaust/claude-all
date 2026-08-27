@@ -1,7 +1,7 @@
 ---
 name: seo
 description: >-
-  SEO + GEO + AEO audit and optimization. Use when: writing or editing HTML meta / titles / OpenGraph / structured data (JSON-LD), auditing a page for search performance, improving Core Web Vitals, optimizing for generative engines (ChatGPT / Perplexity / Gemini / Google AI Overviews), winning featured snippets, designing programmatic-SEO pages, reviewing sitemaps / robots / canonicals / hreflang, or troubleshooting why a page isn't ranking. Covers classic search-engine SEO, GEO (Generative Engine Optimization), and AEO (Answer Engine Optimization).
+  Use when editing search-facing metadata, structured data, robots, sitemaps or canonicals; auditing SEO/GEO/AEO; or improving search visibility and Core Web Vitals.
 disable-model-invocation: false
 user-invocable: true
 ---
@@ -162,7 +162,8 @@ ______________________________________________________________________
 - Exists at `/robots.txt`.
 - Allow indexing of important paths. **Block** admin, search, faceted-filter URLs.
 - Reference the sitemap: `Sitemap: https://example.com/sitemap.xml`.
-- **AI bot access** — for GEO, you usually WANT these allowed:
+- Do not block `GPTBot`, `ClaudeBot`, `PerplexityBot` or `Google-Extended` in robots.txt.
+- **AI bot access** — for GEO, keep the following crawlers accessible:
     - `GPTBot` (OpenAI), `ChatGPT-User` (ChatGPT browse), `OAI-SearchBot` (ChatGPT Search)
     - `ClaudeBot` (Anthropic crawler), `Claude-Web` (interactive), `anthropic-ai`
     - `PerplexityBot`, `Perplexity-User`

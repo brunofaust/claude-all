@@ -1,13 +1,7 @@
 ---
 name: prek
 description: >-
-  Git pre-commit hook framework — covers BOTH pre-commit (the original Python tool) and prek (its
-  faster, dependency-free Rust drop-in). Same hook ecosystem, hook IDs, stages, and SKIP=; prek reads
-  .pre-commit-config.yaml unchanged and adds an optional prek.toml. Use when: setting up pre-commit or
-  prek in a project, adding or configuring hooks, debugging hook failures (staged-file issues, --files
-  mode gotchas), resolving a finding (fix / allowlist / scope-exclude a path), multi-language
-  spell-check (typos + cspell), understanding the final_check.py Claude Code hook pattern, or running
-  it as a CI quality gate.
+  Use when configuring prek/pre-commit hooks, running quality gates or resolving hook failures, staged-file omissions, interpreter mismatches and skipped stages.
 disable-model-invocation: false
 user-invocable: true
 ---
@@ -33,7 +27,6 @@ model, same upstream hook repos, same hook IDs. Translate freely:
 | Run on all files | `pre-commit run --all-files` | `prek run --all-files` |
 | Run one hook on files | `pre-commit run <id> --files a b` | `prek run <id> --files a b` |
 | Update hook revisions | `pre-commit autoupdate` | `prek autoupdate` |
-| Skip a hook | `SKIP=<id> …` | `SKIP=<id> …` (identical) |
 | Config file | `.pre-commit-config.yaml` | `.pre-commit-config.yaml` **or** `prek.toml` |
 
 The only prek-only piece is `prek.toml` (TOML) — upstream pre-commit reads YAML only; `prek util
@@ -60,6 +53,14 @@ Bulky recipes live under `references/`. Read the matching file before deep work 
 | Adding multi-language spell-check (CSpell alongside `typos`)                                  | [`references/cspell.md`](references/cspell.md)                           |
 
 ______________________________________________________________________
+
+## Gate execution contract
+
+Delegate gate runs to `code-quality` and repairs to `lint-fixer`. Inspect the returned
+`[FILES MODIFIED BY THE GATE]` report; scope any restoration to unintended gate edits.
+Stage new/changed files before the full run. Claim success only after both
+`prek run --all-files` and `prek run --all-files --hook-stage pre-push` pass and each
+expected hook actually inspected its inputs. Never bypass failing hooks.
 
 ## What prek is NOT
 
@@ -113,16 +114,6 @@ uv run prek run --all-files
 
 # Run on specific files only (used by final_check.py hook)
 prek run --files src/mymodule/foo.py src/mymodule/bar.py
-
-# Skip a specific hook by ID (comma-separated for several)
-SKIP=mypy prek run --all-files
-SKIP=gitleaks,mypy prek run --all-files
-
-# The same SKIP env var works at COMMIT time — skips the hook for ONE commit.
-# Use when a pre-existing failure is unrelated to your change (then fix it separately):
-SKIP=mypy git commit -m "feat: ..."
-# Prefer SKIP=<id> over `git commit --no-verify`: SKIP skips ONLY the named hook(s);
-# --no-verify disables EVERY hook and silently hides real failures.
 
 # Update all hooks to their latest revisions
 prek autoupdate
@@ -347,7 +338,7 @@ When a hook flags something, you have **three levers**, in order of preference:
     shouldn't be checked at all (generated code, i18n locale dumps, vendored files, fixtures).
 
 A top-level `exclude = { glob = [...] }` applies to **every** hook; a per-hook `exclude` scopes to one.
-For a one-off bypass use `SKIP=<id>` (see Daily commands) — that's not a real resolution, just a defer.
+Never use `SKIP=` or `--no-verify` to bypass a failure, including a pre-existing one.
 
 ### Worked example — `typos`
 

@@ -6,6 +6,22 @@ only for a proven STRUCTURAL reason (see *Internal contracts* below), never as t
 internal default: a dataclass validates nothing. **TypedDict is banned outright**
 (checker rule `no-typeddict`), and so is `typing.cast` (checker rule `no-cast`).
 
+## Gate findings: repair the contract
+
+Fix the code; never weaken a contract or bypass a checker to clear a finding.
+
+| Finding | Required repair |
+| --- | --- |
+| `extra-forbid` / unknown field | Update the consumer/schema together; keep `extra="forbid"`, never `ignore` or `allow`. |
+| `masking-default` | Remove defaults from required fields. Optional fields use `T \| None = None` and explicit `None` handling. |
+| `opaque-annotation` | Specify a concrete shape or value type; never widen to `Any`, remove annotations or add `type: ignore`. |
+| `no-typeddict` / `no-cast` | Validate with `Model.model_validate(...)`. |
+| `select-star` | Name query columns; do not loosen the model to absorb extras. |
+| Parse failure / checker exit 2 | Pin the hook interpreter's `language_version`; never swallow `SyntaxError` or exclude unreadable code. |
+
+Never hide a new finding with `--select`, `SKIP=`, `--no-verify`, `noqa`,
+a suppression or a new baseline entry. Existing regression baselines do not authorize new debt.
+
 ## Why TypedDict is banned
 
 **TypedDict is static-only — it validates NOTHING at runtime.** mypy checks the

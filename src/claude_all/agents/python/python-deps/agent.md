@@ -1,13 +1,9 @@
 ---
 name: python-deps
 description: >-
-  Python dependency manager (Haiku). Triggers: `uv sync/add/remove/lock/upgrade`, `pip install/uninstall`,
-  `poetry add/remove/update/lock`, `pipx install/upgrade`, "install deps", "sync deps", "bump/upgrade the
-  dependency versions", "update pyproject to latest", "why isn't this package installing". On an explicit
-  version bump it updates the declared version NUMBER in `pyproject.toml` (keeping each specifier's
-  operator/signal, extras and markers unchanged) — not just `uv.lock` — then relocks and validates for
-  dependency / Python-version conflicts. Returns 1-line success or tight conflict report.
-  For `uv run pytest` use `test-runner`; for `uv run mypy`/`ruff` use `code-quality`/`lint-fixer`.
+  Manage Python dependencies with uv/pip/poetry/pipx: install, sync, add/remove, lock or bump.
+  Explicit bumps update declared version numbers while preserving operators/extras/markers, then
+  relock/validate. Tests go to test-runner; lint/types to code-quality or lint-fixer.
 model: claude-haiku-4-5
 tools:
   - Bash

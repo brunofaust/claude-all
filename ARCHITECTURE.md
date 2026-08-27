@@ -34,7 +34,7 @@ agents/hooks/skills inside whatever project adopted them.
 | `tests/` | Pytest suite (`test_dependency_resolution.py`, `test_leftovers.py`, `test_md_links.py`) covering the installer's dependency-closure logic, leftover/orphan detection, and the README-link gate. |
 | `hooks/` (repo root) | Empty — not to be confused with `src/claude_all/hooks/`, which holds the actual installable hook scripts. |
 | `.claude/` | This repo's own Claude Code configuration: `.claude/skills/` (repo-scoped skills used *while working on* claude-all, not shipped by the installer — e.g. `vendored-sources`), `.claude/settings.json`, and worktree bookkeeping. Tracked in git, not ignored. |
-| `.github/workflows/ci.yml` | Runs `prek run --all-files` on every PR to `main` (`SKIP=no-commit-to-branch` so CI itself isn't blocked by the branch-protection hook). |
+| `.github/workflows/ci.yml` | Runs pytest (including the instruction budget and ownership checks) and `prek run --all-files` on every PR to `main` (`SKIP=no-commit-to-branch` so CI itself isn't blocked by the branch-protection hook). |
 | `.github/workflows/release.yml` | Drives the `python-semantic-release` release flow (see below). |
 | `prek.toml` | The full pre-commit/prek hook chain — the project's single lint/quality gate (see "Gates" below). |
 | `codecongruence.toml` | Config for the `codecongruence` semantic-drift hook run via prek. |
@@ -54,6 +54,14 @@ agents/hooks/skills inside whatever project adopted them.
 **Vendored resources.** Some skills/agents (e.g. from Vercel's `agent-skills`, `humanink`) are copied from upstream repos rather than authored here. `vendored.json` tracks their source and is refreshed by `scripts/vendor_sync.py`. Vendored files must stay byte-identical to upstream — local additions go in sidecar files (`ATTRIBUTION.md`, `claude_md.md`, `hook.*`) rather than edits to the vendored file itself, and several prek hooks (whitespace fixers, `typos`) exclude the vendored directories to avoid drifting them from upstream.
 
 ## Gates (`scripts/` + `prek.toml`)
+
+**Instruction context budget.** Companion snippets contain model-facing routing,
+loading triggers and caller obligations; descriptions select resources, and bodies
+hold their procedures. Standalone snippets retain global constraints. Both hosts
+use the same snippets and ownership tags, including when `AGENTS.md` symlinks to
+`CLAUDE.md`. The catalog test caps rendered instructions at 14,500 UTF-8 bytes;
+the shared-file test covers personal/foreign content, symlinks and repeat installs.
+This is a deterministic file-size budget, not a tokenizer-specific token limit.
 
 `prek run --all-files` is the single lint/quality entry point (mirrored in `.github/workflows/ci.yml`, which runs the same command on every PR). It chains a standard `pre-commit-hooks` set (JSON/TOML/YAML validation, whitespace/EOL fixers, large-file and merge-conflict checks, `no-commit-to-branch`) with several checks specific to this repo:
 

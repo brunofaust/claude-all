@@ -1,7 +1,7 @@
 ---
 name: adversarial-verification
 description: >-
-  Evidence-first verification discipline. Use BEFORE claiming work complete, before opening a PR, after applying a fix, before saying "tests pass" / "it works" / "the bug is fixed". The rule: no success word without a fresh command run quoted verbatim. Tries to BREAK the change instead of confirming it. Pairs with `test-runner` (executor) and `e2e-scenario-runner` (multi-service probe). Synthesized from obra/superpowers `verification-before-completion`, alirezarezvani/claude-skills `adversarial-reviewer`, robertoecf/adversarial-review.
+  Use before claiming success, completion, passing tests, a fixed bug or PR readiness, and after applying a fix.
 disable-model-invocation: false
 user-invocable: true
 ---

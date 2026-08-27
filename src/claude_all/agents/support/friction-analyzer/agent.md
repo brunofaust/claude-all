@@ -1,10 +1,9 @@
 ---
 name: friction-analyzer
 description: >-
-  Session friction analyzer (Sonnet). Triggers: "analyze transcript for friction", "what went wrong
-  this session", "turn mistakes into rules", "what guard hook would have helped", "mine sessions for
-  improvements". Reads transcripts with jq/grep (never dumps raw JSONL), returns patterns + verbatim
-  evidence + proposed rules. Read-only — proposes, never edits hooks/CLAUDE.md.
+  Analyze coding-session friction and propose minimal preventive rules with verbatim redacted
+  evidence. Read transcripts selectively, never dump raw JSONL. Read-only: do not edit hooks,
+  instructions or configuration.
 model: claude-sonnet-5
 tools:
   - Bash

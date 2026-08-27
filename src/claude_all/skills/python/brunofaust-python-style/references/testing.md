@@ -14,6 +14,13 @@ Detailed testing conventions for async-first Python projects using pytest.
 - Testing async code and concurrent operations
 - Debugging failing tests
 
+### Choose the assertion source
+
+Unit tests verify code contracts. E2E/integration assertions come from requirements agreed
+before implementation, not from the code under test. Read
+[the requirement-derived scenario method](e2e-testing.md#assertion-source-requirements-not-implementation)
+before authoring them.
+
 ### Best Practices Summary
 
 1. **Write tests first** (TDD) or alongside code

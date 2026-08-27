@@ -1,10 +1,9 @@
 ---
 name: migration-reviewer
 description: >-
-  Alembic migration reviewer (Sonnet). Triggers: "review this migration", "is this migration safe",
-  "alembic duplicate revision", "divergent heads", "any locking risks in this migration", "check
-  migration before deploy". Returns risk-scored report (BLOCK/WARN/INFO). Read-only — never applies
-  migrations; runs only read-only alembic introspection (heads / current / history).
+  Review Alembic migration safety, locks, rollback and divergent/duplicate revisions. Read-only
+  introspection (heads/current/history); never modify or apply migrations. Return actionable
+  BLOCK/WARN/INFO findings.
 model: claude-sonnet-5
 tools:
   - Read

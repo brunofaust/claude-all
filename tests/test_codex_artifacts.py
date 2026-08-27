@@ -14,6 +14,78 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from claude_all import cli
 
+# Migration contract from e94af8e: shrinking instructions must not delete their owners.
+PRE_COMPACTION_INSTRUCTION_IDENTITIES = {
+    "agents/aws-events-scheduler",
+    "agents/aws-lambda-deployer",
+    "agents/bug-hunter",
+    "agents/cloudformation-deployer",
+    "agents/cloudformation-reviewer",
+    "agents/cloudwatch-inspector",
+    "agents/code-quality",
+    "agents/cost-audit-runner",
+    "agents/cost-explorer",
+    "agents/docker-log-inspector",
+    "agents/docker-runner",
+    "agents/dynamodb-inspector",
+    "agents/dynamodb-mutator",
+    "agents/e2e-scenario-runner",
+    "agents/ecr-manager",
+    "agents/ecs-inspector",
+    "agents/email-inspector",
+    "agents/friction-analyzer",
+    "agents/frontend-builder",
+    "agents/gh-runner",
+    "agents/git-audit",
+    "agents/git-cleanup",
+    "agents/git-committer",
+    "agents/git-runner",
+    "agents/http-runner",
+    "agents/iam-auditor",
+    "agents/incident-responder",
+    "agents/lint-fixer",
+    "agents/migration-reviewer",
+    "agents/postgres-query",
+    "agents/python-deps",
+    "agents/python-module-migrator",
+    "agents/rds-postgres-query",
+    "agents/repo-cleaner",
+    "agents/s3-inspector",
+    "agents/secrets-fetcher",
+    "agents/seo-reviewer",
+    "agents/seo-runner",
+    "agents/sqs-monitor",
+    "agents/step-functions-tracer",
+    "agents/terraform-deployer",
+    "agents/terraform-reviewer",
+    "agents/test-author",
+    "agents/test-runner",
+    "instructions/agent-era-rules",
+    "instructions/bash-safety",
+    "instructions/commit-cadence",
+    "instructions/delegate_search",
+    "instructions/response-style",
+    "instructions/secrets-in-shell",
+    "instructions/tool-dispatch",
+    "instructions/worktree-isolation",
+    "skills/adversarial-verification",
+    "skills/alembic-migration",
+    "skills/aws-architecture",
+    "skills/aws-cost-optimization",
+    "skills/brunofaust-frontend-style",
+    "skills/brunofaust-python-style",
+    "skills/code-review-discipline",
+    "skills/merge-main",
+    "skills/prek",
+    "skills/research-before-build",
+    "skills/self-rationalization-guard",
+    "skills/seo",
+    "skills/ship-pr",
+    "skills/subagent-prompting",
+    "skills/verification-loop",
+    "tools/rtk",
+}
+
 INVALID_HOOK_DOCUMENTS = [
     pytest.param({"hooks": []}, id="hooks-is-not-an-object"),
     pytest.param(
@@ -146,6 +218,87 @@ def test_inject_codex_agents_md_preserves_handwritten_content(tmp_path: Path, mo
     assert cli.write_tagged_block(agents, item, None) == "removed"
 
     assert agents.read_text(encoding="utf-8") == "# Local rules\n\nKeep this.\n"
+
+
+@pytest.fixture
+def shipped_instruction_snippets() -> list[tuple[cli.Item, Path]]:
+    """Discover the real instruction catalog, rejecting empty companion content."""
+    items = cli.discover([])
+    assert items, "Resource discovery returned an empty catalog"
+    snippets = []
+    for item in items:
+        snippet = cli.claude_md_snippet_path(item)
+        if snippet is not None:
+            assert snippet.read_text(encoding="utf-8").strip(), f"Empty snippet: {snippet}"
+            snippets.append((item, snippet))
+    assert snippets, "No shipped instruction companions were discovered"
+    identities = {f"{item.kind}/{item.name}" for item, _ in snippets}
+    missing = PRE_COMPACTION_INSTRUCTION_IDENTITIES - identities
+    assert not missing, f"Instruction compaction dropped original owners: {sorted(missing)}"
+    return snippets
+
+
+def test_shipped_instruction_catalog_stays_within_root_context_budget(
+    tmp_path: Path, shipped_instruction_snippets: list[tuple[cli.Item, Path]]
+) -> None:
+    """Bound rendered instructions including ownership markers, not just body text.
+
+    Args:
+        tmp_path: Isolated instruction destination.
+        shipped_instruction_snippets: Nonempty real resource companions.
+    """
+    target = tmp_path / "CLAUDE.md"
+    for item, snippet in shipped_instruction_snippets:
+        cli.inject_tagged_block(target, item, snippet)
+
+    # Leave room for personal rules within the approved 70% file-size reduction.
+    rendered_bytes = len(target.read_bytes())
+    assert rendered_bytes <= 14_500, f"Managed instruction catalog uses {rendered_bytes} bytes"
+
+
+def test_both_hosts_share_symlinked_instructions_without_growth_or_content_loss(
+    tmp_path: Path, shipped_instruction_snippets: list[tuple[cli.Item, Path]]
+) -> None:
+    """Reinstalling both hosts preserves shared-file ownership and unmanaged text.
+
+    Args:
+        tmp_path: Isolated user home and installer state.
+        shipped_instruction_snippets: Nonempty real resource companions.
+    """
+    claude = tmp_path / ".claude" / "CLAUDE.md"
+    agents = tmp_path / ".codex" / "AGENTS.md"
+    claude.parent.mkdir()
+    agents.parent.mkdir()
+    personal = "# Personal rules\n\nKeep café names unchanged.\n"
+    foreign = (
+        "\n<!-- another-tool:rules:start -->\nKeep this too.\n<!-- another-tool:rules:end -->\n"
+    )
+    original = personal + foreign
+    claude.write_text(original, encoding="utf-8")
+    agents.symlink_to(Path("../.claude/CLAUDE.md"))
+    original_link = agents.readlink()
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+        patch.setattr(cli, "STATE_DIR", tmp_path / ".claude-all")
+        patch.setattr(cli, "STATE_FILE", tmp_path / ".claude-all" / "state.json")
+        for item, _ in shipped_instruction_snippets:
+            cli.inject_claude_md(item, "user")
+            cli.inject_agents_md(item, "user")
+        installed = claude.read_bytes()
+        for item, _ in shipped_instruction_snippets:
+            cli.inject_claude_md(item, "user")
+            cli.inject_agents_md(item, "user")
+
+    assert agents.is_symlink() and agents.readlink() == original_link
+    assert agents.resolve() == claude
+    assert agents.read_bytes() == claude.read_bytes() == installed
+    rendered = installed.decode("utf-8")
+    assert rendered.startswith(original)
+    for item, snippet in shipped_instruction_snippets:
+        start, end = cli.snippet_tags(item)
+        assert rendered.count(start) == rendered.count(end) == 1
+        assert f"{start}\n{snippet.read_text(encoding='utf-8').rstrip()}\n{end}" in rendered
 
 
 def test_merge_codex_hook_preserves_foreign_entry_and_timeout_seconds(

@@ -1,10 +1,9 @@
 ---
 name: test-author
 description: >-
-  Unit test writer (Sonnet). Triggers: "write tests for X", "add unit tests", "increase coverage",
-  "hit the coverage gate", "tests are missing for Y". Coverage-driven: measures gaps via `pytest --cov`,
-  writes behavior-asserting tests to the gate following brunofaust-python-style conventions. Never
-  coverage-games or edits source. Pairs with `test-runner` (author writes → runner verifies).
+  Write behavior-asserting unit tests for missing coverage or acceptance criteria. Measure
+  coverage, preserve source and gates; report product bugs instead of hiding them. Existing
+  suite execution goes to test-runner.
 model: claude-sonnet-5
 tools:
   - Bash

@@ -1,10 +1,9 @@
 ---
 name: test-runner
 description: >-
-  Test suite runner (Haiku). Triggers: `pytest`, `uv run pytest`, `npm test`, `vitest`, `jest`, `go
-  test`, `cargo test`, "run tests", "did I break anything", "is this covered", "re-run". Returns total
-  passed/failed/skipped + failed test IDs + first error line per failure. Read-only — never edits
-  code or tests. For writing tests use `test-author`.
+  Run existing pytest/npm/pnpm/Vitest/Jest/Go/Rust tests and coverage; report counts, failed IDs
+  and verbatim failure bodies. Read-only; never edit tests or source. New tests go to
+  test-author.
 model: claude-haiku-4-5
 tools:
   - Bash

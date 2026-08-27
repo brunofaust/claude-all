@@ -1,10 +1,8 @@
 ---
 name: sqs-monitor
 description: >-
-  SQS queue inspector (Haiku). Triggers: `aws sqs list-queues/get-queue-attributes`, DLQ peek
-  (`receive-message --visibility-timeout 0`), "queue depth", "DLQ growing", "oldest message age",
-  "what's in the DLQ". Returns per-queue depth + in-flight + DLQ depth + oldest message age. DLQ
-  redrive (`start-message-move-task`) requires explicit "yes redrive" confirmation.
+  Inspect SQS depth, in-flight/oldest messages and DLQs; peek with visibility-timeout 0. Redrive
+  via start-message-move-task only with explicit yes redrive confirmation.
 model: claude-haiku-4-5
 tools:
   - Bash

@@ -1,14 +1,9 @@
 ---
 name: code-quality
 description: >-
-  Lint and type-check runner (Haiku). Triggers: "run lint", "prek is failing", "ruff complaining",
-  "mypy errors", "eslint errors", "type check", "run quality gates". Runs `prek run --all-files` or
-  individual linters and reports findings. Report-only — never fixes (use `lint-fixer` for that).
-  STRICTLY REPORT-ONLY: it never fixes anything itself and never claims a fix as its own work. Because
-  auto-fixing hooks (ruff `--fix`, ruff-format, trailing-whitespace) rewrite files as a SIDE EFFECT of
-  running the gate, it snapshots the working tree before/after and reports every file the gate touched in
-  a `[FILES MODIFIED BY THE GATE]` section so the caller can revert.
-  Covers Python (ruff, mypy, prek) and frontend (eslint, prettier, tsc, biome).
+  Run lint/type/quality checks and report verbatim findings. Use the project prek chain when
+  configured. Never fix; snapshot content before/after hooks and always report [FILES MODIFIED
+  BY THE GATE]. Fix requests go to lint-fixer.
 model: claude-haiku-4-5
 tools:
   - Bash

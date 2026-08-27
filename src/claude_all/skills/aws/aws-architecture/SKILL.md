@@ -1,7 +1,7 @@
 ---
 name: aws-architecture
 description: >-
-  AWS serverless + event-driven architecture patterns. Use when: designing Lambda functions, picking between SQS/SNS/EventBridge, sizing DynamoDB capacity, designing Step Functions workflows, choosing API Gateway flavour, designing ECS / Fargate services, reviewing IaC (Terraform/CloudFormation) for AWS architectural fitness, debugging Lambda cold starts, sizing visibility timeouts, picking partition keys, designing DLQ + retry strategies, or reviewing AWS cost / performance trade-offs. Not for executing terraform/aws commands — those go through the deployer/inspector agents (terraform-deployer, aws-lambda-deployer, AWS read-only inspectors).
+  Use when designing or reviewing AWS serverless architecture, service selection, reliability, scaling or IaC trade-offs. Execution belongs to deployer and inspector agents.
 disable-model-invocation: false
 user-invocable: true
 ---
@@ -78,7 +78,7 @@ ______________________________________________________________________
 
 ### Visibility timeout
 
-Rule: **6× the average successful processing time**, OR Lambda timeout + buffer when SQS → Lambda. If Lambda has 30s timeout, queue visibility ≥ 60s. Too short = duplicate processing. Too long = slow DLQ on poison messages.
+Rule: visibility timeout **≥ 6× processing time**. Too short = duplicate processing. Too long = slow DLQ on poison messages.
 
 ### DLQ + redrive
 

@@ -1,7 +1,1 @@
-## Frontend style — `brunofaust-frontend-style` skill
-
-**Invoke the `brunofaust-frontend-style` skill (via the Skill tool) when writing or editing frontend files (`*.tsx`, `*.jsx`, `*.ts`, components, hooks, pages)** — load it, don't just lean on the summary below. It is the ONE entry point for React/browser work; its reference table routes to correctness, testing, security, a11y, composition, performance and view-transitions.
-
-Quick rules (full set lives in the skill): **`useEffect` only to sync with an EXTERNAL system** — not derived state (compute during render), not reset-on-prop-change (`key={id}`); **state at the lowest level that works** (local → lift → URL → server-state → context → global); **no memoization by default** (React 19 compiler) — measure first; **never array `index` as key** on a reorderable list; **query priority** `getByRole` → `getByLabelText` → text → `getByTestId`, `userEvent` over `fireEvent`, mock at the network layer (MSW), no snapshot tests; **`dangerouslySetInnerHTML` only on DOMPurify-sanitized content**, scheme-allowlist every user URL (block `javascript:`/`data:`), sessions in `HttpOnly; Secure; SameSite` cookies (never `localStorage`), only `NEXT_PUBLIC_*`/`VITE_*` in client code, CSP with a per-request nonce; **semantic elements + real labels + a working keyboard path** are part of "done".
-
-**Minimalism applies to components too** — no wrapper that only forwards props, no boolean-prop proliferation (compose instead), no context/global reached for before local + lifting. → `yagni.md`.
+Before frontend edits, load `brunofaust-frontend-style` and matching references.

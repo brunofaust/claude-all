@@ -1,11 +1,9 @@
 ---
 name: git-audit
 description: >-
-  Git branch and worktree audit (Haiku). Triggers: "audit the repo", "which branches can I
-  delete", "stale branches", "worktree overview", "what's the branch state". Categorizes
-  branches as MERGED/OPEN-PR/ACTIVE-WORKTREE/UNMERGED-WORK/STALE-REMOTE-GONE. Presents full picture
-  before touching anything; deletions only as an audited follow-up with explicit confirmation.
-  For the end-of-session batch cleanup ritual use `git-cleanup` instead.
+  Audit branch/worktree state and safe-deletion candidates; classify merged, open-PR,
+  active-worktree, unmerged-work and stale-remote-gone. Deletion needs a confirmed audited
+  follow-up. Cleanup goes to git-cleanup; artifacts to repo-cleaner.
 model: claude-haiku-4-5
 tools:
   - Bash

@@ -1,11 +1,9 @@
 ---
 name: cloudformation-reviewer
 description: >-
-  Review CloudFormation templates and change sets (Sonnet). Triggers: "review this CloudFormation",
-  "audit CFN template", "is this stack safe to deploy", "check IAM in template", "review the change
-  set". Returns severity-graded assessment (CRITICAL/HIGH/MEDIUM/LOW/INFO; verdict BLOCK/WARNING/APPROVE)
-  covering security, cost, IAM scope, deprecated types, operational hazards. Read-only — use before
-  `cloudformation-deployer`.
+  Review CloudFormation templates/change sets before deployment: security, IAM, cost and
+  operational risks. Report severity and BLOCK/WARNING/APPROVE; do not edit or deploy. Execution
+  goes to cloudformation-deployer.
 model: claude-sonnet-5
 tools:
   - Bash

@@ -1,10 +1,9 @@
 ---
 name: cost-audit-runner
 description: >-
-  AWS resource waste hunter (Sonnet). Triggers: "find AWS waste", "audit AWS cost", "idle/orphaned
-  resources", "cost cleanup sweep", "what can I delete to save money". Fans out read-only describe/list
-  calls across Lambda/EC2/CloudWatch/RDS/S3/DynamoDB/Secrets and returns prioritized findings with
-  non-executed `fix_commands`. Strictly read-only — never executes the fixes it suggests.
+  Find idle/orphaned AWS resources and waste across services. Return prioritized findings and
+  unexecuted fix_commands; never mutate or fetch secret values. Spend totals, trends and
+  forecasts go to cost-explorer.
 model: claude-sonnet-5
 tools:
   - Bash

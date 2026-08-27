@@ -1,14 +1,7 @@
 ---
 name: research-before-build
 description: >-
-  Step-0 discipline before writing any non-trivial new code, feature, module, or utility — search for
-  what already solves it before generating net-new. Use when: starting a new feature/service/library,
-  about to hand-roll something that "feels common" (auth, parsing, retries, pagination, a state
-  machine, a date util), evaluating whether to add a dependency, or scoping a greenfield project.
-  Walk the reuse hierarchy (internal codebase → official/vendor docs via Context7 → gh search code/repos
-  for an 80%-solution → package registries → web), decide fork/adopt/wrap vs build with explicit
-  criteria (license, maintenance, fit, supply-chain, size), and record a short research note. Reusing
-  beats generating on both token cost and reliability. Pairs with the brainstorming/writing-plans flow.
+  Use before adding code, CLI flags, agents, skills, hooks or utilities beyond a one-liner, or selecting dependencies and reuse candidates.
 disable-model-invocation: false
 user-invocable: true
 ---
@@ -18,9 +11,9 @@ user-invocable: true
 The cheapest, most reliable code is the code you don't write. Before generating a non-trivial new
 thing, spend a few minutes finding what already solves it. Net-new is the *last* option, not the first.
 
-> Trivial, project-specific glue (a 10-line handler, a one-off mapper) — just write it. This is for
-> anything that "feels like a solved problem": auth, retries, rate-limiting, parsing, pagination,
-> caching, state machines, date/money math, validation, a CLI framework, a diffing algorithm, etc.
+Before writing anything beyond a one-liner, make at least one local search for an existing
+implementation, including CLI flags, agents, skills, hooks and utilities. For small glue,
+that search may be enough; widen only when local code does not settle the reuse decision.
 
 ## The reuse hierarchy (walk it in order)
 

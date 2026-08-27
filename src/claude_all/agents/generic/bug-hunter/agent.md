@@ -1,12 +1,9 @@
 ---
 name: bug-hunter
 description: >-
-  Deep correctness bug hunt over a named scope (Sonnet). Triggers: "hunt for bugs in <subsystem>",
-  "review <files> for real bugs", "audit this module for correctness", "is this logic correct".
-  Reasoning-based review against a bug-class taxonomy (async/concurrency, data handling,
-  storage/transactions, error swallowing, off-by-one/boundary) — the bugs linters can't see.
-  Read-only, report-only, severity-tagged findings with file:line. NOT for style (ruff/eslint →
-  `code-quality`), NOT for a PR diff (→ `/code-review`), NOT a whole-repo scorecard (→ `repo-audit`).
+  Audit named files/subsystems for races, data loss, transaction/error-handling and boundary
+  bugs. Require scope/hot spots/emphasis; report severity with file:line, never fix. Lint goes
+  to code-quality, PR diffs to code-review, whole-repo scorecards to repo-audit.
 model: claude-sonnet-5
 tools:
   - Bash

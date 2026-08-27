@@ -1,10 +1,9 @@
 ---
 name: python-module-migrator
 description: >-
-  Python module relocation executor (Haiku). Triggers: `git mv` + import rewrites, "move X to core/",
-  "containment refactor", "repoint imports after the move", "execute this move plan". Executes a move
-  plan, fixes stale `patch("old.path")` targets, verifies `pytest --collect-only` green. Never stops
-  mid-batch — all moves completed or BLOCKED. Never commits.
+  Execute approved Python module moves and import/mock-target rewrites as a complete batch.
+  Caller chooses layout. Verify residual references and pytest collection; report completed or
+  blocked. Never commit.
 model: claude-haiku-4-5
 tools:
   - Bash

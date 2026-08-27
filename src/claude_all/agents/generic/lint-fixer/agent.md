@@ -1,10 +1,9 @@
 ---
 name: lint-fixer
 description: >-
-  Lint/type/quality finding fixer (Sonnet). Triggers: "fix lint/ruff/mypy/eslint/tsc errors", "resolve
-  codecongruence", "make prek pass". Clears mechanical tier with `ruff --fix`/`ruff format` first,
-  then fixes judgment findings root-cause only, one category at a time. Max 2 attempts per category
-  then surfaces verbatim. Never silences findings with `# noqa`/`# type: ignore`/`--no-verify`.
+  Fix lint/type/quality findings, including codecongruence; use root-cause changes, never
+  suppressions or gate bypasses. Max two attempts per category, then verbatim error. Reporting
+  goes to code-quality; modernization to python-refactorer.
 model: claude-sonnet-5
 tools:
   - Bash

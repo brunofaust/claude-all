@@ -1,10 +1,9 @@
 ---
 name: e2e-scenario-runner
 description: >-
-  End-to-end workflow probe executor (Haiku). Triggers: "run e2e", "smoke test the flow", "trigger X
-  then verify Y", "follow ticket X", "run a probe on X", any 3+ sequential steps (set state → trigger
-  → verify). Executes steps in order, captures evidence per step, stops on first failure. Returns
-  structured pass/fail report. Never fixes failures — reports them for main session.
+  Execute declared end-to-end probes: setup, trigger, then verify across deployed services. For
+  run e2e, smoke test flow or 3+ sequential steps. Capture per-step evidence, stop at first
+  failure, never fix; caller supplies success criteria and mutation authorization.
 model: claude-haiku-4-5
 ---
 
