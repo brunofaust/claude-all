@@ -34,6 +34,7 @@ historical directory-name filters remain accepted and migrate to that canonical 
 Prefer scripting it? Skip the picker:
 
 ```bash
+claude-all --version                   # print the installed claude-all version
 claude-all --list                      # see everything available
 claude-all --all --user agents aws     # install all AWS agents, user-wide
 claude-all --all --project skills      # install all skills, this project only

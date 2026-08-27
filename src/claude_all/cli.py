@@ -34,6 +34,7 @@ import sys
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from importlib.metadata import version
 from pathlib import Path
 
 __all__ = ["main", "run"]
@@ -3380,9 +3381,15 @@ def cmd_list(items: list[Item]):
 
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(
+        prog="claude-all",
         description="claude-all installer (interactive TUI)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
+    )
+    ap.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {version('claude-all')}",
     )
     ap.add_argument("--list", action="store_true", help="List items without installing")
     ap.add_argument("--all", action="store_true", help="Select everything (skip TUI)")
