@@ -1,6 +1,6 @@
 [project]
 name = "claude-all"
-version = "0.14.1"
+version = "0.15.0"
 description = "Claude skills, agents and everything else to improve coding with Claude"
 readme = "README.md"
 keywords = [ "claude", "agent", "mcp", "plugin", "skill", "tool" ]
