@@ -1305,6 +1305,32 @@ def test_ensure_codex_cache_uses_a_source_fingerprint_to_skip_unchanged_builds(
     assert cli.ensure_codex_cache([item]) is True
 
 
+def test_ensure_codex_cache_rebuilds_when_a_cached_agent_is_invalid_toml(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """A corrupt cache is repaired even when its input fingerprint is unchanged.
+
+    Args:
+        tmp_path: Isolated filesystem fixture.
+        monkeypatch: Pytest fixture for global-path isolation.
+    """
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(cli, "STATE_DIR", tmp_path / "home" / ".claude-all")
+    item = cli.Item(
+        "agents",
+        "test",
+        "sample-agent",
+        agent_source(tmp_path, "claude-haiku-4-5"),
+    )
+
+    assert cli.ensure_codex_cache([item]) is True
+    cached_agent = cli.codex_cache_root() / "agents" / "sample-agent.toml"
+    cached_agent.write_text('developer_instructions = "unterminated', encoding="utf-8")
+
+    assert cli.ensure_codex_cache([item]) is True
+    assert tomllib.loads(cached_agent.read_text(encoding="utf-8"))["name"] == "sample-agent"
+
+
 def test_rebuild_flag_rebuilds_only_the_managed_cache(tmp_path: Path, monkeypatch) -> None:
     """The explicit rebuild command creates no visible Codex artifacts.
 
