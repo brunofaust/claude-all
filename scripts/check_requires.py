@@ -11,7 +11,14 @@ It resolves targets by importing the installer's own `discover()` /`state_key`,
 so "what counts as a resource" is defined in exactly one place (the installer),
 never re-derived here.
 
-Exit codes: 0 = every entry resolves · 1 = a dangling/malformed entry.
+Discovery is fail-loud: a glob that matches nothing fails OPEN — the scan
+inspects zero manifests, exits 0, and the gate reports green while guarding
+nothing. So a run where discovery comes up empty exits non-zero naming the
+pattern that matched nothing, and every clean run prints how many manifests it
+actually inspected.
+
+Exit codes: 0 = every entry resolves · 1 = a dangling/malformed entry ·
+2 = discovery matched nothing (a gate that inspected zero units never passes).
 """
 
 from __future__ import annotations
@@ -22,6 +29,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SRC = REPO_ROOT / "src"
+MANIFEST_PATTERNS = ("claude-all.json", "*.claude-all.json")
 
 
 def load_resource_keys() -> set[str]:
@@ -37,19 +45,30 @@ def load_resource_keys() -> set[str]:
     return {state_key(it.kind, it.name) for it in discover([])}
 
 
-def find_violations(known: set[str]) -> list[str]:
+def find_manifests() -> list[Path]:
+    """Return every dependency manifest under ``src/claude_all`` — the unit this
+    gate inspects.
+
+    Two shapes exist: a bare ``claude-all.json`` beside a folder resource, and a
+    ``<name>.claude-all.json`` sibling of a flat resource (the same convention
+    as the ``hook.*``/``.claude_md.md`` companions).
+    """
+    base = SRC / "claude_all"
+    return [p for pattern in MANIFEST_PATTERNS for p in sorted(base.rglob(pattern))]
+
+
+def find_violations(known: set[str], manifests: list[Path] | None = None) -> list[str]:
     """Return one finding per dangling/malformed ``requires`` entry.
 
     Args:
         known: Every resolvable resource key.
+        manifests: Manifests to inspect; defaults to :func:`find_manifests`.
 
     Returns:
         Stable ``path: message`` findings (empty when the graph is clean).
     """
     findings: list[str] = []
-    for manifest in sorted((SRC / "claude_all").rglob("claude-all.json")) + sorted(
-        (SRC / "claude_all").rglob("*.claude-all.json")
-    ):
+    for manifest in find_manifests() if manifests is None else manifests:
         rel = manifest.relative_to(REPO_ROOT)
         try:
             config = json.loads(manifest.read_text(encoding="utf-8"))
@@ -72,8 +91,27 @@ def find_violations(known: set[str]) -> list[str]:
 
 
 def main() -> int:
-    """CLI entry point — print findings to stdout, exit 1 on any."""
-    findings = find_violations(load_resource_keys())
+    """CLI entry point — findings on stdout; non-zero on findings or empty discovery."""
+    manifests = find_manifests()
+    if not manifests:
+        patterns = " and ".join(f"`{p}`" for p in MANIFEST_PATTERNS)
+        print(
+            f"check_requires: 0 manifests matched {patterns} under "
+            f"{(SRC / 'claude_all').relative_to(REPO_ROOT)} — a renamed/moved "
+            "directory would do exactly this; a gate that inspected nothing never passes.",
+            file=sys.stderr,
+        )
+        return 2
+    known = load_resource_keys()
+    if not known:
+        print(
+            "check_requires: installer discover([]) returned 0 resources — resource "
+            "discovery is broken (renamed/moved tree?), so no `requires` entry can "
+            "be validated.",
+            file=sys.stderr,
+        )
+        return 2
+    findings = find_violations(known, manifests)
     for finding in findings:
         print(finding)
     if findings:
@@ -83,6 +121,10 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
+    print(
+        f"check_requires: {len(manifests)} manifest(s) inspected — "
+        "every `requires` entry resolves."
+    )
     return 0
 
 
