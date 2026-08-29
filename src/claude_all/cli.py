@@ -31,6 +31,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tomllib
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -2695,21 +2696,43 @@ def write_codex_cache_manifest(cache: Path, fingerprint: str) -> None:
     )
 
 
-def codex_cache_is_current(cache: Path, fingerprint: str) -> bool:
+def codex_cache_is_current(cache: Path, fingerprint: str, items: list[Item]) -> bool:
     """Return whether a cache manifest matches the requested input digest.
 
     Args:
         cache: Managed cache directory.
         fingerprint: Digest expected for this build.
+        items: Discovered resources whose agent artifacts must be present and valid.
 
     Returns:
-        True when the manifest is valid and current.
+        True when the manifest and every generated agent artifact are valid and current.
     """
     try:
         current = json.loads((cache / "manifest.json").read_text(encoding="utf-8"))
-    except (FileNotFoundError, json.JSONDecodeError):
+    except (OSError, json.JSONDecodeError):
         return False
-    return current.get("version") == 1 and current.get("fingerprint") == fingerprint
+    if current.get("version") != 1 or current.get("fingerprint") != fingerprint:
+        return False
+
+    expected_keys = {
+        "name",
+        "description",
+        "model",
+        "model_reasoning_effort",
+        "developer_instructions",
+    }
+    for item in items:
+        if item.kind != "agents":
+            continue
+        try:
+            artifact = tomllib.loads(
+                (cache / "agents" / f"{item.name}.toml").read_text(encoding="utf-8")
+            )
+        except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError):
+            return False
+        if set(artifact) != expected_keys or artifact.get("name") != item.name:
+            return False
+    return True
 
 
 def ensure_codex_cache(items: list[Item]) -> bool:
@@ -2723,7 +2746,7 @@ def ensure_codex_cache(items: list[Item]) -> bool:
     """
     cache = codex_cache_root()
     fingerprint = codex_cache_fingerprint(items)
-    if codex_cache_is_current(cache, fingerprint):
+    if codex_cache_is_current(cache, fingerprint, items):
         return False
     build_codex_cache(items, fingerprint)
     return True
