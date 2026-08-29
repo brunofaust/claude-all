@@ -33,7 +33,10 @@ legacy Codex wiring on upgrade. A skill's `SKILL.md` frontmatter name is canonic
 historical directory-name filters remain accepted and migrate to that canonical name
 (`claude-hooks`, for example, remains a filter alias for `hook-authoring`).
 
-`claude-all --rebuild` refreshes its internal Codex artifact cache. It does not install, remove, or change any selected items.
+`claude-all --rebuild` regenerates the Codex agents already installed by
+`claude-all`, directly into `~/.codex/agents`. It preserves the enabled-agent set;
+normal installs generate only their selected agents. It never replaces the
+`agents` directory or modifies agents it does not own.
 
 `claude-all` never installs either CLI. If one host is not available, it installs the other and reports the skipped host.
 

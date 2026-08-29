@@ -141,27 +141,6 @@ def test_removes_recorded_codex_agents_md_block(
     assert agents_md.read_text(encoding="utf-8") == "# Local rules\n"
 
 
-def test_uninstall_removes_the_managed_codex_cache_only_after_the_last_install(
-    home: Path,
-) -> None:
-    """A narrowed uninstall preserves the shared cache until no installs remain.
-
-    Args:
-        home: Isolated installer state directory.
-    """
-    install_record(home, name="first")
-    install_record(home, name="second")
-    cache = cli.codex_cache_root()
-    cache.mkdir(parents=True)
-    (cache / "manifest.json").write_text("{}\n", encoding="utf-8")
-
-    assert cli.cmd_uninstall(filters=["first"], scope="user", assume_yes=True) == 0
-    assert cache.exists()
-
-    assert cli.cmd_uninstall(filters=["second"], scope="user", assume_yes=True) == 0
-    assert not cache.exists()
-
-
 def test_declining_removes_nothing(home: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Answering no leaves every artifact and the state record intact.
 

@@ -135,24 +135,13 @@ def agent_source(tmp_path: Path, model: str) -> Path:
     return source
 
 
-@pytest.mark.parametrize(
-    ("claude_model", "codex_model", "effort"),
-    [
-        ("claude-haiku-4-5", "gpt-5.6-luna", "medium"),
-        ("claude-sonnet-5", "gpt-5.6-terra", "high"),
-        ("claude-opus-5", "gpt-5.6-sol", "high"),
-    ],
-)
-def test_render_codex_agent_maps_claude_models(
-    tmp_path: Path, claude_model: str, codex_model: str, effort: str
-) -> None:
-    """Claude aliases compile into valid, appropriately configured Codex TOML.
+@pytest.mark.parametrize("claude_model", ["claude-haiku-4-5", "claude-sonnet-5", "claude-opus-5"])
+def test_render_codex_agent_omits_model_configuration(tmp_path: Path, claude_model: str) -> None:
+    """Claude model aliases do not constrain the generated Codex TOML.
 
     Args:
         tmp_path: Isolated filesystem fixture.
         claude_model: Authored Claude model alias.
-        codex_model: Expected generated Codex model.
-        effort: Expected Codex reasoning effort.
     """
     source = agent_source(tmp_path, claude_model)
     original = source.read_text(encoding="utf-8")
@@ -162,24 +151,10 @@ def test_render_codex_agent_maps_claude_models(
     parsed = tomllib.loads(rendered)
     assert parsed["name"] == "sample-agent"
     assert parsed["description"] == "Sample agent for conversion tests."
-    assert parsed["model"] == codex_model
-    assert parsed["model_reasoning_effort"] == effort
+    assert "model" not in parsed
+    assert "model_reasoning_effort" not in parsed
     assert "Do the narrow task" in parsed["developer_instructions"]
     assert source.read_text(encoding="utf-8") == original
-
-
-@pytest.mark.parametrize("claude_model", ["claude-unknown-1", "claude-opuss-typo"])
-def test_render_codex_agent_rejects_unknown_claude_model(tmp_path: Path, claude_model: str) -> None:
-    """An unreviewed model alias never receives a silent arbitrary mapping.
-
-    Args:
-        tmp_path: Isolated filesystem fixture.
-        claude_model: Unsupported Claude model alias under test.
-    """
-    source = agent_source(tmp_path, claude_model)
-
-    with pytest.raises(ValueError, match=rf"{claude_model}.*agent\.md"):
-        cli.render_codex_agent(source)
 
 
 def test_render_codex_agent_emits_toml_safe_non_bmp_unicode(tmp_path: Path) -> None:
@@ -587,10 +562,10 @@ def test_agent_cleanup_preserves_repointed_generated_file_symlink(
     assert "agents/demo" not in cli.load_state()["installs"]
 
 
-def test_agent_cleanup_removes_unchanged_installer_managed_link(
+def test_agent_cleanup_removes_unchanged_installer_managed_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Agent cleanup removes its unchanged link while retaining the cache source.
+    """Agent cleanup removes its unchanged direct TOML file.
 
     Args:
         tmp_path: Isolated filesystem fixture.
@@ -604,16 +579,36 @@ def test_agent_cleanup_removes_unchanged_installer_managed_link(
 
     cli.install_codex_item(item, "project")
     destination = tmp_path / ".codex" / "agents" / "demo.toml"
-    cached_source = cli.codex_cache_root() / "agents" / "demo.toml"
-    assert destination.is_symlink()
-    assert destination.resolve() == cached_source.resolve()
+    assert destination.is_file() and not destination.is_symlink()
 
     cli.remove_install_host("agents", "demo", "project", "codex")
 
     assert not destination.is_symlink()
     assert not destination.exists()
-    assert cached_source.is_file()
     assert "agents/demo" not in cli.load_state()["installs"]
+
+
+def test_agent_cleanup_preserves_a_user_modified_installer_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Uninstall retains a generated TOML after the user changes its content.
+
+    Args:
+        tmp_path: Isolated filesystem fixture.
+        monkeypatch: Pytest fixture for path and state isolation.
+    """
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(cli, "STATE_DIR", tmp_path / "state")
+    monkeypatch.setattr(cli, "STATE_FILE", tmp_path / "state" / "state.json")
+    item = cli.Item("agents", "test", "demo", agent_source(tmp_path / "source", "claude-haiku-4-5"))
+
+    cli.install_codex_item(item, "project")
+    destination = tmp_path / ".codex" / "agents" / "demo.toml"
+    destination.write_text('name = "user-modified"\n', encoding="utf-8")
+
+    cli.remove_install_host("agents", "demo", "project", "codex")
+
+    assert destination.read_text(encoding="utf-8") == 'name = "user-modified"\n'
 
 
 @pytest.mark.parametrize("document", INVALID_HOOK_DOCUMENTS)
@@ -1178,20 +1173,20 @@ def test_install_item_creates_claude_and_codex_agent_artifacts(tmp_path: Path, m
 
     assert (tmp_path / ".claude" / "agents" / "sample-agent.md").is_symlink()
     generated = tmp_path / ".codex" / "agents" / "sample-agent.toml"
-    assert generated.is_symlink()
-    assert tomllib.loads(generated.read_text(encoding="utf-8"))["model"] == "gpt-5.6-luna"
+    assert generated.is_file() and not generated.is_symlink()
+    assert "model" not in tomllib.loads(generated.read_text(encoding="utf-8"))
 
 
-def test_build_codex_cache_renders_all_agents_but_installs_only_selected_agent(
+def test_rebuild_codex_agents_renders_only_installed_agents_directly(
     tmp_path: Path, monkeypatch
 ) -> None:
-    """The managed cache holds every render while Codex sees only selected resources.
+    """A rebuild writes only already-installed agents into Codex's directory.
 
     Args:
         tmp_path: Isolated filesystem fixture.
         monkeypatch: Pytest fixture for global-path isolation.
     """
-    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(cli.Path, "home", lambda: tmp_path / "home")
     monkeypatch.setattr(cli, "STATE_DIR", tmp_path / "home" / ".claude-all")
     monkeypatch.setattr(
         cli,
@@ -1211,47 +1206,26 @@ def test_build_codex_cache_renders_all_agents_but_installs_only_selected_agent(
         agent_source(tmp_path / "second", "claude-sonnet-5"),
     )
 
-    cli.build_codex_cache([first, second])
-    cli.install_codex_item(first, "project")
-
-    cache = tmp_path / "home" / ".claude-all" / "codex" / "agents"
-    assert (
-        tomllib.loads((cache / "first-agent.toml").read_text(encoding="utf-8"))["model"]
-        == "gpt-5.6-luna"
-    )
-    assert (
-        tomllib.loads((cache / "second-agent.toml").read_text(encoding="utf-8"))["model"]
-        == "gpt-5.6-terra"
-    )
-    assert (tmp_path / ".codex" / "agents" / "first-agent.toml").is_symlink()
-    assert not (tmp_path / ".codex" / "agents" / "second-agent.toml").exists()
-
-
-def test_codex_cache_contains_only_generated_agents(tmp_path: Path, monkeypatch) -> None:
-    """Instructions and compatible skills are installed directly, outside the cache.
-
-    Args:
-        tmp_path: Isolated filesystem fixture.
-        monkeypatch: Pytest fixture for global-path isolation.
-    """
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(cli, "STATE_DIR", tmp_path / "home" / ".claude-all")
-    agent = cli.Item(
+    cli.record_install(
         "agents",
-        "test",
-        "sample-agent",
-        agent_source(tmp_path / "agent", "claude-haiku-4-5"),
+        "first-agent",
+        tmp_path / "home" / ".codex" / "agents" / "first-agent.toml",
+        host="codex",
+        scope="user",
     )
-    instruction = tmp_path / "instruction.md"
-    instruction.write_text("Use local rules.\n", encoding="utf-8")
-
-    cli.build_codex_cache([agent, cli.Item("instructions", "test", "demo", instruction)])
-
-    cache = tmp_path / "home" / ".claude-all" / "codex"
-    assert (cache / "agents" / "sample-agent.toml").is_file()
-    assert not (cache / "instructions").exists()
-    assert not (cache / "skills").exists()
-    assert not (cache / "hooks").exists()
+    legacy_cache = tmp_path / "home" / ".claude-all" / "codex"
+    legacy_cache.mkdir(parents=True)
+    (legacy_cache / "manifest.json").write_text("{}\n", encoding="utf-8")
+    agents = tmp_path / "home" / ".codex" / "agents"
+    personal_agent = agents / "personal-agent.toml"
+    personal_agent.parent.mkdir(parents=True, exist_ok=True)
+    personal_agent.write_text('name = "personal-agent"\n', encoding="utf-8")
+    assert cli.rebuild_codex_agents([first, second]) == 1
+    assert (agents / "first-agent.toml").is_file()
+    assert not (agents / "second-agent.toml").exists()
+    assert not (agents / "first-agent.toml").is_symlink()
+    assert personal_agent.read_text(encoding="utf-8") == 'name = "personal-agent"\n'
+    assert not legacy_cache.exists()
 
 
 def test_codex_skill_links_directly_to_its_compatible_source(tmp_path: Path, monkeypatch) -> None:
@@ -1274,39 +1248,41 @@ def test_codex_skill_links_directly_to_its_compatible_source(tmp_path: Path, mon
     destination = tmp_path / ".agents" / "skills" / "demo"
     assert destination.is_symlink()
     assert destination.resolve() == skill_source.parent
-    assert not (tmp_path / "home" / ".claude-all" / "codex" / "skills").exists()
 
 
-def test_ensure_codex_cache_uses_a_source_fingerprint_to_skip_unchanged_builds(
-    tmp_path: Path, monkeypatch
+def test_rebuild_preserves_legacy_cache_for_an_unmigrated_agent_symlink(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A content digest works for released and local editable installations alike.
+    """A rebuild never strands an agent source that is no longer shipped.
 
     Args:
         tmp_path: Isolated filesystem fixture.
-        monkeypatch: Pytest fixture for global-path isolation.
+        monkeypatch: Pytest fixture for path and state isolation.
     """
-    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(cli.Path, "home", lambda: tmp_path / "home")
     monkeypatch.setattr(cli, "STATE_DIR", tmp_path / "home" / ".claude-all")
-    item = cli.Item(
-        "agents",
-        "test",
-        "sample-agent",
-        agent_source(tmp_path, "claude-haiku-4-5"),
+    monkeypatch.setattr(
+        cli,
+        "STATE_FILE",
+        tmp_path / "home" / ".claude-all" / "state.json",
     )
+    legacy_cache = tmp_path / "home" / ".claude-all" / "codex"
+    legacy_source = legacy_cache / "agents" / "retired-agent.toml"
+    legacy_source.parent.mkdir(parents=True)
+    legacy_source.write_text('name = "retired-agent"\n', encoding="utf-8")
+    visible = tmp_path / "home" / ".codex" / "agents" / "retired-agent.toml"
+    visible.parent.mkdir(parents=True)
+    visible.symlink_to(legacy_source)
 
-    assert cli.ensure_codex_cache([item]) is True
-    assert cli.ensure_codex_cache([item]) is False
+    assert cli.rebuild_codex_agents([]) == 0
 
-    item.src.write_text(
-        item.src.read_text(encoding="utf-8") + "\nNew instruction.\n", encoding="utf-8"
-    )
-
-    assert cli.ensure_codex_cache([item]) is True
+    assert legacy_source.is_file()
+    assert visible.is_symlink()
+    assert visible.resolve() == legacy_source.resolve()
 
 
-def test_rebuild_flag_rebuilds_only_the_managed_cache(tmp_path: Path, monkeypatch) -> None:
-    """The explicit rebuild command creates no visible Codex artifacts.
+def test_rebuild_flag_generates_global_codex_agents(tmp_path: Path, monkeypatch) -> None:
+    """The explicit rebuild command writes visible global Codex artifacts.
 
     Args:
         tmp_path: Isolated filesystem fixture.
@@ -1318,16 +1294,25 @@ def test_rebuild_flag_rebuilds_only_the_managed_cache(tmp_path: Path, monkeypatc
         "sample-agent",
         agent_source(tmp_path, "claude-haiku-4-5"),
     )
-    seen: list[list[cli.Item]] = []
     monkeypatch.setattr(cli, "discover", lambda filters: [item])
+    monkeypatch.setattr(cli.Path, "home", lambda: tmp_path / "home")
+    monkeypatch.setattr(cli, "STATE_DIR", tmp_path / "home" / ".claude-all")
     monkeypatch.setattr(
         cli,
-        "ensure_codex_cache",
-        lambda items: seen.append(items) or True,
+        "STATE_FILE",
+        tmp_path / "home" / ".claude-all" / "state.json",
+    )
+    cli.record_install(
+        "agents",
+        "sample-agent",
+        tmp_path / "home" / ".codex" / "agents" / "sample-agent.toml",
+        host="codex",
+        scope="user",
     )
 
     assert cli.main(["--rebuild"]) == 0
-    assert seen == [[item]]
+    destination = tmp_path / "home" / ".codex" / "agents" / "sample-agent.toml"
+    assert destination.is_file() and not destination.is_symlink()
 
 
 def test_rebuild_rejects_scope_flags() -> None:
@@ -1351,7 +1336,7 @@ def test_version_flag_reports_installed_distribution_version(
     assert capsys.readouterr().out == f"claude-all {version('claude-all')}\n"
 
 
-def test_install_migrates_a_previous_generated_agent_to_a_cache_symlink(
+def test_install_migrates_a_legacy_cache_symlink_to_a_direct_file(
     tmp_path: Path, monkeypatch
 ) -> None:
     """Installing the selected agent upgrades the previous generated layout safely.
@@ -1379,7 +1364,12 @@ def test_install_migrates_a_previous_generated_agent_to_a_cache_symlink(
         cli.render_codex_agent(item.src, item.name),
         encoding="utf-8",
     )
-    cli.ensure_codex_cache([item])
+    cache = tmp_path / "home" / ".claude-all" / "codex" / "agents"
+    cache.mkdir(parents=True)
+    legacy_source = cache / "sample-agent.toml"
+    legacy_source.write_text(old_destination.read_text(encoding="utf-8"), encoding="utf-8")
+    old_destination.unlink()
+    old_destination.symlink_to(legacy_source)
     cli.install_codex_item(item, "project")
 
-    assert old_destination.is_symlink()
+    assert old_destination.is_file() and not old_destination.is_symlink()
