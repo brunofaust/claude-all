@@ -31,7 +31,6 @@ import re
 import shutil
 import subprocess
 import sys
-import tomllib
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -586,7 +585,14 @@ def undo_artifact(artifact: dict) -> str:
         return drop_settings_command(settings_file, artifact["command"])
     if kind == "generated_file":
         path = Path(artifact["path"])
-        if in_install_scope(path) and path.is_file() and not path.is_symlink():
+        expected_digest = artifact.get("digest")
+        if (
+            in_install_scope(path)
+            and path.is_file()
+            and not path.is_symlink()
+            and isinstance(expected_digest, str)
+            and hashlib.sha256(path.read_bytes()).hexdigest() == expected_digest
+        ):
             path.unlink()
             return "generated file"
         return ""
@@ -711,21 +717,6 @@ def reverse_records(entries: list[dict], labeler: Callable[[dict, list[str]], st
     labels = [labeler(entry, reverse_scoped_record(installs, entry)) for entry in entries]
     save_state(state)
     return labels
-
-
-def remove_codex_cache_if_unused() -> bool:
-    """Remove the managed Codex cache only after every recorded install is gone.
-
-    Returns:
-        True when the cache was removed, otherwise False.
-    """
-    if load_state().get("installs"):
-        return False
-    cache = codex_cache_root()
-    if not cache.exists():
-        return False
-    shutil.rmtree(cache)
-    return True
 
 
 # ---------------------- full uninstall ----------------------
@@ -1100,11 +1091,6 @@ class Item:
 # ---------------------- Codex artifact rendering ----------------------
 
 
-CODEX_MODEL_MAP = {
-    "claude-haiku-4-5": ("gpt-5.6-luna", "medium"),
-    "claude-sonnet-5": ("gpt-5.6-terra", "high"),
-    "claude-opus-5": ("gpt-5.6-sol", "high"),
-}
 CLAUDE_SKILL_NAME = re.compile(r"^[a-z0-9-]{1,64}$")
 CLAUDE_SKILL_RESERVED_WORDS = ("anthropic", "claude")
 
@@ -1153,24 +1139,6 @@ def parse_agent_front_matter(source: Path) -> tuple[dict[str, str], str]:
     return fields, body.strip()
 
 
-def codex_model_for(claude_model: str, source: Path) -> tuple[str, str]:
-    """Map an authored Claude model alias to its approved Codex equivalent.
-
-    Args:
-        claude_model: Model alias authored in the Claude agent front matter.
-        source: Agent source used to make configuration errors actionable.
-
-    Returns:
-        The approved Codex model and reasoning effort.
-
-    Raises:
-        ValueError: If the authored model has no approved Codex mapping.
-    """
-    if claude_model in CODEX_MODEL_MAP:
-        return CODEX_MODEL_MAP[claude_model]
-    raise ValueError(f"unknown Claude model {claude_model!r} in {source}")
-
-
 def render_codex_agent(source: Path, name: str | None = None) -> str:
     """Compile one Claude Markdown agent into a Codex custom-agent TOML file.
 
@@ -1182,20 +1150,16 @@ def render_codex_agent(source: Path, name: str | None = None) -> str:
         TOML for the corresponding Codex custom agent.
 
     Raises:
-        ValueError: If required agent metadata or its model mapping is missing.
+        ValueError: If required agent metadata is missing.
     """
     fields, body = parse_agent_front_matter(source)
     agent_name = name or fields.get("name")
     description = fields.get("description")
-    model = fields.get("model")
-    if not agent_name or not description or not model:
-        raise ValueError(f"agent needs name, description, and model: {source}")
-    codex_model, effort = codex_model_for(model, source)
+    if not agent_name or not description:
+        raise ValueError(f"agent needs name and description: {source}")
     values = {
         "name": agent_name,
         "description": description,
-        "model": codex_model,
-        "model_reasoning_effort": effort,
         "developer_instructions": body,
     }
     return (
@@ -2527,15 +2491,6 @@ def codex_root(scope: str) -> Path:
     return scoped_path(scope, Path.home() / ".codex", Path.cwd() / ".codex")
 
 
-def codex_cache_root() -> Path:
-    """Return the single installer-owned cache for generated Codex artifacts.
-
-    Returns:
-        The state-directory cache shared by all Codex installation scopes.
-    """
-    return STATE_DIR / "codex"
-
-
 def codex_skill_root(scope: str) -> Path:
     """Return Codex's user or project skill discovery directory.
 
@@ -2617,139 +2572,103 @@ def migrate_legacy_skill_host(item: Item, scope: str, host: str, skill_root: Pat
         legacy_destination.unlink()
 
 
-def cache_codex_item(item: Item) -> None:
-    """Build one generated Codex agent without exposing it to Codex.
+def is_recorded_codex_agent(destination: Path, scope: str) -> bool:
+    """Return whether the installer already owns a direct Codex agent file.
 
     Args:
-        item: Discovered resource to cache when it is an agent.
+        destination: Candidate TOML path in a Codex agent directory.
+        scope: ``"user"`` or ``"project"`` installation scope.
+
+    Returns:
+        True when the recorded Codex footprint owns the exact destination.
     """
-    if item.kind != "agents":
-        return
-    cache = codex_cache_root()
-    destination = cache / "agents" / f"{item.name}.toml"
+    for entry in load_state().get("installs", {}).values():
+        hosts = entry.get("scopes", {}).get(scope, {}).get("hosts", {})
+        codex = hosts.get("codex", {})
+        for artifact in codex.get("artifacts", []):
+            if artifact.get("path") == str(destination) and artifact.get("type") in {
+                "generated_file",
+                "symlink",
+            }:
+                return True
+    return False
+
+
+def write_codex_agent(item: Item, scope: str) -> bool:
+    """Render one agent directly into Codex's visible agent directory.
+
+    A legacy installer-created cache symlink is safely replaced. Existing regular
+    files are updated only when their content is unchanged or the installer has a
+    state record for them, preserving a user-authored agent with the same name.
+
+    Args:
+        item: Agent resource to render.
+        scope: ``"user"`` or ``"project"`` installation scope.
+
+    Returns:
+        True when the direct TOML file was written, otherwise False.
+    """
+    destination = codex_root(scope) / "agents" / f"{item.name}.toml"
+    rendered = render_codex_agent(item.src, item.name)
     destination.parent.mkdir(parents=True, exist_ok=True)
-    destination.write_text(render_codex_agent(item.src, item.name), encoding="utf-8")
-
-
-def codex_cache_fingerprint(items: list[Item]) -> str:
-    """Return a stable digest of inputs that can affect the generated cache.
-
-    Args:
-        items: Discovered resources whose agent sources may be rendered.
-
-    Returns:
-        SHA-256 digest of the renderer and every relevant agent source file.
-    """
-    digest = hashlib.sha256()
-    # The renderer and CODEX_MODEL_MAP live in this module. Including it makes
-    # editable/local installs refresh cached TOML when either changes, without
-    # requiring a package-version bump.
-    digest.update(Path(__file__).read_bytes())
-    cache = codex_cache_root()
-    for item in sorted(
-        (item for item in items if item.kind == "agents"), key=lambda item: item.name
-    ):
-        source_root = item.src.parent if item.src.name == "agent.md" else item.src
-        paths = (
-            [source_root]
-            if source_root.is_file()
-            else sorted(path for path in source_root.rglob("*") if path.is_file())
+    if destination.is_symlink():
+        legacy_cache = STATE_DIR / "codex"
+        if legacy_cache not in destination.resolve(strict=False).parents:
+            return False
+        destination.unlink()
+    elif destination.exists() and (
+        not destination.is_file()
+        or (
+            destination.read_text(encoding="utf-8") != rendered
+            and not is_recorded_codex_agent(destination, scope)
         )
-        for path in paths:
-            if cache == path or cache in path.parents:
-                continue
-            digest.update(str(path).encode("utf-8"))
-            digest.update(path.read_bytes())
-    return digest.hexdigest()
+    ):
+        return False
+    destination.write_text(rendered, encoding="utf-8")
+    return True
 
 
-def build_codex_cache(items: list[Item], fingerprint: str | None = None) -> Path:
-    """Render every available Codex artifact into the managed cache.
+def legacy_codex_agent_symlink_exists(legacy_cache: Path) -> bool:
+    """Return whether a user-level agent still resolves into the legacy cache.
 
     Args:
-        items: Discovered resources whose agents should be rendered.
-        fingerprint: Precomputed input digest to record in the cache manifest.
+        legacy_cache: Former installer-owned artifact-cache directory.
 
     Returns:
-        The rebuilt installer-owned cache directory.
+        True when removing the cache would leave a visible agent dangling.
     """
-    cache = codex_cache_root()
-    if cache.exists():
-        shutil.rmtree(cache)
-    for item in items:
-        cache_codex_item(item)
-    cache.mkdir(parents=True, exist_ok=True)
-    write_codex_cache_manifest(cache, fingerprint or codex_cache_fingerprint(items))
-    return cache
-
-
-def write_codex_cache_manifest(cache: Path, fingerprint: str) -> None:
-    """Record the cache input fingerprint after a successful build.
-
-    Args:
-        cache: Managed cache directory.
-        fingerprint: Digest of the cache inputs.
-    """
-    (cache / "manifest.json").write_text(
-        json.dumps({"version": 1, "fingerprint": fingerprint}, indent=2) + "\n",
-        encoding="utf-8",
+    agents = codex_root("user") / "agents"
+    return any(
+        legacy_cache in path.resolve(strict=False).parents
+        for path in agents.glob("*.toml")
+        if path.is_symlink()
     )
 
 
-def codex_cache_is_current(cache: Path, fingerprint: str, items: list[Item]) -> bool:
-    """Return whether a cache manifest matches the requested input digest.
+def rebuild_codex_agents(items: list[Item]) -> int:
+    """Refresh every already-installed Codex agent in the global directory.
 
     Args:
-        cache: Managed cache directory.
-        fingerprint: Digest expected for this build.
-        items: Discovered resources whose agent artifacts must be present and valid.
+        items: Discovered resources, including installed agents to render.
 
     Returns:
-        True when the manifest and every generated agent artifact are valid and current.
+        Number of direct TOML files written.
     """
-    try:
-        current = json.loads((cache / "manifest.json").read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return False
-    if current.get("version") != 1 or current.get("fingerprint") != fingerprint:
-        return False
-
-    expected_keys = {
-        "name",
-        "description",
-        "model",
-        "model_reasoning_effort",
-        "developer_instructions",
+    installed_names = {
+        entry["name"]
+        for entry in load_state().get("installs", {}).values()
+        if entry.get("kind") == "agents"
+        and entry.get("scopes", {}).get("user", {}).get("hosts", {}).get("codex")
     }
-    for item in items:
-        if item.kind != "agents":
-            continue
-        try:
-            artifact = tomllib.loads(
-                (cache / "agents" / f"{item.name}.toml").read_text(encoding="utf-8")
-            )
-        except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError):
-            return False
-        if set(artifact) != expected_keys or artifact.get("name") != item.name:
-            return False
-    return True
-
-
-def ensure_codex_cache(items: list[Item]) -> bool:
-    """Build the managed cache only when its content fingerprint has changed.
-
-    Args:
-        items: Discovered resources whose agents may affect the cache.
-
-    Returns:
-        True when the cache was rebuilt, otherwise False.
-    """
-    cache = codex_cache_root()
-    fingerprint = codex_cache_fingerprint(items)
-    if codex_cache_is_current(cache, fingerprint, items):
-        return False
-    build_codex_cache(items, fingerprint)
-    return True
+    written = sum(
+        write_codex_agent(item, "user")
+        for item in items
+        if item.kind == "agents" and item.name in installed_names
+    )
+    legacy_cache = STATE_DIR / "codex"
+    if legacy_cache.exists() and not legacy_codex_agent_symlink_exists(legacy_cache):
+        shutil.rmtree(legacy_cache)
+    return written
 
 
 def install_codex_mcp(item: Item, scope: str) -> str:
@@ -2875,11 +2794,25 @@ def install_codex_item(item: Item, scope: str) -> str:
         return message or f"instructions/{item.name}: no Codex companion found"
     if item.kind == "agents":
         destination = root / "agents" / f"{item.name}.toml"
-        cache_codex_item(item)
-        cached_source = codex_cache_root() / "agents" / f"{item.name}.toml"
-        if not replace_with_symlink(destination, cached_source):
+        rendered = render_codex_agent(item.src, item.name)
+        if (
+            destination.is_file()
+            and not destination.is_symlink()
+            and destination.read_text(encoding="utf-8") == rendered
+            and not is_recorded_codex_agent(destination, scope)
+        ):
             return f"skipped Codex agent {item.name}: destination is user-owned"
-        record_artifact(item.kind, item.name, {"type": "symlink", "path": str(destination)})
+        if not write_codex_agent(item, scope):
+            return f"skipped Codex agent {item.name}: destination is user-owned"
+        record_artifact(
+            item.kind,
+            item.name,
+            {
+                "type": "generated_file",
+                "path": str(destination),
+                "digest": hashlib.sha256(rendered.encode("utf-8")).hexdigest(),
+            },
+        )
         message = inject_agents_md(item, scope)
         if message:
             start, end = snippet_tags(item)
@@ -2893,7 +2826,7 @@ def install_codex_item(item: Item, scope: str) -> str:
                     "end": end,
                 },
             )
-        return f"linked Codex agent {destination}" + (f"; {message}" if message else "")
+        return f"generated Codex agent {destination}" + (f"; {message}" if message else "")
     if item.kind == "skills":
         preflight_error = hook_install_preflight(item, scope, "codex")
         if preflight_error is not None:
@@ -3363,7 +3296,6 @@ def cmd_uninstall(*, filters: list[str], scope: str, assume_yes: bool) -> int:
     forgotten = forget_records(external)
     leftovers, advisory = scan_leftovers(scope)
     cleaned = remove_leftovers(leftovers)
-    cache_removed = remove_codex_cache_if_unused()
 
     for line in removed:
         print(f"  ✓ {line}")
@@ -3371,8 +3303,6 @@ def cmd_uninstall(*, filters: list[str], scope: str, assume_yes: bool) -> int:
         print(f"  ✓ {line}")
     for line in cleaned:
         print(f"  ✓ leftover: {line}")
-    if cache_removed:
-        print("  ✓ managed Codex cache")
     if remove_state_file():
         print("  ✓ removed state file (nothing recorded any more)")
     if advisory:
@@ -3430,7 +3360,7 @@ def main(argv: list[str]) -> int:
     ap.add_argument(
         "--rebuild",
         action="store_true",
-        help="Rebuild the managed Codex artifact cache",
+        help="Regenerate installed global Codex agent TOML files",
     )
     ap.add_argument(
         "--uninstall",
@@ -3450,9 +3380,8 @@ def main(argv: list[str]) -> int:
         if args.user or args.project:
             ap.error("--rebuild has no scope; run it without --user or --project")
         all_items = discover([])
-        rebuilt = ensure_codex_cache(all_items)
-        state = "Rebuilt" if rebuilt else "Already current"
-        print(f"{state} Codex artifact cache: {codex_cache_root()}")
+        written = rebuild_codex_agents(all_items)
+        print(f"Rebuilt {written} installed Codex agent(s): {Path.home() / '.codex' / 'agents'}")
         return 0
 
     if args.uninstall:
@@ -3554,10 +3483,6 @@ def main(argv: list[str]) -> int:
 
     target_root = USER_CLAUDE_DIR if scope == "user" else (Path.cwd() / ".claude")
 
-    rebuilt = ensure_codex_cache(discover([]))
-    cache_state = "rebuilt" if rebuilt else "current"
-
-    print(f"\nCodex artifact cache {cache_state}: {codex_cache_root()}")
     print(f"Installing {len(chosen)} item(s) → {target_root}\n")
     failures = 0
     for it in chosen:
@@ -3578,7 +3503,7 @@ def main(argv: list[str]) -> int:
         print(f"\nDone with {failures} failure(s) — see errors above.", file=sys.stderr)
         notify_stale(scope)
         return 1
-    print("\nDone. Symlinks → edits in repo propagate to install location.")
+    print("\nDone. Codex agents are generated directly in its agent directory.")
     notify_stale(scope)
     return 0
 
