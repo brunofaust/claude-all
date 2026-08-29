@@ -16,9 +16,9 @@ from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from check_md_links import (
+from scripts.check_md_links import (
     CODE_SPAN,
     LINK,
     BrokenLink,
@@ -34,7 +34,7 @@ from check_md_links import (
     main,
     strip_code_blocks,
 )
-from vendor_sync import clone_upstream
+from scripts.vendor_sync import clone_upstream
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -56,7 +56,7 @@ def test_vendor_clone_supports_pinned_commit_refs(
         calls.append((args, cwd))
         return commit if args == ["rev-parse", "HEAD"] else ""
 
-    monkeypatch.setattr("vendor_sync.run_git", record_git)
+    monkeypatch.setattr("scripts.vendor_sync.run_git", record_git)
 
     assert clone_upstream("https://example.com/myorg/myapp", commit, destination) == commit
     assert calls == [
@@ -158,7 +158,7 @@ class TestCheckLinks:
         # of crashing on read_text(). Regression for the CHANGELOG.md removal,
         # which crashed exactly this way.
         missing = tmp_path / "GONE.md"
-        monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [missing])
+        monkeypatch.setattr("scripts.check_md_links.tracked_markdown", lambda: [missing])
         assert check_links(registry=[]) == LinkCheckResult()
 
     def test_broken_link_records_file_target_and_resolved(
@@ -172,8 +172,8 @@ class TestCheckLinks:
         (root / "docs").mkdir()
         page = root / "docs" / "page.md"
         page.write_text("intro [gone](../gone.md) more\n")
-        monkeypatch.setattr("check_md_links.ROOT", root)
-        monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [page])
+        monkeypatch.setattr("scripts.check_md_links.ROOT", root)
+        monkeypatch.setattr("scripts.check_md_links.tracked_markdown", lambda: [page])
 
         result = check_links(registry=[])
 
@@ -195,8 +195,8 @@ class TestCheckLinks:
         (tmp_path / "vend").mkdir()
         upstream = tmp_path / "vend" / "SKILL.md"
         upstream.write_text("[gone](gone.md)\n")
-        monkeypatch.setattr("check_md_links.ROOT", tmp_path)
-        monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [upstream])
+        monkeypatch.setattr("scripts.check_md_links.ROOT", tmp_path)
+        monkeypatch.setattr("scripts.check_md_links.tracked_markdown", lambda: [upstream])
         registry = [{"path": "vend", "vendor_mode": "dir"}]
 
         result = check_links(registry=registry)
@@ -243,7 +243,7 @@ class TestCoverageAndReports:
                 "vendored_files_skipped": 1,
             },
             "broken_links": [
-                {"file": "a.md", "line": 3, "target": "../x.md", "resolved": "x.md"}
+                {"file": "a.md", "line": 3, "target": "../x.md", "resolved": "x.md"},
             ],
             "unlinked_resources": [{"kind": "skill", "name": "n", "path": "p/SKILL.md"}],
         }
@@ -265,9 +265,11 @@ class TestCoverageAndReports:
     def test_passing_human_run_is_silent(
         self, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setattr("check_md_links.check_links", lambda registry: LinkCheckResult())
         monkeypatch.setattr(
-            "check_md_links.check_readme_coverage", lambda: CoverageResult()
+            "scripts.check_md_links.check_links", lambda registry: LinkCheckResult()
+        )
+        monkeypatch.setattr(
+            "scripts.check_md_links.check_readme_coverage", lambda: CoverageResult()
         )
         assert main([]) == 0
         out, err = capsys.readouterr()
@@ -297,7 +299,7 @@ class TestJsonMode:
         self, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr(
-            "check_md_links.check_links",
+            "scripts.check_md_links.check_links",
             lambda registry: LinkCheckResult(
                 broken=[
                     BrokenLink(
@@ -312,7 +314,7 @@ class TestJsonMode:
             ),
         )
         monkeypatch.setattr(
-            "check_md_links.check_readme_coverage",
+            "scripts.check_md_links.check_readme_coverage",
             lambda: CoverageResult(resources_checked=2),
         )
 
@@ -340,11 +342,11 @@ class TestJsonMode:
         self, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr(
-            "check_md_links.check_links",
+            "scripts.check_md_links.check_links",
             lambda registry: LinkCheckResult(md_files_scanned=3, links_resolved=5),
         )
         monkeypatch.setattr(
-            "check_md_links.check_readme_coverage",
+            "scripts.check_md_links.check_readme_coverage",
             lambda: CoverageResult(
                 unlinked=[
                     UnlinkedResource(
@@ -374,7 +376,7 @@ class TestJsonMode:
         self, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr(
-            "check_md_links.check_links",
+            "scripts.check_md_links.check_links",
             lambda registry: LinkCheckResult(
                 broken=[
                     BrokenLink(
@@ -387,7 +389,7 @@ class TestJsonMode:
             ),
         )
         monkeypatch.setattr(
-            "check_md_links.check_readme_coverage", lambda: CoverageResult()
+            "scripts.check_md_links.check_readme_coverage", lambda: CoverageResult()
         )
 
         assert main([]) == 1
