@@ -9,7 +9,7 @@ It detects the locally available host CLIs; it never installs either CLI.
 # Install an agent or skill into every available host (positional args are path filters)
 claude-all --all --user <name>     # ~/.claude, ~/.codex, and ~/.agents/skills
 claude-all --all --project <name>  # ./.claude, ./.codex, and ./.agents/skills
-claude-all --rebuild               # refresh the internal Codex artifact cache
+claude-all --rebuild               # regenerate installed Codex agent TOMLs
 
 # Remove installs
 claude-all --prune                 # only what the repo no longer ships
@@ -27,11 +27,19 @@ prek run --all-files
 
 ### `--rebuild`
 
-`claude-all --rebuild` rebuilds its internal Codex artifact cache from the current
-repository resources. It has no user or project scope and does not install,
-remove, or relink any visible resource. Normal installs refresh the cache when
-needed; use this command only to recover a stale or corrupted cache while
-developing the installer.
+`claude-all --rebuild` regenerates the Codex agents that this installer already
+records as installed, directly in `~/.codex/agents`. It has no project scope and
+does not enable unselected agents.
+
+### Codex agent discovery compatibility
+
+**Tested 2026-08-29 with Codex CLI 0.151.0:** Codex discovers a regular
+`~/.codex/agents/<name>.toml` file, but skips an individual TOML symlink even
+when its target is readable (`0644`). Do not symlink generated agent files to
+an installer cache. Generate regular files directly in the existing agents
+directory, preserving any user-owned agents there. A directory-level symlink
+also loaded in this version, but must not be used because it would hide or
+replace unrelated user agents.
 
 ## Commits and releases
 
