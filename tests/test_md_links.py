@@ -21,8 +21,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 from check_md_links import (
     CODE_SPAN,
     LINK,
+    BrokenLink,
+    CoverageResult,
+    LinkCheckResult,
+    UnlinkedResource,
     check_links,
+    check_readme_coverage,
+    display_path,
+    human_findings,
     is_vendored,
+    json_report,
+    main,
     strip_code_blocks,
 )
 from vendor_sync import clone_upstream
@@ -150,7 +159,243 @@ class TestCheckLinks:
         # which crashed exactly this way.
         missing = tmp_path / "GONE.md"
         monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [missing])
-        assert check_links(registry=[]) == []
+        assert check_links(registry=[]) == LinkCheckResult()
+
+    def test_broken_link_records_file_target_and_resolved(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        # A real tmp tree: the resolved path that does not exist is the payload
+        # a --json consumer acts on — it must survive the scan verbatim.
+        # .resolve() first: check_links resolves link targets, so a symlinked
+        # tmp root (/tmp -> /private/tmp) must match on both sides.
+        root = tmp_path.resolve()
+        (root / "docs").mkdir()
+        page = root / "docs" / "page.md"
+        page.write_text("intro [gone](../gone.md) more\n")
+        monkeypatch.setattr("check_md_links.ROOT", root)
+        monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [page])
+
+        result = check_links(registry=[])
+
+        assert result.md_files_scanned == 1
+        assert result.links_resolved == 1
+        assert result.vendored_files_skipped == 0
+        assert result.broken == [
+            BrokenLink(
+                file="docs/page.md",
+                line=1,
+                target="../gone.md",
+                resolved="gone.md",
+            )
+        ]
+
+    def test_vendored_file_counts_as_skipped(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        (tmp_path / "vend").mkdir()
+        upstream = tmp_path / "vend" / "SKILL.md"
+        upstream.write_text("[gone](gone.md)\n")
+        monkeypatch.setattr("check_md_links.ROOT", tmp_path)
+        monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [upstream])
+        registry = [{"path": "vend", "vendor_mode": "dir"}]
+
+        result = check_links(registry=registry)
+
+        assert result.broken == []
+        assert result.vendored_files_skipped == 1
+        assert result.md_files_scanned == 0
+
+
+class TestDisplayPath:
+    def test_in_repo_path_becomes_root_relative(self) -> None:
+        assert display_path(ROOT / "a" / "b.md") == "a/b.md"
+
+    def test_outside_repo_keeps_full_path(self) -> None:
+        assert display_path(Path("/elsewhere/b.md")) == "/elsewhere/b.md"
+
+
+class TestCoverageAndReports:
+    def test_check_readme_coverage_counts_resources(self) -> None:
+        # Runs against this repo: a clean tree must still PROVE it looked —
+        # zero resources_checked is the vacuous pass the counts guard against.
+        result = check_readme_coverage()
+        assert result.resources_checked > 0
+        assert result.unlinked == []
+
+    def test_json_report_shape_on_findings(self) -> None:
+        links = LinkCheckResult(
+            broken=[BrokenLink(file="a.md", line=3, target="../x.md", resolved="x.md")],
+            md_files_scanned=2,
+            links_resolved=4,
+            vendored_files_skipped=1,
+        )
+        coverage = CoverageResult(
+            unlinked=[UnlinkedResource(kind="skill", name="n", path="p/SKILL.md")],
+            resources_checked=5,
+        )
+
+        assert json_report(links, coverage) == {
+            "passed": False,
+            "counts": {
+                "md_files_scanned": 2,
+                "links_resolved": 4,
+                "resources_checked": 5,
+                "vendored_files_skipped": 1,
+            },
+            "broken_links": [
+                {"file": "a.md", "line": 3, "target": "../x.md", "resolved": "x.md"}
+            ],
+            "unlinked_resources": [{"kind": "skill", "name": "n", "path": "p/SKILL.md"}],
+        }
+
+    def test_human_findings_match_the_legacy_prose(self) -> None:
+        # Byte-identical with what the gate printed before --json existed.
+        links = LinkCheckResult(
+            broken=[BrokenLink(file="a.md", line=3, target="../x.md", resolved="x.md")]
+        )
+        coverage = CoverageResult(
+            unlinked=[UnlinkedResource(kind="skill", name="n", path="p/SKILL.md")]
+        )
+
+        assert human_findings(links, coverage) == [
+            "a.md:3: broken-link -> ../x.md",
+            "README.md: undocumented -> skill/n (add a row linking p/SKILL.md)",
+        ]
+
+    def test_passing_human_run_is_silent(
+        self, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr("check_md_links.check_links", lambda registry: LinkCheckResult())
+        monkeypatch.setattr(
+            "check_md_links.check_readme_coverage", lambda: CoverageResult()
+        )
+        assert main([]) == 0
+        out, err = capsys.readouterr()
+        assert out == ""
+        assert err == ""
+
+
+class TestJsonMode:
+    """--json emits one machine-readable object; the human report stays default."""
+
+    def test_clean_tree_reports_passing_counts(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        # The real tree IS the vacuous-pass detector: a passing report whose
+        # counts are zero means a glob stopped matching after a rename.
+        assert main(["--json"]) == 0
+        out, _ = capsys.readouterr()
+        report = json.loads(out)
+        assert report["passed"] is True
+        assert report["broken_links"] == []
+        assert report["unlinked_resources"] == []
+        assert report["counts"]["md_files_scanned"] > 0
+        assert report["counts"]["links_resolved"] > 0
+        assert report["counts"]["resources_checked"] > 0
+
+    def test_broken_link_is_machine_readable(
+        self, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            "check_md_links.check_links",
+            lambda registry: LinkCheckResult(
+                broken=[
+                    BrokenLink(
+                        file="area/page.md",
+                        line=7,
+                        target="../gone.md",
+                        resolved="area/gone.md",
+                    )
+                ],
+                md_files_scanned=3,
+                links_resolved=5,
+            ),
+        )
+        monkeypatch.setattr(
+            "check_md_links.check_readme_coverage",
+            lambda: CoverageResult(resources_checked=2),
+        )
+
+        assert main(["--json"]) == 1
+        out, _ = capsys.readouterr()
+        report = json.loads(out)
+        assert report["passed"] is False
+        assert report["broken_links"] == [
+            {
+                "file": "area/page.md",
+                "line": 7,
+                "target": "../gone.md",
+                "resolved": "area/gone.md",
+            }
+        ]
+        assert report["unlinked_resources"] == []
+        assert report["counts"] == {
+            "md_files_scanned": 3,
+            "links_resolved": 5,
+            "resources_checked": 2,
+            "vendored_files_skipped": 0,
+        }
+
+    def test_unlinked_resource_is_machine_readable(
+        self, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            "check_md_links.check_links",
+            lambda registry: LinkCheckResult(md_files_scanned=3, links_resolved=5),
+        )
+        monkeypatch.setattr(
+            "check_md_links.check_readme_coverage",
+            lambda: CoverageResult(
+                unlinked=[
+                    UnlinkedResource(
+                        kind="skill",
+                        name="my-skill",
+                        path="src/claude_all/skills/generic/my-skill/SKILL.md",
+                    )
+                ],
+                resources_checked=2,
+            ),
+        )
+
+        assert main(["--json"]) == 1
+        out, _ = capsys.readouterr()
+        report = json.loads(out)
+        assert report["passed"] is False
+        assert report["broken_links"] == []
+        assert report["unlinked_resources"] == [
+            {
+                "kind": "skill",
+                "name": "my-skill",
+                "path": "src/claude_all/skills/generic/my-skill/SKILL.md",
+            }
+        ]
+
+    def test_default_output_never_becomes_json(
+        self, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            "check_md_links.check_links",
+            lambda registry: LinkCheckResult(
+                broken=[
+                    BrokenLink(
+                        file="area/page.md",
+                        line=7,
+                        target="../gone.md",
+                        resolved="area/gone.md",
+                    )
+                ]
+            ),
+        )
+        monkeypatch.setattr(
+            "check_md_links.check_readme_coverage", lambda: CoverageResult()
+        )
+
+        assert main([]) == 1
+        out, err = capsys.readouterr()
+        assert out == "area/page.md:7: broken-link -> ../gone.md\n"
+        assert "1 finding(s)." in err
+        with pytest.raises(json.JSONDecodeError):
+            json.loads(out)
 
 
 def test_non_vendored_routes_use_discoverable_skill_names() -> None:
