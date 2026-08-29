@@ -2681,7 +2681,7 @@ def install_codex_mcp(item: Item, scope: str) -> str:
     Returns:
         A description of the completed or skipped registration.
     """
-    _, name, command, raw_args, raw_env = mcp_metadata(item)
+    meta, name, command, raw_args, raw_env = mcp_metadata(item)
     if not command:
         return f"skipped Codex mcp {item.name}: missing 'command'"
     has_keychain = has_keychain_reference(raw_args, raw_env)
@@ -2693,7 +2693,12 @@ def install_codex_mcp(item: Item, scope: str) -> str:
             else f"{key}={shell_quote(str(value))}"
             for key, value in raw_env.items()
         ]
-        exec_parts = [shell_quote(command), *(shell_quote(str(arg)) for arg in raw_args)]
+        exec_parts = [shell_quote(command)]
+        for arg in raw_args:
+            if isinstance(arg, str) and arg.startswith("keychain:"):
+                exec_parts.append(f'"{keychain_subst(arg)}"')
+            else:
+                exec_parts.append(shell_quote(str(arg)))
         cmd.extend(["sh", "-c", " ".join([*env_parts, "exec", *exec_parts])])
     else:
         for key, value in raw_env.items():
@@ -2702,6 +2707,9 @@ def install_codex_mcp(item: Item, scope: str) -> str:
         cmd.extend(str(arg) for arg in raw_args)
     subprocess.run(cmd, check=True)
     record_install(item.kind, item.name, None, host="codex", scope=scope)
+    msg = meta.get("post_install_message")
+    if msg:
+        print(f"  (i) {item.name}:\n{msg}")
     return f"added Codex mcp {name} (scope: {scope})"
 
 

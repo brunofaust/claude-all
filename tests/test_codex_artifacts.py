@@ -758,6 +758,54 @@ def test_install_standalone_hook_rejects_invalid_nested_shapes_before_linking(
     assert not (tmp_path / ".claude" / "hooks" / "mock-spec-guard.py").exists()
 
 
+def test_install_codex_postgres_mcp_resolves_keychain_at_launch(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Codex registers Postgres with a runtime Keychain launcher and setup guidance.
+
+    Args:
+        monkeypatch: Pytest fixture for subprocess and state isolation.
+        capsys: Pytest fixture for installer output inspection.
+    """
+    item = next(item for item in cli.discover(["postgres"]) if item.kind == "mcps")
+    commands: list[list[str]] = []
+
+    def run(command: list[str], *, check: bool) -> None:
+        """Capture the MCP registration command without launching Codex.
+
+        Args:
+            command: Registration command that would be executed.
+            check: Whether subprocess failures would raise.
+        """
+        assert check
+        commands.append(command)
+
+    monkeypatch.setattr(cli.subprocess, "run", run)
+    monkeypatch.setattr(cli, "record_install", lambda *args, **kwargs: None)
+
+    cli.install_codex_mcp(item, "user")
+
+    expected_shell = (
+        "exec 'npx' '-y' '@modelcontextprotocol/server-postgres' "
+        '"$(security find-generic-password -a "$USER" -s "POSTGRES_URL" -w)"'
+    )
+    assert commands == [
+        [
+            "codex",
+            "mcp",
+            "add",
+            "postgres",
+            "--",
+            "sh",
+            "-c",
+            expected_shell,
+        ]
+    ]
+    output = capsys.readouterr().out
+    assert "Store the connection URL in macOS Keychain, then re-install this MCP" in output
+    assert 'security add-generic-password -U -a "$USER" -s "POSTGRES_URL" -w' in output
+
+
 @pytest.mark.parametrize(
     ("canonical_name", "legacy_directory"),
     [

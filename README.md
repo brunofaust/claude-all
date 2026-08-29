@@ -265,7 +265,8 @@ A plugin is a third-party tool installed via `claude plugin install` (Claude Cod
 
 ## MCPs
 
-MCP servers Claude Code can connect to. Each lives at `src/claude_all/mcps/<name>/mcp.json` and installs via `claude mcp add`.
+MCP servers Claude Code and Codex can connect to. Each lives at
+`src/claude_all/mcps/<name>/mcp.json` and installs through the selected host CLI.
 
 | MCP | What it's for |
 | --- | --- |
@@ -275,7 +276,10 @@ MCP servers Claude Code can connect to. Each lives at `src/claude_all/mcps/<name
 | [`postgres`](src/claude_all/mcps/postgres/mcp.json) | Read-only SQL against a Postgres DB (set the connection URL after install). |
 | [`code-review-graph`](src/claude_all/mcps/code-review-graph/mcp.json) | Codebase knowledge graph — risk-scored diff review, hub/bridge detection, surprise-scoring, knowledge gaps, dead code. Run `code-review-graph build` in each target repo after install. |
 
-**Secrets:** an MCP config value prefixed `keychain:NAME` is resolved from the macOS keychain at launch time — nothing is ever stored in plaintext. Store one once:
+**Secrets:** an MCP config value prefixed `keychain:NAME` is resolved from the macOS
+keychain by a runtime shell launcher in both hosts — nothing is ever stored in
+plaintext. The installer prints the required setup message after installation. Store
+one once:
 
 ```bash
 security add-generic-password -a "$USER" -s "CONTEXT7_API_KEY" -w "ctx7sk-XXXXXX"

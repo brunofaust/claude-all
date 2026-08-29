@@ -7,5 +7,5 @@
   "env": {},
   "transport": "stdio",
   "description": "Postgres MCP — read-only SQL queries against a Postgres database. Connection URL read from macOS keychain.",
-  "post_install_message": "Store the connection URL in macOS keychain BEFORE install (or re-install after):\n  security add-generic-password -a \"$USER\" -s \"POSTGRES_URL\" -w \"postgresql://user:pass@host:5432/dbname\"\nInstaller reads it via:\n  security find-generic-password -a \"$USER\" -s \"POSTGRES_URL\" -w"
+  "post_install_message": "Store the connection URL in macOS Keychain, then re-install this MCP:\n  security add-generic-password -U -a \"$USER\" -s \"POSTGRES_URL\" -w\nThe final -w securely prompts for the URL. The installer reads it at launch; it is never stored in MCP config."
 }
