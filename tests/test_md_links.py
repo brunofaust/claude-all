@@ -11,7 +11,9 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 import sys
+from io import StringIO
 from pathlib import Path
 
 import pytest
@@ -110,7 +112,7 @@ class TestStripCodeBlocks:
 
 
 class TestIsVendored:
-    def test_dir_mode_exempts_the_whole_tree(self) -> None:
+    def test_dir_mode_exempts_whole_tree(self) -> None:
         registry = [{"path": "src/x/skill", "vendor_mode": "dir"}]
         root = Path(is_vendored.__globals__["ROOT"])
         assert is_vendored(root / "src/x/skill/AGENTS.md", registry)
@@ -227,3 +229,249 @@ def test_claude_hook_examples_use_timeout_seconds() -> None:
                 findings.append(f"{path.relative_to(ROOT)}: timeout={value}")
 
     assert findings == []
+
+
+# Tests for --json flag
+def test_json_clean_tree(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """--json on a clean tree should output JSON with pass:true and zero counts."""
+    # Initialize a git repo
+    monkeypatch.setattr("check_md_links.ROOT", tmp_path)
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.name", "Test"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=tmp_path, check=True)
+    # Create a minimal vendored.json
+    vendored: dict[str, list[dict]] = {"vendored": []}
+    (tmp_path / "vendored.json").write_text(json.dumps(vendored))
+    # Create a README.md to avoid errors in check_readme_coverage
+    (tmp_path / "README.md").write_text("# README\n")
+    # No markdown files tracked
+    # Run main with --json
+    from check_md_links import main
+
+    # Capture stdout and stderr using StringIO
+    stdout_capture = StringIO()
+    stderr_capture = StringIO()
+
+    # We need to monkey-patch the ROOT in check_md_links module
+    import check_md_links
+
+    check_md_links.ROOT = tmp_path
+
+    # Redirect stdout and stderr
+    old_stdout, old_stderr = sys.stdout, sys.stderr
+    try:
+        sys.stdout = stdout_capture
+        sys.stderr = stderr_capture
+        exit_code = main()
+    finally:
+        sys.stdout = old_stdout
+        sys.stderr = old_stderr
+
+    # Get the output
+    output = stdout_capture.getvalue()
+    err = stderr_capture.getvalue()
+
+    # Parse JSON
+    data = json.loads(output)
+    assert data["pass"] is True
+    assert data["counts"]["markdown_files_scanned"] == 0
+    assert data["counts"]["links_resolved"] == 0
+    assert data["counts"]["resources_checked"] == 0
+    assert data["counts"]["files_skipped_as_vendored"] == 0
+    assert data["broken_links"] == []
+    assert data["unlinked_resources"] == []
+    assert exit_code == 0
+    # stderr should be empty (no diagnostics)
+    assert err == ""
+
+
+def test_json_broken_link(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """--json with a broken link should output JSON with pass:false and one broken link."""
+    monkeypatch.setattr("check_md_links.ROOT", tmp_path)
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.name", "Test"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=tmp_path, check=True)
+    # Create a markdown file with a broken link
+    md = tmp_path / "doc.md"
+    md.write_text("See [link](missing.md) for details.\n")
+    subprocess.run(["git", "add", "doc.md"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "-m", "add doc"], cwd=tmp_path, check=True)
+    # Vendored.json
+    vendored: dict[str, list[dict]] = {"vendored": []}
+    (tmp_path / "vendored.json").write_text(json.dumps(vendored))
+    # README.md
+    (tmp_path / "README.md").write_text("# README\n")
+    # Run main with --json
+    import check_md_links
+    from check_md_links import main
+
+    check_md_links.ROOT = tmp_path
+
+    # Capture stdout and stderr using StringIO
+    stdout_capture = StringIO()
+    stderr_capture = StringIO()
+
+    old_stdout, old_stderr = sys.stdout, sys.stderr
+    try:
+        sys.stdout = stdout_capture
+        sys.stderr = stderr_capture
+        exit_code = main()
+    finally:
+        sys.stdout = old_stdout
+        sys.stderr = old_stderr
+
+    stdout_val = stdout_capture.getvalue()
+    stderr_val = stderr_capture.getvalue()
+
+    # Parse JSON
+    data = json.loads(stdout_val)
+    assert data["pass"] is False
+    assert data["counts"]["markdown_files_scanned"] == 1
+    assert data["counts"]["links_resolved"] == 1
+    assert data["counts"]["resources_checked"] == 0
+    assert data["counts"]["files_skipped_as_vendored"] == 0
+    assert len(data["broken_links"]) == 1
+    bl = data["broken_links"][0]
+    assert bl["file"] == "doc.md"
+    assert bl["target"] == "missing.md"
+    # resolved_path should be absolute path to tmp_path/doc.md's parent / missing.md resolved
+    expected_resolved = (tmp_path / "missing.md").resolve()
+    assert bl["resolved_path"] == str(expected_resolved)
+    assert data["unlinked_resources"] == []
+    assert exit_code == 1
+    # stderr should be empty
+    assert stderr_val == ""
+
+
+def test_json_unlinked_resource(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """--json with an unlinked resource should output JSON with pass:false and one unlinked resource."""
+    monkeypatch.setattr("check_md_links.ROOT", tmp_path)
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.name", "Test"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=tmp_path, check=True)
+    # Create a markdown file (no links)
+    md = tmp_path / "doc.md"
+    md.write_text("# Doc\n")
+    subprocess.run(["git", "add", "doc.md"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "-m", "add doc"], cwd=tmp_path, check=True)
+    # Vendored.json
+    vendored: dict[str, list[dict]] = {"vendored": []}
+    (tmp_path / "vendored.json").write_text(json.dumps(vendored))
+    # Create a skill directory and SKILL.md (to be discovered)
+    skill_dir = tmp_path / "src" / "myskill"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text("---\nname: myskill\n---\n# Skill\n")
+    # We need to make sure the skill is discoverable by claude_all.cli.discover
+    # For simplicity, we'll mock the discover function? But we don't want to depend on the actual discover.
+    # Instead, we'll create a minimal claude_all structure? That's heavy.
+    # Alternatively, we can patch the discover function in check_md_links to return a known item.
+    # Let's do that.
+    from types import SimpleNamespace
+    from unittest.mock import patch
+
+    # Create a mock item
+    item = SimpleNamespace(kind="skill", name="myskill", src=skill_dir / "SKILL.md")
+
+    # Patch claude_all.cli.discover to return [item]
+    with patch("check_md_links.discover", return_value=[item]):
+        (tmp_path / "README.md").write_text("# README\n")  # no link to the skill
+        import check_md_links
+        from check_md_links import main
+
+        check_md_links.ROOT = tmp_path
+
+        # Capture stdout and stderr using StringIO
+        stdout_capture = StringIO()
+        stderr_capture = StringIO()
+
+        old_stdout, old_stderr = sys.stdout, sys.stderr
+        try:
+            sys.stdout = stdout_capture
+            sys.stderr = stderr_capture
+            exit_code = main()
+        finally:
+            sys.stdout = old_stdout
+            sys.stderr = old_stderr
+
+        stdout_val = stdout_capture.getvalue()
+        stderr_val = stderr_capture.getvalue()
+
+    data = json.loads(stdout_val)
+    assert data["pass"] is False
+    assert data["counts"]["markdown_files_scanned"] == 1
+    assert data["counts"]["links_resolved"] == 0
+    assert data["counts"]["resources_checked"] == 1
+    assert data["counts"]["files_skipped_as_vendored"] == 0
+    assert data["broken_links"] == []
+    assert len(data["unlinked_resources"]) == 1
+    # The unlinked resource path should be relative to ROOT
+    assert data["unlinked_resources"][0] == "src/myskill/SKILL.md"
+    assert exit_code == 1
+    assert stderr_val == ""
+
+
+def test_default_output_unaffected(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Ensure that without --json, the output and exit code are unchanged."""
+    monkeypatch.setattr("check_md_links.ROOT", tmp_path)
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.name", "Test"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=tmp_path, check=True)
+    # Create a markdown file with a broken link
+    md = tmp_path / "doc.md"
+    md.write_text("See [link](missing.md) for details.\n")
+    subprocess.run(["git", "add", "doc.md"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "-m", "add doc"], cwd=tmp_path, check=True)
+    # Vendored.json
+    vendored: dict[str, list[dict]] = {"vendored": []}
+    (tmp_path / "vendored.json").write_text(json.dumps(vendored))
+    # README.md
+    (tmp_path / "README.md").write_text("# README\n")
+    # Test without --json
+    import check_md_links
+    from check_md_links import main
+
+    check_md_links.ROOT = tmp_path
+
+    # Capture stdout and stderr using StringIO
+    stdout_capture_nojson = StringIO()
+    stderr_capture_nojson = StringIO()
+
+    old_stdout, old_stderr = sys.stdout, sys.stderr
+    try:
+        sys.stdout = stdout_capture_nojson
+        sys.stderr = stderr_capture_nojson
+        exit_code_nojson = main()
+    finally:
+        sys.stdout = old_stdout
+        sys.stderr = old_stderr
+
+    out_nojson = stdout_capture_nojson.getvalue()
+    err_nojson = stderr_capture_nojson.getvalue()
+
+    # Test with --json
+    stdout_capture_json = StringIO()
+    stderr_capture_json = StringIO()
+
+    try:
+        sys.stdout = stdout_capture_json
+        sys.stderr = stderr_capture_json
+        exit_code_json = main()
+    finally:
+        sys.stdout = old_stdout
+        sys.stderr = old_stderr
+
+    out_json = stdout_capture_json.getvalue()
+    err_json = stderr_capture_json.getvalue()
+
+    # The JSON output should be valid JSON and contain the finding
+    data = json.loads(out_json)
+    assert data["pass"] is False
+    assert len(data["broken_links"]) == 1
+    # The non-JSON output should have the finding string
+    assert out_nojson.strip() == "doc.md:1: broken-link -> missing.md"
+    # The stderr should have the count line in non-JSON mode
+    assert err_nojson.strip() == "1 finding(s)."
+    # In JSON mode, stderr should be empty
+    assert err_json == ""
+    # Exit codes should be the same
+    assert exit_code_nojson == exit_code_json == 1
