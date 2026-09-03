@@ -11,7 +11,9 @@ It resolves targets by importing the installer's own `discover()` /`state_key`,
 so "what counts as a resource" is defined in exactly one place (the installer),
 never re-derived here.
 
-Exit codes: 0 = every entry resolves · 1 = a dangling/malformed entry.
+Exit codes: 0 = every entry resolves · 1 = a dangling/malformed entry, or a
+zero-inspection run (the dependency scan matched no resources — a gate that
+examined nothing must never report green).
 """
 
 from __future__ import annotations
@@ -71,9 +73,31 @@ def find_violations(known: set[str]) -> list[str]:
     return findings
 
 
-def main() -> int:
-    """CLI entry point — print findings to stdout, exit 1 on any."""
-    findings = find_violations(load_resource_keys())
+def run(known: set[str]) -> int:
+    """Validate the manifest graph against *known*; return the process exit code.
+
+    Fails hard when *known* is empty — discovery matched no resources, so the
+    scan inspected nothing and must not exit 0 (a gate that examined nothing
+    must never report green). On a clean run it prints one greppable summary
+    line with the inspected resource count.
+
+    Args:
+        known: Every resolvable resource key, as ``load_resource_keys()`` yields.
+
+    Returns:
+        0 when every entry resolves and at least one resource was inspected,
+        1 otherwise.
+    """
+    if not known:
+        print(
+            "ERROR: dependency scan matched ZERO resources — the installer's "
+            "discover() found nothing under src/claude_all (renamed/moved "
+            "directory?), so no resources were inspected. Refusing to exit 0 on "
+            "an empty scan.",
+            file=sys.stderr,
+        )
+        return 1
+    findings = find_violations(known)
     for finding in findings:
         print(finding)
     if findings:
@@ -83,7 +107,13 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
+    print(f"OK: inspected {len(known)} resource(s), no dangling requires.")
     return 0
+
+
+def main() -> int:
+    """CLI entry point — run the gate on the installer's discovered resources."""
+    return run(load_resource_keys())
 
 
 if __name__ == "__main__":
