@@ -41,6 +41,24 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
+# Module-level variable for discover, initialized lazily
+discover = None
+
+
+def _setup_discover():
+    """Initialize the discover function by adjusting sys.path and importing."""
+    global discover
+    if discover is None:
+        sys.path.insert(0, str(ROOT / "src"))
+        from claude_all.cli import discover as d
+
+        discover = d
+
+
+# Initialize discover at module level
+_setup_discover()
+
+
 # [label](target) — skip images, absolute URLs, anchors and mailto. A leading `/` is
 # a site-absolute URL (the SEO skill's llms.txt examples), never a repo path.
 LINK = re.compile(r"(?<!!)\[[^\]]*\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
@@ -99,7 +117,7 @@ def tracked_markdown() -> list[Path]:
     return [ROOT / p for p in out.split("\0") if p]
 
 
-def check_links(registry: list[dict]):
+def _check_links_detailed(registry: list[dict]):
     """Check Markdown links in non-vendored files.
 
     Returns a tuple of:
@@ -142,7 +160,16 @@ def check_links(registry: list[dict]):
     return findings, broken_links_info, links_checked, files_skipped
 
 
-def check_readme_coverage():
+def check_links(registry: list[dict]) -> list[str]:
+    """Check Markdown links in non-vendored files.
+
+    Returns a list of human-readable findings strings (for backward compatibility).
+    """
+    findings, _, _, _ = _check_links_detailed(registry)
+    return findings
+
+
+def _check_readme_coverage_detailed():
     """Check README coverage for resources.
 
     Returns a tuple of:
@@ -150,9 +177,6 @@ def check_readme_coverage():
         - list of unlinked resource paths (relative to repository root, as strings)
         - count of resources checked
     """
-    sys.path.insert(0, str(ROOT / "src"))
-    from claude_all.cli import discover
-
     readme = (ROOT / "README.md").read_text()
     findings = []
     unlinked_resources = []
@@ -168,6 +192,15 @@ def check_readme_coverage():
     return findings, unlinked_resources, resources_checked
 
 
+def check_readme_coverage() -> list[str]:
+    """Check README coverage for resources.
+
+    Returns a list of human-readable findings strings (for backward compatibility).
+    """
+    findings, _, _ = _check_readme_coverage_detailed()
+    return findings
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -175,13 +208,15 @@ def main() -> int:
         action="store_true",
         help="Emit machine-readable JSON instead of human-readable output",
     )
-    args = parser.parse_args()
+    args, _ = parser.parse_known_args()  # Ignore unknown arguments (e.g., from pytest)
 
     registry = json.loads((ROOT / "vendored.json").read_text()).get("vendored", [])
 
     if args.json:
-        findings_strings, broken_links_info, links_checked, files_skipped = check_links(registry)
-        coverage_strings, unlinked_resources, resources_checked = check_readme_coverage()
+        findings_strings, broken_links_info, links_checked, files_skipped = _check_links_detailed(
+            registry
+        )
+        coverage_strings, unlinked_resources, resources_checked = _check_readme_coverage_detailed()
         findings = findings_strings + coverage_strings
         markdown_files = tracked_markdown()
         markdown_files_scanned = len(markdown_files)
@@ -207,8 +242,8 @@ def main() -> int:
         print(json.dumps(data))
         return 0 if pass_fail else 1
     else:
-        findings_strings, _, _ = check_links(registry)
-        coverage_strings, _, _ = check_readme_coverage()
+        findings_strings = check_links(registry)
+        coverage_strings = check_readme_coverage()
         findings = findings_strings + coverage_strings
         for finding in findings:
             print(finding)

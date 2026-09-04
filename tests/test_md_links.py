@@ -344,7 +344,7 @@ def test_json_broken_link(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> No
 
 
 def test_json_unlinked_resource(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """--json with an unlinked resource should output JSON with pass:false and one unlinked resource."""
+    """--json with an unlinked resource outputs JSON with pass:false and one unlinked resource."""
     monkeypatch.setattr("check_md_links.ROOT", tmp_path)
     subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
     subprocess.run(["git", "config", "user.name", "Test"], cwd=tmp_path, check=True)
@@ -362,10 +362,7 @@ def test_json_unlinked_resource(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     skill_dir.mkdir(parents=True)
     (skill_dir / "SKILL.md").write_text("---\nname: myskill\n---\n# Skill\n")
     # We need to make sure the skill is discoverable by claude_all.cli.discover
-    # For simplicity, we'll mock the discover function? But we don't want to depend on the actual discover.
-    # Instead, we'll create a minimal claude_all structure? That's heavy.
-    # Alternatively, we can patch the discover function in check_md_links to return a known item.
-    # Let's do that.
+    # Mock discover for simplicity; avoid actual dependency.
     from types import SimpleNamespace
     from unittest.mock import patch
 
