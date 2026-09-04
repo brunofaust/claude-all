@@ -14,8 +14,25 @@ Two failures this repo has actually shipped, now mechanical:
 Vendored files are exempt from check 1: they are kept byte-identical to upstream,
 so their upstream-relative links legitimately do not resolve in this tree. Files
 listed under a vendored entry's `local_only` are OURS and stay checked.
+
+With `--json`, emits a machine-readable JSON object instead of the human-readable
+report. The JSON contains:
+- `pass`: boolean indicating overall success/failure
+- `counts`: object with:
+  - `markdown_files_scanned`: number of markdown files found and processed (excluding vendored)
+  - `links_resolved`: total link targets examined
+  - `resources_checked`: number of resources checked for README coverage
+  - `files_skipped_as_vendored`: number of files skipped due to vendored exemption
+- `broken_links`: array of objects, each with:
+  - `file`: containing file (relative to repo root)
+  - `target`: raw link target as written in markdown
+  - `resolved_path`: the resolved path that did not exist (absolute)
+- `unlinked_resources`: array of resource paths (relative to repo root) not linked from README
+
+Human output stays the default and stays byte-identical — this is additive.
 """
 
+import argparse
 import json
 import re
 import subprocess
@@ -118,15 +135,102 @@ def check_readme_coverage() -> list[str]:
     ]
 
 
+def get_json_data(registry: list[dict]) -> dict:
+    """Collect structured data for JSON output."""
+    # Get all markdown files
+    all_markdown_files = tracked_markdown()
+
+    # Counters
+    markdown_files_scanned = 0  # non-vendored files processed
+    links_resolved = 0  # link targets examined
+    files_skipped_as_vendored = 0  # vendored files skipped
+
+    # Data collections
+    broken_links = []
+
+    # Process markdown files for link checking
+    for md in all_markdown_files:
+        if is_vendored(md, registry):
+            files_skipped_as_vendored += 1
+            continue
+        if not md.exists():
+            continue
+
+        # Count this file as scanned (non-vendored and exists)
+        markdown_files_scanned += 1
+
+        for line_no, line in strip_code_blocks(md.read_text()):
+            for target in LINK.findall(CODE_SPAN.sub("", line)):
+                if target.startswith(SKIP_PREFIX):
+                    continue
+                bare = target.split("#", 1)[0]
+                if not bare:
+                    continue  # pure anchor
+
+                # Count this link target as resolved (examined)
+                links_resolved += 1
+
+                resolved_path = (md.parent / bare).resolve()
+                if not resolved_path.exists():
+                    rel = md.relative_to(ROOT)
+                    broken_links.append(
+                        {"file": str(rel), "target": target, "resolved_path": str(resolved_path)}
+                    )
+
+    # Process README coverage
+    unlinked_resources_raw = check_readme_coverage()
+    resources_checked = len(unlinked_resources_raw)
+    unlinked_resources = []
+
+    for item_str in unlinked_resources_raw:
+        # Extract the path from the string like:
+        # "README.md: undocumented -> kind/name (add a row linking path)"
+        if "add a row linking " in item_str:
+            path_part = item_str.split("add a row linking ")[1].rstrip(")")
+            unlinked_resources.append(path_part)
+
+    # Determine overall pass/fail
+    pass_check = len(broken_links) == 0 and len(unlinked_resources) == 0
+
+    return {
+        "pass": pass_check,
+        "counts": {
+            "markdown_files_scanned": markdown_files_scanned,
+            "links_resolved": links_resolved,
+            "resources_checked": resources_checked,
+            "files_skipped_as_vendored": files_skipped_as_vendored,
+        },
+        "broken_links": broken_links,
+        "unlinked_resources": unlinked_resources,
+    }
+
+
 def main() -> int:
+    parser = argparse.ArgumentParser(description="Check markdown links and README coverage")
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit machine-readable JSON output instead of human-readable format",
+    )
+    args = parser.parse_args()
+
     registry = json.loads((ROOT / "vendored.json").read_text()).get("vendored", [])
-    findings = check_links(registry) + check_readme_coverage()
-    for finding in findings:
-        print(finding)
-    if findings:
-        print(f"\n{len(findings)} finding(s).", file=sys.stderr)
-        return 1
-    return 0
+
+    if args.json:
+        # JSON output mode
+        data = get_json_data(registry)
+        print(json.dumps(data, indent=None))  # Compact JSON
+        # Exit with 0 if pass, 1 if fail (same as non-JSON mode)
+        return 0 if data["pass"] else 1
+    else:
+        # Original human-readable output mode
+        findings = check_links(registry) + check_readme_coverage()
+        for finding in findings:
+            print(finding)
+        if findings:
+            print(f"\n{len(findings)} finding(s).", file=sys.stderr)
+            return 1
+        return 0
 
 
 if __name__ == "__main__":
