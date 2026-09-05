@@ -64,24 +64,24 @@ def cpu_bound_task(n: int) -> int:
 
 def parallel_free_threaded(numbers: List[int]) -> List[int]:
     """Execute CPU-bound tasks in parallel using free-threading.
-    
+
     Requires Python 3.14+ with free-threading enabled (-X gil=0).
     """
     results = [None] * len(numbers)
-    
+
     def worker(idx: int, value: int) -> None:
         results[idx] = cpu_bound_task(value)
-    
+
     threads = []
     for i, n in enumerate(numbers):
         thread = threading.Thread(target=worker, args=(i, n))
         threads.append(thread)
         thread.start()
-    
+
     # Wait for all threads to complete
     for thread in threads:
         thread.join()
-    
+
     return results
 
 
@@ -112,12 +112,12 @@ async def process_file_cpu_intensive(file_path: Path) -> dict:
     """Process a file with CPU-intensive analysis (suitable for free-threading or InterpreterPoolExecutor)."""
     # CPU-bound work: parse and analyze file contents
     data = await run_in_thread(file_path.read_text)  # I/O offloaded to thread
-    
+
     # CPU-bound analysis (could use free-threading or InterpreterPoolExecutor)
     analysis_result = await run_in_thread(
         _cpu_bound_analysis, data
     )
-    
+
     return {
         "file": file_path.name,
         "analysis": analysis_result,
@@ -139,14 +139,14 @@ def _cpu_bound_analysis(text: str) -> dict:
 
 async def process_files_hybrid(file_paths: List[Path]) -> List[dict]:
     """Process multiple files with hybrid CPU/I/O workload.
-    
+
     Uses brunofaust-python-style patterns:
     - I/O operations offloaded via run_in_thread()
     - CPU-bound work can use free-threading, InterpreterPoolExecutor, or run_in_thread()
     """
     # For I/O-bound file reading: use run_in_thread() (established pattern)
     # For CPU-bound analysis: could use free-threading if enabled and compatible
-    
+
     tasks = [process_file_cpu_intensive(fp) for fp in file_paths]
     return await asyncio.gather(*tasks)
 
@@ -196,7 +196,7 @@ Checking dependency compatibility is crucial when considering free-threading. He
    import sys
    from concurrent.futures import InterpreterPoolExecutor
    import threading
-   
+
    def get_executor():
        """Return appropriate executor based on Python version and capabilities."""
        if hasattr(sys, '_is_gil_enabled') and not sys._is_gil_enabled():
