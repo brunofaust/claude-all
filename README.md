@@ -119,7 +119,6 @@ Subagents Claude Code delegates to for specific jobs. Haiku for mechanical work,
 | [`ecr-manager`](src/claude_all/agents/aws/ecr-manager/agent.md) | haiku | Lists and prunes ECR images. |
 | [`cost-explorer`](src/claude_all/agents/aws/cost-explorer/agent.md) | haiku | Reports AWS spend by service, tag, or time. |
 | [`cost-audit-runner`](src/claude_all/agents/aws/cost-audit-runner/agent.md) | sonnet | Finds idle or wasted AWS resources. |
-| [`rds-postgres-query`](src/claude_all/agents/aws/rds-postgres-query/agent.md) | haiku | Runs read-only SQL against RDS/Aurora Postgres. |
 | [`terraform-deployer`](src/claude_all/agents/aws/terraform-deployer/agent.md) | haiku | Runs `terraform plan`/`apply` with your approval. |
 | [`terraform-reviewer`](src/claude_all/agents/aws/terraform-reviewer/agent.md) | sonnet | Reviews Terraform for security and cost issues. |
 | [`cloudformation-deployer`](src/claude_all/agents/aws/cloudformation-deployer/agent.md) | haiku | Deploys CloudFormation stacks with your approval. |
@@ -134,7 +133,7 @@ Subagents Claude Code delegates to for specific jobs. Haiku for mechanical work,
 
 | Agent | Model | What it does |
 | --- | --- | --- |
-| [`postgres-query`](src/claude_all/agents/databases/postgres-query/agent.md) | haiku | Runs read-only SQL against local/non-AWS Postgres. |
+| [`postgres-query`](src/claude_all/agents/databases/postgres-query/agent.md) | haiku | Runs read-only SQL against any Postgres, including AWS RDS/Aurora. |
 
 ### Python
 

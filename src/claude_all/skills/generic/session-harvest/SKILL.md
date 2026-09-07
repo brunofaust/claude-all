@@ -5,8 +5,8 @@ description: >-
   recurring friction, re-derived knowledge, and repeated workflows, then turn each pattern into a
   proposed reusable resource (skill / agent / hook / CLAUDE.md instruction / settings change) that
   would most improve the project. Use when: onboarding a repo and wanting to harvest the team's
-  assistant usage into durable tooling, "mine my sessions for improvements", "what skills/agents/hooks
-  should this project have", deciding what to automate next, or as the process-tooling dimension of a
+  assistant usage into durable tooling, mining past sessions for improvements, deciding which
+  skills/agents/hooks a project should have or what to automate next, or as the process-tooling dimension of a
   repo-audit. Output is a PRIORITIZED BACKLOG: for each proposed resource — its type + name, a
   description, the evidence, an estimated % improvement for the project, and effort. Report-only — it
   PROPOSES the backlog; it never auto-creates hooks/settings/instructions (those need confirmation).

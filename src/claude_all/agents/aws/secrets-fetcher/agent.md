@@ -50,7 +50,7 @@ psql -c "SELECT ..."
 ````
 
 DO NOT run this snippet in the agent — it would echo the secret into the transcript.
-For RDS queries: delegate to `rds-postgres-query` which sources the secret inline + scoped to one process.
+For RDS queries: delegate to `postgres-query` which sources the secret inline + scoped to one process.
 
 ## Allowed commands
 

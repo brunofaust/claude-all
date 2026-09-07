@@ -1286,7 +1286,7 @@ def test_create_user_rejects_invalid_email():
 
 - Test edge cases
 - Test with null, negative, positive, UTF-8, Unicode values
-- Test connection failures/intermittence in integration tests (if possible)
+- Test connection failures and intermittence in integration tests
 - Verify retry logic works correctly using mock side effects
 
 ### Running Tests

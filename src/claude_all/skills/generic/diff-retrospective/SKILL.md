@@ -3,9 +3,9 @@ name: diff-retrospective
 description: >-
   Turn a range of merged PRs / commits into durable guardrails — read the DIFFS (not just the PR
   descriptions), cluster recurring root causes, and emit for each (a) a CLAUDE.md rule and, wherever
-  possible, (b) an executable checker. Use when: "do a retrospective on the last N PRs", "what keeps
-  going wrong", "turn these merged changes into lint rules / guardrails", post-mortem on a sprint or
-  release, or hardening a codebase after a bug cluster. Complements `session-harvest` (which mines
+  possible, (b) an executable checker. Use when: running a retrospective over a range of merged PRs,
+  diagnosing what keeps going wrong, turning shipped changes into lint rules or guardrails,
+  post-mortem on a sprint or release, or hardening a codebase after a bug cluster. Complements `session-harvest` (which mines
   assistant chat histories) and `friction-analyzer` (one session transcript) — this one mines the
   SHIPPED CODE. Pairs with the `lessons-extractor` agent, which fans the diff-reading out in parallel.
 disable-model-invocation: false

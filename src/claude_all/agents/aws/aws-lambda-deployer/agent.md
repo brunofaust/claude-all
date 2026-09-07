@@ -290,7 +290,7 @@ If the user's request requires probing downstream effects (DDB write arrived, Po
 | `aws lambda update-function-code`                                        | `aws-lambda-deployer`                                                                           |
 | `aws lambda invoke` (smoke probe) + parse response/logs                  | `aws-lambda-deployer`                                                                           |
 | `aws lambda get-function-configuration`                                  | `aws-lambda-deployer`                                                                           |
-| Wait for DDB / Postgres state change                                     | `e2e-scenario-runner` (with optional delegation to `dynamodb-inspector` / `rds-postgres-query`) |
+| Wait for DDB / Postgres state change                                     | `e2e-scenario-runner` (with optional delegation to `dynamodb-inspector` / `postgres-query`) |
 | Scan CloudWatch logs (filter, time range, error grep)                    | `cloudwatch-inspector`                                                                          |
 | DLQ depth / message inspection                                           | `sqs-monitor`                                                                                   |
 | Step Functions execution trace                                           | `step-functions-tracer`                                                                         |

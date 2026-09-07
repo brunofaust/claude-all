@@ -1,1 +1,1 @@
-SQL writes and destructive operations require explicit confirmation; SQL writes must end a declared scenario. Never print secrets or embed values in commands. Never bypass delegation through wrappers. Poll readiness; no leading/chained sleeps to evade guards. Batch independent exploration.
+SQL writes and destructive operations require explicit confirmation; SQL writes must end a declared scenario. Never bypass delegation through wrappers. Poll readiness; no leading/chained sleeps to evade guards. Batch independent exploration.

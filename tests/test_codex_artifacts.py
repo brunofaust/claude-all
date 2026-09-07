@@ -48,7 +48,6 @@ PRE_COMPACTION_INSTRUCTION_IDENTITIES = {
     "agents/postgres-query",
     "agents/python-deps",
     "agents/python-module-migrator",
-    "agents/rds-postgres-query",
     "agents/repo-cleaner",
     "agents/s3-inspector",
     "agents/secrets-fetcher",
