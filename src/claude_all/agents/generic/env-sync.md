@@ -24,7 +24,7 @@ For production deploys, use the explicit specialized agents with per-step
 confirmation:
   - terraform-deployer  → Terraform changes
   - aws-lambda-deployer → Lambda code updates
-  - postgres-query / rds-postgres-query → migrations (read verify only)
+  - postgres-query → migrations (read verify only)
 
 Each step must be confirmed separately with "prod confirmed" language.
 ```

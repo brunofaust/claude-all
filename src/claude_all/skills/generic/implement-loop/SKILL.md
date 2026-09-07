@@ -4,8 +4,8 @@ description: >-
   Implement an approved backlog/PRD one story at a time — each story in a FRESH subagent context, in
   dependency order, committed with an acceptance-criteria trace, reviewed diff-only, with progress fed
   forward. The structured "story-by-story" form of the Ralph loop. Use when: building a multi-story
-  feature/refactor from a spec, "implement this backlog/PRD", "work through these stories one by one",
-  or autonomously delivering a planned change without context drift. Pairs with `requirements-ears`
+  feature/refactor from a spec, working through an approved backlog or PRD story by story, or
+  autonomously delivering a planned change without context drift. Pairs with `requirements-ears`
   (produces the stories + `[bN]` ids), `subagent-prompting` (fresh-context dispatch),
   `adversarial-verification` (per-story evidence), `code-review-discipline` (per-diff review), and
   `/ship-pr` (open the PR at the end). User-invoke only — it writes code and commits.

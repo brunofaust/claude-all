@@ -4,9 +4,9 @@ description: >-
   Convert a business idea, feature request, or change into precise, testable acceptance
   criteria using EARS notation (Easy Approach to Requirements Syntax). Use BEFORE
   implementing a feature or refactor when the requester wants to specify behavior at the
-  business level without writing code or tests. Triggers: "what should this do", "write
-  acceptance criteria", "spec this feature", "turn this into requirements", or handing a
-  brainstorm output into implementation. Complements a brainstorming/design phase (which
+  business level without writing code or tests. Covers any request to specify what a feature
+  should do, write acceptance criteria, or turn a brainstorm into requirements before
+  implementation. Complements a brainstorming/design phase (which
   decides WHAT to build) by pinning HOW each behavior must work. Output feeds directly into tests.
 user-invocable: true
 ---

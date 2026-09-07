@@ -4,8 +4,8 @@ description: >-
   Introduce a NEW lint/quality/correctness gate to an existing (brownfield) codebase WITHOUT a
   big-bang cleanup — the regression-only baseline harness + the three-step warn→error rollout. Use
   when: adding a custom checker/AST rule/pre-commit hook to a repo that already has violations,
-  "how do I roll out a gate without fixing everything first", "baseline the existing findings",
-  ratcheting tech debt down, "make this rule fail only on new code", wiring a gate into CI, or writing
+  rolling a gate out without fixing everything first, baselining existing findings, ratcheting tech
+  debt down, scoping a rule to fail only on new code, wiring a gate into CI, or writing
   a static checker (single migration head, banned env-var, junk-drawer module, module-level private
   names). Ships a runnable `baseline_gate.py` template + example checkers under `checkers/`. The
   governing principle: a rule in prose gets violated; a rule encoded as a checker holds — so every

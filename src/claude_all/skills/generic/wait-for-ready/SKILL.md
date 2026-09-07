@@ -5,9 +5,8 @@ description: >-
   instead of a fixed `sleep N`. Use whenever you just started something and need to wait before
   the next step: after `docker compose up` / `docker run`, after starting a dev server or API,
   before running smoke tests or `curl` against a just-started endpoint, before connecting to a
-  freshly-started Postgres/Redis. Triggers on "wait for the container", "wait until it's up",
-  "wait for the server to be ready", "sleep then curl", "poll until healthy", "is the service up
-  yet", "give it a few seconds then hit the endpoint". A fixed `sleep` is the wrong tool — too
+  freshly-started Postgres/Redis. Covers any request to wait, sleep, or pause before probing a
+  process that was just started. A fixed `sleep` is the wrong tool — too
   short and the probe fails, too long and you waste the wait; poll with a timeout + interval and
   fail fast instead.
 disable-model-invocation: false

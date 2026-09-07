@@ -46,7 +46,7 @@ async def get_entity_metadata(
 #### Docstring Rules
 
 - Opening sentence describes what the function does (imperative mood)
-- Second paragraph provides behavioral context when needed (if possible, explain the usage in the full project context)
+- Second paragraph provides behavioral context when needed: explain the usage in the full project context
 - `Args:` — every parameter documented, with its purpose
 - `Returns:` — describe what's returned and when different types are possible
 - `Raises:` — every exception the caller should be aware of
