@@ -19,7 +19,6 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
-
 from check_md_links import (
     CODE_SPAN,
     LINK,
@@ -265,7 +264,7 @@ class TestJsonOutput:
             pass
 
         monkeypatch.setattr(
-            "check_md_links.cli.discover",
+            "check_md_links.discover",
             lambda _: [],
         )
 
@@ -321,7 +320,7 @@ class TestJsonOutput:
 
         # Mock discover to return no resources
         monkeypatch.setattr(
-            "check_md_links.cli.discover",
+            "check_md_links.discover",
             lambda _: [],
         )
 
@@ -388,7 +387,7 @@ class TestJsonOutput:
         item = Item("skill", "test-skill", repo / "src" / "test-skill" / "SKILL.md")
         # We don't actually need to create the file, just the path
         monkeypatch.setattr(
-            "check_md_links.cli.discover",
+            "check_md_links.discover",
             lambda _: [item],
         )
 
@@ -447,7 +446,7 @@ class TestJsonOutput:
 
         item = Item("skill", "test-skill", repo / "src" / "test-skill" / "SKILL.md")
         monkeypatch.setattr(
-            "check_md_links.cli.discover",
+            "check_md_links.discover",
             lambda _: [item],
         )
 
