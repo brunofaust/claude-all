@@ -227,3 +227,109 @@ def test_claude_hook_examples_use_timeout_seconds() -> None:
                 findings.append(f"{path.relative_to(ROOT)}: timeout={value}")
 
     assert findings == []
+
+
+class TestJsonMode:
+    def test_json_clean_tree_outputs_pass(self, monkeypatch, tmp_path, capsys):
+        import sys
+        import types
+
+        import check_md_links
+
+        fake_cli = types.ModuleType("claude_all.cli")
+        fake_cli.discover = lambda _: []
+        monkeypatch.setitem(sys.modules, "claude_all.cli", fake_cli)
+
+        readme = tmp_path / "README.md"
+        readme.write_text("")
+        monkeypatch.setattr(check_md_links, "ROOT", tmp_path)
+        monkeypatch.setattr(check_md_links, "tracked_markdown", lambda: [])
+        monkeypatch.setattr(sys, "argv", ["check_md_links.py", "--json"])
+        (tmp_path / "vendored.json").write_text('{"vendored": []}')
+        exit_code = check_md_links.main()
+        out = json.loads(capsys.readouterr().out)
+        assert exit_code == 0
+        assert out["pass"] is True
+        assert out["counts"]["markdown_files_scanned"] == 0
+        assert out["counts"]["links_resolved"] == 0
+        assert out["counts"]["resources_checked"] == 0
+        assert out["counts"]["files_skipped_as_vendored"] == 0
+        assert out["broken_links"] == []
+        assert out["unlinked_resources"] == []
+
+    def test_json_broken_link_detected(self, monkeypatch, tmp_path, capsys):
+        import sys
+        import types
+
+        import check_md_links
+
+        fake_cli = types.ModuleType("claude_all.cli")
+        fake_cli.discover = lambda _: []
+        monkeypatch.setitem(sys.modules, "claude_all.cli", fake_cli)
+
+        readme = tmp_path / "README.md"
+        readme.write_text("")
+        (tmp_path / "vendored.json").write_text('{"vendored": []}')
+        md_file = tmp_path / "test.md"
+        md_file.write_text("[link](missing.md)")
+        monkeypatch.setattr(check_md_links, "ROOT", tmp_path)
+        monkeypatch.setattr(check_md_links, "tracked_markdown", lambda: [md_file])
+        monkeypatch.setattr(sys, "argv", ["check_md_links.py", "--json"])
+        exit_code = check_md_links.main()
+        out = json.loads(capsys.readouterr().out)
+        assert exit_code == 1
+        assert out["pass"] is False
+        assert out["counts"]["markdown_files_scanned"] == 1
+        assert out["counts"]["links_resolved"] == 1
+        assert len(out["broken_links"]) == 1
+        bl = out["broken_links"][0]
+        assert bl["file"] == "test.md"
+        assert bl["target"] == "missing.md"
+        assert "missing.md" in bl["resolved_path"]
+
+    def test_json_unlinked_resource_detected(self, monkeypatch, tmp_path, capsys):
+        import sys
+        import types
+
+        import check_md_links
+
+        class DummyItem:
+            def __init__(self, src):
+                self.src = src
+
+        fake_cli = types.ModuleType("claude_all.cli")
+        fake_cli.discover = lambda _: [DummyItem(tmp_path / "src" / "skill" / "SKILL.md")]
+        monkeypatch.setitem(sys.modules, "claude_all.cli", fake_cli)
+
+        readme = tmp_path / "README.md"
+        readme.write_text("no link here")
+        (tmp_path / "vendored.json").write_text('{"vendored": []}')
+        resource_path = tmp_path / "src" / "skill" / "SKILL.md"
+        resource_path.parent.mkdir(parents=True, exist_ok=True)
+        resource_path.write_text("")
+        monkeypatch.setattr(check_md_links, "ROOT", tmp_path)
+        monkeypatch.setattr(check_md_links, "tracked_markdown", lambda: [])
+        monkeypatch.setattr(sys, "argv", ["check_md_links.py", "--json"])
+        exit_code = check_md_links.main()
+        out = json.loads(capsys.readouterr().out)
+        assert exit_code == 1
+        assert out["pass"] is False
+        assert out["counts"]["resources_checked"] == 1
+        assert out["unlinked_resources"] == ["src/skill/SKILL.md"]
+
+    def test_default_output_unchanged(self, monkeypatch, capsys):
+        import sys
+
+        import check_md_links
+
+        monkeypatch.setattr(check_md_links, "tracked_markdown", lambda: [])
+        monkeypatch.setattr(check_md_links, "ROOT", Path(__file__).resolve().parent.parent)
+        monkeypatch.setattr(sys, "argv", ["check_md_links.py"])
+        monkeypatch.setattr(check_md_links, "check_links", lambda registry: ["finding1"])
+        monkeypatch.setattr(check_md_links, "check_readme_coverage", lambda: ["finding2"])
+        exit_code = check_md_links.main()
+        out, err = capsys.readouterr()
+        assert exit_code == 1
+        assert "finding1" in out
+        assert "finding2" in out
+        assert "2 finding(s)." in err
