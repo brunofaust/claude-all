@@ -227,3 +227,63 @@ def test_claude_hook_examples_use_timeout_seconds() -> None:
                 findings.append(f"{path.relative_to(ROOT)}: timeout={value}")
 
     assert findings == []
+
+
+class TestJsonMode:
+    def test_scan_links_empty(self, monkeypatch, tmp_path):
+        import check_md_links
+
+        monkeypatch.setattr(check_md_links, "ROOT", tmp_path)
+        monkeypatch.setattr(check_md_links, "tracked_markdown", lambda: [])
+        md_scanned, skipped, links, broken = check_md_links._scan_links([])
+        assert md_scanned == 0
+        assert skipped == 0
+        assert links == 0
+        assert broken == []
+
+    def test_scan_links_broken(self, monkeypatch, tmp_path):
+        import check_md_links
+
+        root = tmp_path / "repo"
+        root.mkdir()
+        md_file = root / "a.md"
+        md_file.write_text("see [link](missing.txt)")
+        monkeypatch.setattr(check_md_links, "ROOT", root)
+        monkeypatch.setattr(check_md_links, "tracked_markdown", lambda: [md_file])
+        monkeypatch.setattr(check_md_links, "is_vendored", lambda p, r: False)
+        md_scanned, _, links, broken = check_md_links._scan_links([])
+        assert md_scanned == 1
+        assert links == 1
+        assert len(broken) == 1
+        assert broken[0]["file"] == "a.md"
+        assert broken[0]["target"] == "missing.txt"
+
+    def test_readme_coverage_data(self, monkeypatch, tmp_path):
+        import check_md_links
+
+        root = tmp_path / "repo"
+        root.mkdir()
+        readme = root / "README.md"
+        readme.write_text("links ](src/fake/SKILL.md) here")
+        monkeypatch.setattr(check_md_links, "ROOT", root)
+
+        # Mock discover to return one item
+        class Item:
+            kind = "skills"
+            name = "fake"
+            src = root / "src" / "fake" / "SKILL.md"
+
+        monkeypatch.setattr("claude_all.cli.discover", lambda _: [Item()])
+        # Ensure src dir exists for relative path
+        (root / "src" / "fake").mkdir(parents=True)
+        (root / "src" / "fake" / "SKILL.md").write_text("x")
+        resources, unlinked = check_md_links._readme_coverage_data()
+        assert resources == 1
+        assert unlinked == []  # linked
+
+    def test_default_output_unchanged(self, monkeypatch):
+        # Ensure check_links still returns same shape as before
+        from check_md_links import check_links
+
+        monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [])
+        assert check_links([]) == []
