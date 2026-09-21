@@ -73,7 +73,16 @@ def find_violations(known: set[str]) -> list[str]:
 
 def main() -> int:
     """CLI entry point — print findings to stdout, exit 1 on any."""
-    findings = find_violations(load_resource_keys())
+    known = load_resource_keys()
+    discovery_count = len(known)
+    if discovery_count == 0:
+        print(
+            "0 resources matched the discovery pattern — a dependency manifest that "
+            "references no resources is unsafe.",
+            file=sys.stderr,
+        )
+        return 1
+    findings = find_violations(known)
     for finding in findings:
         print(finding)
     if findings:
@@ -83,6 +92,7 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
+    print(f"inspected {discovery_count} units")
     return 0
 
 
