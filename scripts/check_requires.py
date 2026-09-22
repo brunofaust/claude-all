@@ -37,19 +37,22 @@ def load_resource_keys() -> set[str]:
     return {state_key(it.kind, it.name) for it in discover([])}
 
 
-def find_violations(known: set[str]) -> list[str]:
+def find_violations(known: set[str], manifests: list[Path] | None = None) -> list[str]:
     """Return one finding per dangling/malformed ``requires`` entry.
 
     Args:
         known: Every resolvable resource key.
+        manifests: Optional list of manifest paths to inspect. If None, discover via glob.
 
     Returns:
         Stable ``path: message`` findings (empty when the graph is clean).
     """
+    if manifests is None:
+        manifests = sorted((SRC / "claude_all").rglob("claude-all.json")) + sorted(
+            (SRC / "claude_all").rglob("*.claude-all.json")
+        )
     findings: list[str] = []
-    for manifest in sorted((SRC / "claude_all").rglob("claude-all.json")) + sorted(
-        (SRC / "claude_all").rglob("*.claude-all.json")
-    ):
+    for manifest in manifests:
         rel = manifest.relative_to(REPO_ROOT)
         try:
             config = json.loads(manifest.read_text(encoding="utf-8"))
@@ -73,7 +76,17 @@ def find_violations(known: set[str]) -> list[str]:
 
 def main() -> int:
     """CLI entry point — print findings to stdout, exit 1 on any."""
-    findings = find_violations(load_resource_keys())
+    known = load_resource_keys()
+    manifests = sorted((SRC / "claude_all").rglob("claude-all.json")) + sorted(
+        (SRC / "claude_all").rglob("*.claude-all.json")
+    )
+    if not manifests:
+        print(
+            "Zero manifests matched 'claude-all.json' or '*.claude-all.json' — no discovery.",
+            file=sys.stderr,
+        )
+        return 1
+    findings = find_violations(known, manifests)
     for finding in findings:
         print(finding)
     if findings:
@@ -83,6 +96,7 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
+    print(f"inspected {len(manifests)} manifests")
     return 0
 
 
