@@ -73,9 +73,29 @@ def find_violations(known: set[str]) -> list[str]:
 
 def main() -> int:
     """CLI entry point — print findings to stdout, exit 1 on any."""
-    findings = find_violations(load_resource_keys())
+    known = load_resource_keys()
+    discovery_count = len(known)
+    findings = find_violations(known)
+
+    # Handle zero-discovery case: if nothing was discovered and no violations,
+    # this indicates the checker examined nothing (failing open)
+    if discovery_count == 0 and not findings:
+        print(
+            "0 resources matched the discovery pattern — a dependency manifest "
+            "that references no resources is unsafe.",
+            file=sys.stderr,
+        )
+        return 1
+
+    # Print any violation findings
     for finding in findings:
         print(finding)
+
+    # On success (no violations), report how many units were inspected
+    if not findings:
+        print(f"inspected {discovery_count} units")
+
+    # Handle violation cases (existing behavior preserved)
     if findings:
         print(
             f"\n{len(findings)} dangling/invalid requires entry(ies) — a dependency "
