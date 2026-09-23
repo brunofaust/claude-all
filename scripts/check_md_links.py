@@ -14,8 +14,37 @@ Two failures this repo has actually shipped, now mechanical:
 Vendored files are exempt from check 1: they are kept byte-identical to upstream,
 so their upstream-relative links legitimately do not resolve in this tree. Files
 listed under a vendored entry's `local_only` are OURS and stay checked.
+
+JSON output (--json flag):
+The script can emit machine-readable output via `python3 scripts/check_md_links.py --json`.
+When --json is used, stdout is a single JSON object with the shape::
+
+{
+  "pass": true,
+  "counts": {
+    "markdown_files_scanned": <int>,
+    "links_resolved": <int>,
+    "resources_checked": <int>,
+    "files_skipped_as_vendored": <int>
+  },
+  "broken_links": [
+    {
+      "file": "<relative path to markdown file>",
+      "target": "<raw link target as written>",
+      "resolved_path": "<absolute path that was checked and did not exist>"
+    }
+  ],
+  "unlinked_resources": [
+<relative path to resource source>
+    "<relative path to resource source>"
+  ]
+}
+
+Human output is unchanged when --json is not supplied. Exit codes are identical in
+both modes.
 """
 
+import argparse
 import json
 import re
 import subprocess
@@ -118,8 +147,94 @@ def check_readme_coverage() -> list[str]:
     ]
 
 
+def _collect_link_data(registry: list[dict]) -> dict:
+    """Collect structured link-check data for JSON output."""
+    markdown_files_scanned = 0
+    files_skipped_as_vendored = 0
+    links_resolved = 0
+    broken_links = []
+
+    for md in tracked_markdown():
+        if is_vendored(md, registry):
+            files_skipped_as_vendored += 1
+            continue
+        if not md.exists():
+            continue
+        markdown_files_scanned += 1
+        try:
+            text = md.read_text()
+        except OSError:
+            continue
+        for _line_no, line in strip_code_blocks(text):
+            # Extract link targets, ignoring code spans
+            for target in LINK.findall(CODE_SPAN.sub("", line)):
+                if target.startswith(SKIP_PREFIX):
+                    continue
+                bare = target.split("#", 1)[0]
+                if not bare:
+                    continue
+                links_resolved += 1
+                resolved = (md.parent / bare).resolve()
+                if not resolved.exists():
+                    rel = md.relative_to(ROOT).as_posix()
+                    broken_links.append(
+                        {
+                            "file": rel,
+                            "target": target,
+                            "resolved_path": str(resolved),
+                        }
+                    )
+    return {
+        "markdown_files_scanned": markdown_files_scanned,
+        "files_skipped_as_vendored": files_skipped_as_vendored,
+        "links_resolved": links_resolved,
+        "broken_links": broken_links,
+    }
+
+
+def _collect_readme_data() -> tuple[int, list[str]]:
+    """Collect structured README coverage data for JSON output."""
+    sys.path.insert(0, str(ROOT / "src"))
+    from claude_all.cli import discover
+
+    readme = (ROOT / "README.md").read_text()
+    items = list(discover([]))
+    resources_checked = len(items)
+    unlinked = []
+    for item in items:
+        rel = item.src.relative_to(ROOT).as_posix()
+        if f"]({rel})" not in readme:
+            unlinked.append(rel)
+    return resources_checked, unlinked
+
+
 def main() -> int:
+    parser = argparse.ArgumentParser(description="Check markdown links and README coverage")
+    parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON output")
+    args = parser.parse_args()
+
     registry = json.loads((ROOT / "vendored.json").read_text()).get("vendored", [])
+
+    if args.json:
+        link_data = _collect_link_data(registry)
+        resources_checked, unlinked = _collect_readme_data()
+        broken_links = link_data["broken_links"]
+        counts = {
+            "markdown_files_scanned": link_data["markdown_files_scanned"],
+            "links_resolved": link_data["links_resolved"],
+            "resources_checked": resources_checked,
+            "files_skipped_as_vendored": link_data["files_skipped_as_vendored"],
+        }
+        passed = len(broken_links) == 0 and len(unlinked) == 0
+        output = {
+            "pass": passed,
+            "counts": counts,
+            "broken_links": broken_links,
+            "unlinked_resources": unlinked,
+        }
+        print(json.dumps(output))
+        return 0 if passed else 1
+
     findings = check_links(registry) + check_readme_coverage()
     for finding in findings:
         print(finding)
