@@ -24,8 +24,8 @@ Production-grade async Python. Async-first, strict types, immutable parameter ty
 ## Wiring the gates — shipped ≠ enforced (check this ON EVERY INVOCATION)
 
 Installing this skill copies the checkers under `checkers/` (`pydantic_contract.py`,
-`model_contract.py`, `lambda_event_validation.py`, `flat_test_mirror.py`,
-`all_contract.py`) and `regression-gates/baseline_gate.py` into place **as files**.
+`model_contract.py`, `lambda_event_validation.py`,
+`flat_test_mirror.py`, `all_contract.py`) and `regression-gates/baseline_gate.py` into place **as files**.
 It does **NOT** wire them into any project's `prek.toml` / `.pre-commit-config.yaml`
 — gate wiring is *per-project* (each repo has its own hook config, paths, allowlists,
 and `language_version`). A shipped-but-unwired checker enforces **nothing**: it is the
@@ -72,6 +72,7 @@ Read the matching file BEFORE deep work in that area. Each is a focused referenc
 | Architectural decisions — KISS, SRP, Separation of Concerns, Composition>Inheritance, Rule of Three, function size, DI, anti-patterns                                                          | [`references/architecture.md`](references/architecture.md)                                              |
 | **NOT over-engineering — YAGNI, minimalism, target shapes, banned-by-default abstractions, the deletion pass, when a boundary is earned vs speculative**                                        | [`references/yagni.md`](references/yagni.md)                                                            |
 | Writing/optimizing async code — TaskGroup, ExceptionGroup, `run_in_thread`, semaphores, rollback, FIFO, pagination                                                                             | [`references/async-patterns.md`](references/async-patterns.md)                                          |
+| Writing free-threaded code — when to use Python 3.14 free-threading, pros/cons, implementation, dependency checks | [`references/free-thread-python-3.14.md`](references/free-thread-python-3.14.md) |
 | Writing AWS Lambda handlers — async entry point with `uvloop.run()`, `main()` pattern                                                                                                          | See `## Lambda handlers` section below + [`references/async-patterns.md`](references/async-patterns.md) |
 | Configuration management — Pydantic Settings, env var coercion, nested configs, secrets from files                                                                                             | [`references/config.md`](references/config.md)                                                          |
 | Writing tests — pytest, fixtures, parametrize, mocks, LocalStack, time freezing, snapshot, **factory pattern (polyfactory/factory_boy), DI over module-global mocks, mirrored src/ structure** | [`references/testing.md`](references/testing.md)                                                        |
@@ -131,7 +132,7 @@ Full TYPE_CHECKING semantics + Protocol typing + generics → `references/type-h
 
 ```python
 # Dict merging
-enriched = item | {"source_info": info}
+enriched = item | {"source_info": item}
 
 # Set ops on dict keys
 all_keys = entity["keys"].keys() | entity.get("alt_keys", {}).keys()
@@ -243,9 +244,9 @@ Section headers for long files:
 - ❌ `asyncio.run()` → `uvloop.run()`.
 - ❌ Business logic inside `lambda_handler` — sync handler is one line: `return uvloop.run(main(event))`, all logic in `async def main()`.
 - ❌ Wildcard imports.
-- ❌ Global mutable state → pass context objects.
-- ❌ **Using `from __future__ import annotations`** — PEP 649 makes annotations lazy by default on the 3.14+ baseline; the import is redundant dead weight.
-- ❌ Committing secrets / API keys.
+- ❠ Global mutable state → pass context objects.
+- ❠ **Using `from __future__ import annotations`** — PEP 649 makes annotations lazy by default on the 3.14+ baseline; the import is redundant dead weight.
+- ❠ Committing secrets / API keys.
 
 ### Architecture
 
@@ -256,26 +257,26 @@ Section headers for long files:
 - ❌ **A second copy of the same control-flow skeleton** (cache-check→run→finish, fetch→build-result, guard→delete) — extract the skeleton as a higher-order helper at copy two; these families drift silently on one field. → `references/architecture.md`
 - ❌ **A duplication-gate allowlist kept as a graveyard** — every entry is classified (`MERGE`/`EXTRACT-CORE`/`JUSTIFIED:<reason>`), entries naming deleted code are swept, and the list length only shrinks. → `references/enforcement.md`
 - ❌ **Hardcoded config at module or class level** — any value that could differ between environments or change over time must live in `Settings`, env var, or be passed as a parameter. Covers: LLM model names, Jira/workflow statuses, S3/SQS/SNS resource names, API endpoints, timeouts, batch sizes, feature flags. Function/method *parameter defaults* are the one allowed exception. → `references/config.md`
-- ❌ `os.getenv()` scattered across modules — all env var access must go through the `Settings` singleton.
-- ❌ Internal types in public APIs — use Pydantic models / frozen-dataclass DTOs.
-- ❌ **`TypedDict` — banned outright.** Static-only; it validates nothing at runtime. Test fixtures are where it lies most (a fixture that matches neither the DB nor the annotation keeps mypy green). Use a Pydantic `BaseModel`. → `references/data-modeling.md`
-- ❌ **`typing.cast` — banned.** It asserts a type instead of proving one; `cast(row_dtype, dict(row))` is a no-op that only pretends to type. Use `Model.model_validate(...)`.
-- ❌ **`extra="ignore"` / `extra="allow"` — always `extra="forbid"`.** A schema change must be followed by a code change. The consumer-before-producer deployment order this forces is a deploy-process problem, not a reason to weaken the contract.
-- ❌ **A default on a field that is required** — that is the masking-default bug class (`.get(k, default)` is only its symptom). Model the payload; the required-vs-optional decision is then forced.
-- ❌ **`Any` / bare `dict` / bare `Mapping` / `dict[str, Any]` as a model field** — the opaque VALUE is banned, never the container (`Mapping[str, str]` stays legal, and CORE PRINCIPLE #3 still stands). Genuinely polymorphic fields get documented, not a fabricated schema.
-- ❌ **`f(**model.model_dump())` / `Model(**mapping)`** — name the fields. Logging (`log.bind(**ctx)`) is the ONLY exemption; SDK request-building is NOT.
-- ❌ **`SELECT *`** — name the columns so the row's shape is one the code built end-to-end.
-- ❌ **Credential / PII model fields without `Field(repr=False)`** — a model repr in a log line is a token leak. Verify empirically.
-- ❌ **Using a Lambda `event` dict or ECS env block raw** — parse it into a Pydantic model at the boundary first. → `references/data-modeling.md`
-- ❌ **Hard-coded test ids / shared test data / cross-tenant FK in seeds** — dynamic ids, per-test ownership, FKs stay within one tenant. → `references/testing.md`
-- ❌ **A global (all-tenant) job that can't run for a single customer** — add an optional scope param; make DDB idempotency scope-aware so a global run supersedes a customer run. → `references/scoped-processes.md`
-- ❌ Mixed I/O + business logic in one function.
-- ❌ `except Exception: pass` — catch specific, log context, re-raise as needed.
-- ❌ **`contextlib.suppress(Exception)` — strictly prohibited.** Silences all exceptions including bugs, OOM, and `KeyboardInterrupt`. `suppress(SpecificError)` is allowed only with an inline comment explaining why swallowing that specific error is intentional and safe.
-- ❌ Ignoring partial failures in batch ops — return successes + failures.
-- ❌ Skipping input validation at API/function boundaries.
-- ❌ Blocking calls in async — use `run_in_thread()` (see `references/async-patterns.md`).
-- ❌ Untyped collections (`list`, `dict` no params).
+- ❠ `os.getenv()` scattered across modules — all env var access must go through the `Settings` singleton.
+- ❠ Internal types in public APIs — use Pydantic models / frozen-dataclass DTOs.
+- ❠ **`TypedDict` — banned outright.** Static-only; it validates nothing at runtime. Test fixtures are where it lies most (a fixture that matches neither the DB nor the annotation keeps mypy green). Use a Pydantic `BaseModel`. → `references/data-modeling.md`
+- ❠ **`typing.cast` — banned.** It asserts a type instead of proving one; `cast(row_dtype, dict(row))` is a no-op that only pretends to type. Use `Model.model_validate(...)`.
+- ❠ **`extra="ignore"` / `extra="allow"` — always `extra="forbid"`.** A schema change must be followed by a code change. The consumer-before-producer deployment order this forces is a deploy-process problem, not a reason to weaken the contract.
+- ❠ **A default on a field that is required** — that is the masking-default bug class (`.get(k, default)` is only its symptom). Model the payload; the required-vs-optional decision is then forced.
+- ❠ **`Any` / bare `dict` / bare `Mapping` / `dict[str, Any]` as a model field** — the opaque VALUE is banned, never the container (`Mapping[str, str]` stays legal, and CORE PRINCIPLE #3 still stands). Genuinely polymorphic fields get documented, not a fabricated schema.
+- ❠ **`f(**model.model_dump())` / `Model(**mapping)`** — name the fields. Logging (`log.bind(**ctx)`) is the ONLY exemption; SDK request-building is NOT.
+- ❠ **`SELECT *`** — name the columns so the row's shape is one the code built end-to-end.
+- ❠ **Credential / PII model fields without `Field(repr=False)`** — a model repr in a log line is a token leak. Verify empirically.
+- ❠ **Using a Lambda `event` dict or ECS env block raw** — parse it into a Pydantic model at the boundary first. → `references/data-modeling.md`
+- ❠ **Hard-coded test ids / shared test data / cross-tenant FK in seeds** — dynamic ids, per-test ownership, FKs stay within one tenant. → `references/testing.md`
+- ❠ **A global (all-tenant) job that can't run for a single customer** — add an optional scope param; make DDB idempotency scope-aware so a global run supersedes a customer run. → `references/scoped-processes.md`
+- ❠ Mixed I/O + business logic in one function.
+- ❠ `except Exception: pass` — catch specific, log context, re-raise as needed.
+- ❠ **`contextlib.suppress(Exception)` — strictly prohibited.** Silences all exceptions including bugs, OOM, and `KeyboardInterrupt`. `suppress(SpecificError)` is allowed only with an inline comment explaining why swallowing that specific error is intentional and safe.
+- ❠ Ignoring partial failures in batch ops — return successes + failures.
+- ❠ Skipping input validation at API/function boundaries.
+- ❠ Blocking calls in async — use `run_in_thread()` (see `references/async-patterns.md`).
+- ❠ Untyped collections (`list`, `dict` no params).
 
 ## Quick review checklist
 
