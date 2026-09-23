@@ -227,3 +227,114 @@ def test_claude_hook_examples_use_timeout_seconds() -> None:
                 findings.append(f"{path.relative_to(ROOT)}: timeout={value}")
 
     assert findings == []
+
+
+def test_json_output_clean_no_findings(monkeypatch, capsys):
+    """JSON mode should emit valid JSON with passed True when nothing is found."""
+    import json
+    import sys
+
+    # Mock tracked markdown to empty
+    monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [])
+    # Mock discover to return empty list
+    import types
+
+    mock_cli = types.ModuleType("claude_all.cli")
+    mock_cli.discover = lambda _: []
+    monkeypatch.setitem(sys.modules, "claude_all.cli", mock_cli)
+    # Set argv
+    monkeypatch.setattr(sys, "argv", ["check_md_links.py", "--json"])
+    from check_md_links import main
+
+    ret = main()
+    out = capsys.readouterr().out
+    data = json.loads(out)
+    assert data["passed"] is True
+    assert data["counts"]["markdown_files_scanned"] == 0
+    assert data["counts"]["links_resolved"] == 0
+    assert data["counts"]["resources_checked"] == 0
+    assert data["counts"]["files_skipped_as_vendored"] == 0
+    assert data["broken_links"] == []
+    assert data["unlinked_resources"] == []
+    assert ret == 0
+
+
+def test_json_output_broken_link(monkeypatch, capsys, tmp_path):
+    """JSON mode should report a broken link with correct fields."""
+    import json
+    import sys
+    from pathlib import Path
+
+    # Create a temp markdown file with a broken link
+    md = Path(ROOT) / "tmp_test_json_md_links.md"
+    md.write_text("[link](nonexistent_target.md)", encoding="utf-8")
+    try:
+        monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [md])
+        monkeypatch.setattr("check_md_links.is_vendored", lambda p, r: False)
+        import types
+
+        mock_cli = types.ModuleType("claude_all.cli")
+        mock_cli.discover = lambda _: []
+        monkeypatch.setitem(sys.modules, "claude_all.cli", mock_cli)
+        monkeypatch.setattr(sys, "argv", ["check_md_links.py", "--json"])
+        from check_md_links import main
+
+        ret = main()
+        out = capsys.readouterr().out
+        data = json.loads(out)
+        assert data["passed"] is False
+        assert data["counts"]["markdown_files_scanned"] == 1
+        assert data["counts"]["links_resolved"] == 1
+        assert len(data["broken_links"]) == 1
+        bl = data["broken_links"][0]
+        assert bl["file"] == "tmp_test_json_md_links.md"
+        assert bl["target"] == "nonexistent_target.md"
+        assert "nonexistent_target.md" in bl["resolved_path"]
+        assert ret == 1
+    finally:
+        if md.exists():
+            md.unlink()
+
+
+def test_json_output_unlinked_resource(monkeypatch, capsys):
+    """JSON mode should report unlinked resources."""
+    import json
+    import sys
+
+    monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [])
+
+    # Mock discover to return a fake resource
+    class DummyItem:
+        src = ROOT / "src" / "claude_all" / "cli.py"
+
+    import types
+
+    mock_cli = types.ModuleType("claude_all.cli")
+    mock_cli.discover = lambda _: [DummyItem()]
+    monkeypatch.setitem(sys.modules, "claude_all.cli", mock_cli)
+    monkeypatch.setattr(sys, "argv", ["check_md_links.py", "--json"])
+    from check_md_links import main
+
+    ret = main()
+    out = capsys.readouterr().out
+    data = json.loads(out)
+    assert data["passed"] is False
+    assert data["counts"]["resources_checked"] == 1
+    assert len(data["unlinked_resources"]) == 1
+    assert data["unlinked_resources"][0].endswith("cli.py")
+    assert ret == 1
+
+
+def test_default_output_unchanged(monkeypatch, capsys):
+    """Without --json, output format stays human-readable."""
+    monkeypatch.setattr("check_md_links.check_links", lambda r: ["a.md:1: broken-link -> x"])
+    monkeypatch.setattr("check_md_links.check_readme_coverage", lambda: [])
+    monkeypatch.setattr(sys, "argv", ["check_md_links.py"])
+    from check_md_links import main
+
+    ret = main()
+    out = capsys.readouterr()
+    # stdout should contain finding, stderr should contain count
+    assert "a.md:1: broken-link -> x" in out.out
+    assert "1 finding(s)." in out.err
+    assert ret == 1
