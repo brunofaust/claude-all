@@ -11,7 +11,7 @@ Free-threading does **not** make unsafe code safe. It removes the global interpr
 Use the free-threaded build when:
 
 - **CPU-bound pure Python**: compute-heavy workloads that are not released by C extensions and need real parallelism
-- **CPU-bound workload + data-parallel**: embarassingly parallel map/reduce style work with picklable arguments/results
+- **CPU-bound workload + data-parallel**: embarrassingly parallel map/reduce style work with picklable arguments/results
 - **Existing thread-based code** needs more parallelism than GIL allows without rewriting with multiprocessing
 
 ### Do **NOT** use free-threading when:
