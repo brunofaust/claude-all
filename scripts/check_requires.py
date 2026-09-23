@@ -11,7 +11,7 @@ It resolves targets by importing the installer's own `discover()` /`state_key`,
 so "what counts as a resource" is defined in exactly one place (the installer),
 never re-derived here.
 
-Exit codes: 0 = every entry resolves · 1 = a dangling/malformed entry.
+Exit codes: 0 = every entry resolves · 1 = a dangling/malformed entry or zero discovery.
 """
 
 from __future__ import annotations
@@ -37,19 +37,20 @@ def load_resource_keys() -> set[str]:
     return {state_key(it.kind, it.name) for it in discover([])}
 
 
-def find_violations(known: set[str]) -> list[str]:
+def find_violations(known: set[str]) -> tuple[list[str], int]:
     """Return one finding per dangling/malformed ``requires`` entry.
 
     Args:
         known: Every resolvable resource key.
 
     Returns:
-        Stable ``path: message`` findings (empty when the graph is clean).
+        Tuple of (findings list, manifest count examined).
     """
     findings: list[str] = []
-    for manifest in sorted((SRC / "claude_all").rglob("claude-all.json")) + sorted(
+    manifests = sorted((SRC / "claude_all").rglob("claude-all.json")) + sorted(
         (SRC / "claude_all").rglob("*.claude-all.json")
-    ):
+    )
+    for manifest in manifests:
         rel = manifest.relative_to(REPO_ROOT)
         try:
             config = json.loads(manifest.read_text(encoding="utf-8"))
@@ -68,12 +69,24 @@ def find_violations(known: set[str]) -> list[str]:
                     f"{rel}: requires '{dep}' — no such resource (renamed/deleted? "
                     "a built-in like /code-review does not belong in requires)"
                 )
-    return findings
+    return findings, len(manifests)
 
 
 def main() -> int:
     """CLI entry point — print findings to stdout, exit 1 on any."""
-    findings = find_violations(load_resource_keys())
+    known = load_resource_keys()
+
+    findings, manifest_count = find_violations(known)
+
+    # Zero-discovery check: fail loudly if we found no manifests to validate
+    if manifest_count == 0:
+        print(
+            "0 manifests matched the discovery pattern "
+            "src/claude_all/**/*.claude-all.json — dependency check would validate nothing",
+            file=sys.stderr,
+        )
+        return 1
+
     for finding in findings:
         print(finding)
     if findings:
@@ -83,6 +96,9 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
+
+    # Success: report how many units we actually inspected
+    print(f"inspected {manifest_count} manifests")
     return 0
 
 
