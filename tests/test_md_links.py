@@ -227,3 +227,54 @@ def test_claude_hook_examples_use_timeout_seconds() -> None:
                 findings.append(f"{path.relative_to(ROOT)}: timeout={value}")
 
     assert findings == []
+
+
+def test_json_mode_outputs_valid_json_and_expected_keys() -> None:
+    """--json emits valid JSON with the expected top-level keys and counts."""
+    import subprocess
+
+    result = subprocess.run(
+        [sys.executable, str(ROOT / "scripts" / "check_md_links.py"), "--json"],
+        capture_output=True,
+        text=True,
+        cwd=str(ROOT),
+    )
+    # Exit code should be 0 or 1, not an error
+    assert result.returncode in (0, 1)
+    # Stdout must be parseable JSON and nothing else
+    data = json.loads(result.stdout)
+    assert isinstance(data, dict)
+    assert "passed" in data
+    assert "counts" in data
+    assert "broken_links" in data
+    assert "unlinked_resources" in data
+    counts = data["counts"]
+    for key in (
+        "markdown_files_scanned",
+        "links_resolved",
+        "resources_checked",
+        "files_skipped_as_vendored",
+    ):
+        assert key in counts
+        assert isinstance(counts[key], int)
+    assert isinstance(data["broken_links"], list)
+    assert isinstance(data["unlinked_resources"], list)
+
+
+def test_json_mode_exit_code_matches_default_mode() -> None:
+    """Exit code is identical in JSON and default modes for the same input."""
+    import subprocess
+
+    json_res = subprocess.run(
+        [sys.executable, str(ROOT / "scripts" / "check_md_links.py"), "--json"],
+        capture_output=True,
+        text=True,
+        cwd=str(ROOT),
+    )
+    default_res = subprocess.run(
+        [sys.executable, str(ROOT / "scripts" / "check_md_links.py")],
+        capture_output=True,
+        text=True,
+        cwd=str(ROOT),
+    )
+    assert json_res.returncode == default_res.returncode
