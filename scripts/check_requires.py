@@ -76,6 +76,14 @@ def main() -> int:
     known = load_resource_keys()
     discovery_count = len(known)
 
+    if discovery_count == 0:
+        print(
+            "Error: 0 resources matched the discovery pattern — a dependency "
+            "manifest that references no resources is unsafe.",
+            file=sys.stderr,
+        )
+        return 1
+
     findings = find_violations(known)
     for finding in findings:
         print(finding)
@@ -88,16 +96,8 @@ def main() -> int:
         )
         return 1
     else:
-        if discovery_count == 0:
-            print(
-                "Error: 0 resources matched the discovery pattern — a dependency "
-                "manifest that references no resources is unsafe.",
-                file=sys.stderr,
-            )
-            return 1
-        else:
-            print(f"Inspected {discovery_count} resource(s).")
-            return 0
+        print(f"Inspected {discovery_count} resource(s).")
+        return 0
 
 
 if __name__ == "__main__":

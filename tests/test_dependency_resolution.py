@@ -257,10 +257,10 @@ class TestCheckRequires:
 
                 with patch.object(Path, "read_text", side_effect=mock_read_text):
                     # Also need to mock relative_to
-                    def mock_relative_to(self, other):
-                        if str(self) == "test/claude-all.json":
+                    def mock_relative_to(self, *args, **kwargs):
+                        if str(args[0]) == "test/claude-all.json":
                             return Path("test/claude-all.json")
-                        return Path.__dict__["relative_to"](self, other)
+                        return Path.__dict__["relative_to"](*args, **kwargs)
 
                     with patch.object(Path, "relative_to", side_effect=mock_relative_to):
                         result = check_requires.main()
@@ -302,10 +302,10 @@ class TestCheckRequires:
 
                 with patch.object(Path, "read_text", side_effect=mock_read_text):
                     # Also need to mock relative_to
-                    def mock_relative_to(self, other):
-                        if str(self) == "test/claude-all.json":
+                    def mock_relative_to(self, *args, **kwargs):
+                        if str(args[0]) == "test/claude-all.json":
                             return Path("test/claude-all.json")
-                        return Path.__dict__["relative_to"](self, other)
+                        return Path.__dict__["relative_to"](*args, **kwargs)
 
                     with patch.object(Path, "relative_to", side_effect=mock_relative_to):
                         result = check_requires.main()
