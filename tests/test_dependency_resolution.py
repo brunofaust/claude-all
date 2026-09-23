@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -28,6 +29,10 @@ from claude_all.cli import (
     state_key,
     undo_artifact,
 )
+
+# Import the check_requires module functions
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+import check_requires
 
 
 def make_item(kind: str, name: str, src: Path) -> Item:
@@ -64,16 +69,6 @@ def build_universe(root: Path, graph: dict[str, list[str]]) -> list[Item]:
             (d / "claude-all.json").write_text(json.dumps({"requires": requires}))
         items.append(make_item("skills", name, d / "SKILL.md"))
     return items
-
-
-@pytest.fixture
-def universe(tmp_path: Path) -> list[Item]:
-    """A synthetic 4-resource universe: a -> b -> c, plus an unrelated d.
-
-    Args:
-        tmp_path: pytest's per-test temporary directory.
-    """
-    return build_universe(tmp_path, {"a": ["skills/b"], "b": ["skills/c"], "c": [], "d": []})
 
 
 def keys(items: list[Item]) -> set[str]:
@@ -238,8 +233,89 @@ class TestPruneScopeGuard:
         assert not in_install_scope(Path("/tmp/elsewhere/x"))
 
 
-class TestShippedManifests:
-    """The real graph in this repo — guards against a rename breaking it."""
+class TestCheckRequires:
+    """Tests for the check_requires script."""
+
+    def test_success_with_resources_found(self, capsys) -> None:
+        """Test successful run when resources are found and no violations exist."""
+        with patch("check_requires.load_resource_keys") as mock_load:
+            mock_load.return_value = {"skills/test"}
+
+            # Create a temporary claude-all.json with valid requires
+            with patch("check_requires.SRC") as mock_src:
+                mock_src.__truediv__.return_value.rglob.side_effect = lambda pattern: (
+                    [Path("test/claude-all.json")] if pattern == "claude-all.json" else []
+                )
+
+                # Mock the file reading
+                original_read_text = Path.read_text
+
+                def mock_read_text(self, encoding="utf-8"):
+                    if str(self).ends_with("claude-all.json"):
+                        return json.dumps({"requires": ["skills/test"]})
+                    return original_read_text(self, encoding)
+
+                with patch.object(Path, "read_text", side_effect=mock_read_text):
+                    # Also need to mock relative_to
+                    def mock_relative_to(self, other):
+                        if str(self) == "test/claude-all.json":
+                            return Path("test/claude-all.json")
+                        return Path.__dict__["relative_to"](self, other)
+
+                    with patch.object(Path, "relative_to", side_effect=mock_relative_to):
+                        result = check_requires.main()
+
+        assert result == 0
+        captured = capsys.readouterr()
+        assert "Inspected 1 resource(s)." in captured.out
+
+    def test_zero_discovery_failure(self, capsys) -> None:
+        """Test failure when zero resources are discovered."""
+        with patch("check_requires.load_resource_keys") as mock_load:
+            mock_load.return_value = set()  # Empty set - zero discovery
+
+            result = check_requires.main()
+
+        assert result == 1
+        captured = capsys.readouterr()
+        assert "0 resources matched the discovery pattern" in captured.err
+        assert "manifest that references no resources is unsafe" in captured.err
+
+    def test_existing_failure_still_works(self, capsys) -> None:
+        """Test that genuine validation failures still work as before."""
+        with patch("check_requires.load_resource_keys") as mock_load:
+            mock_load.return_value = {"skills/existing"}
+
+            # Create a temporary claude-all.json with invalid requires
+            with patch("check_requires.SRC") as mock_src:
+                mock_src.__truediv__.return_value.rglob.side_effect = lambda pattern: (
+                    [Path("test/claude-all.json")] if pattern == "claude-all.json" else []
+                )
+
+                # Mock the file reading
+                original_read_text = Path.read_text
+
+                def mock_read_text(self, encoding="utf-8"):
+                    if str(self).ends_with("claude-all.json"):
+                        return json.dumps({"requires": ["skills/nonexistent"]})
+                    return original_read_text(self, encoding)
+
+                with patch.object(Path, "read_text", side_effect=mock_read_text):
+                    # Also need to mock relative_to
+                    def mock_relative_to(self, other):
+                        if str(self) == "test/claude-all.json":
+                            return Path("test/claude-all.json")
+                        return Path.__dict__["relative_to"](self, other)
+
+                    with patch.object(Path, "relative_to", side_effect=mock_relative_to):
+                        result = check_requires.main()
+
+        assert result == 1
+        captured = capsys.readouterr()
+        # Should show the violation
+        assert "requires 'skills/nonexistent' — no such resource" in captured.out
+        # Should show the summary
+        assert "1 dangling/invalid requires entry" in captured.err
 
     def test_every_requires_target_exists(self) -> None:
         """Every `requires` entry in the repo resolves to a discoverable resource."""

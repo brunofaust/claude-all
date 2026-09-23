@@ -73,9 +73,13 @@ def find_violations(known: set[str]) -> list[str]:
 
 def main() -> int:
     """CLI entry point — print findings to stdout, exit 1 on any."""
-    findings = find_violations(load_resource_keys())
+    known = load_resource_keys()
+    discovery_count = len(known)
+
+    findings = find_violations(known)
     for finding in findings:
         print(finding)
+
     if findings:
         print(
             f"\n{len(findings)} dangling/invalid requires entry(ies) — a dependency "
@@ -83,7 +87,17 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
-    return 0
+    else:
+        if discovery_count == 0:
+            print(
+                "Error: 0 resources matched the discovery pattern — a dependency "
+                "manifest that references no resources is unsafe.",
+                file=sys.stderr,
+            )
+            return 1
+        else:
+            print(f"Inspected {discovery_count} resource(s).")
+            return 0
 
 
 if __name__ == "__main__":
