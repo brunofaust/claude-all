@@ -73,7 +73,14 @@ def find_violations(known: set[str]) -> list[str]:
 
 def main() -> int:
     """CLI entry point — print findings to stdout, exit 1 on any."""
-    findings = find_violations(load_resource_keys())
+    known = load_resource_keys()
+    # Discover manifest files to inspect (replicating the glob pattern from find_violations)
+    manifest_files = list(
+        sorted((SRC / "claude_all").rglob("claude-all.json"))
+        + sorted((SRC / "claude_all").rglob("*.claude-all.json"))
+    )
+    manifest_count = len(manifest_files)
+    findings = find_violations(known)
     for finding in findings:
         print(finding)
     if findings:
@@ -83,6 +90,14 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
+    if manifest_count == 0:
+        print(
+            "\n0 resources matched the discovery pattern — a dependency manifest "
+            "that references no resources is unsafe.",
+            file=sys.stderr,
+        )
+        return 1
+    print(f"\n inspected {manifest_count} units")
     return 0
 
 
