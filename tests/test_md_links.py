@@ -17,7 +17,7 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
-
+import check_md_links
 from check_md_links import (
     CODE_SPAN,
     LINK,
@@ -227,3 +227,112 @@ def test_claude_hook_examples_use_timeout_seconds() -> None:
                 findings.append(f"{path.relative_to(ROOT)}: timeout={value}")
 
     assert findings == []
+
+
+def test_json_output_clean_tree(monkeypatch, tmp_path, capsys):
+    import json
+    import sys
+
+    # Minimal repo layout
+    (tmp_path / "vendored.json").write_text('{"vendored": []}')
+    (tmp_path / "README.md").write_text("")
+    monkeypatch.setattr(check_md_links, "ROOT", tmp_path)
+    monkeypatch.setattr(check_md_links, "tracked_markdown", lambda: [])
+    import claude_all.cli
+
+    monkeypatch.setattr(claude_all.cli, "discover", lambda _: [])
+    monkeypatch.setattr(sys, "argv", ["check_md_links.py", "--json"])
+    ret = check_md_links.main()
+    out = capsys.readouterr().out
+    data = json.loads(out)
+    assert data["pass"] is True
+    assert data["markdown_files_scanned"] == 0
+    assert data["files_skipped_as_vendored"] == 0
+    assert data["links_resolved"] == 0
+    assert data["resources_checked"] == 0
+    assert data["broken_links"] == []
+    assert data["unlinked_resources"] == []
+    assert ret == 0
+
+
+def test_json_output_broken_link(monkeypatch, tmp_path, capsys):
+    import json
+    import sys
+
+    (tmp_path / "vendored.json").write_text('{"vendored": []}')
+    (tmp_path / "README.md").write_text("")
+    md_file = tmp_path / "test.md"
+    md_file.write_text("[link](missing.md)")
+    monkeypatch.setattr(check_md_links, "ROOT", tmp_path)
+    monkeypatch.setattr(check_md_links, "tracked_markdown", lambda: [md_file])
+    import claude_all.cli
+
+    monkeypatch.setattr(claude_all.cli, "discover", lambda _: [])
+    monkeypatch.setattr(sys, "argv", ["check_md_links.py", "--json"])
+    ret = check_md_links.main()
+    out = capsys.readouterr().out
+    data = json.loads(out)
+    assert data["pass"] is False
+    assert data["markdown_files_scanned"] == 1
+    assert data["files_skipped_as_vendored"] == 0
+    assert data["links_resolved"] == 1
+    assert len(data["broken_links"]) == 1
+    bl = data["broken_links"][0]
+    assert bl["file"] == "test.md"
+    assert bl["target"] == "missing.md"
+    # resolved_path should be under tmp_path
+    assert "missing.md" in bl["resolved_path"]
+    assert ret == 1
+
+
+def test_json_output_unlinked_resource(monkeypatch, tmp_path, capsys):
+    import json
+    import sys
+
+    (tmp_path / "vendored.json").write_text('{"vendored": []}')
+    (tmp_path / "README.md").write_text("")
+    monkeypatch.setattr(check_md_links, "ROOT", tmp_path)
+    monkeypatch.setattr(check_md_links, "tracked_markdown", lambda: [])
+
+    class MockItem:
+        kind = "skill"
+        name = "my-skill"
+        src = tmp_path / "src" / "skill" / "SKILL.md"
+
+    def mock_discover(_):
+        return [MockItem()]
+
+    import claude_all.cli
+
+    monkeypatch.setattr(claude_all.cli, "discover", mock_discover)
+    monkeypatch.setattr(sys, "argv", ["check_md_links.py", "--json"])
+    ret = check_md_links.main()
+    out = capsys.readouterr().out
+    data = json.loads(out)
+    assert data["pass"] is False
+    assert data["resources_checked"] == 1
+    assert len(data["unlinked_resources"]) == 1
+    assert data["unlinked_resources"][0]["path"] == "src/skill/SKILL.md"
+    assert ret == 1
+
+
+def test_default_output_unchanged(monkeypatch, tmp_path, capsys):
+    import sys
+
+    (tmp_path / "vendored.json").write_text('{"vendored": []}')
+    (tmp_path / "README.md").write_text("")
+    md_file = tmp_path / "test.md"
+    md_file.write_text("[link](missing.md)")
+    monkeypatch.setattr(check_md_links, "ROOT", tmp_path)
+    monkeypatch.setattr(check_md_links, "tracked_markdown", lambda: [md_file])
+    import claude_all.cli
+
+    monkeypatch.setattr(claude_all.cli, "discover", lambda _: [])
+    monkeypatch.setattr(sys, "argv", ["check_md_links.py"])
+    ret = check_md_links.main()
+    out = capsys.readouterr()
+    # Human output should contain the finding line
+    assert "test.md:1: broken-link -> missing.md" in out.out
+    # Summary goes to stderr
+    assert "1 finding(s)." in out.err
+    assert ret == 1
