@@ -227,3 +227,121 @@ def test_claude_hook_examples_use_timeout_seconds() -> None:
                 findings.append(f"{path.relative_to(ROOT)}: timeout={value}")
 
     assert findings == []
+
+
+def test_json_output_clean_passes(monkeypatch: pytest.MonkeyPatch) -> None:
+    """JSON mode on a clean tree returns passed true and correct counts."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+    import check_md_links as cml
+
+    monkeypatch.setattr(cml, "tracked_markdown", lambda: [])
+
+    # Mock readme data: no unlinked resources
+    def fake_collect_readme():
+        return [], {"resources_checked": 0, "unlinked_resources": []}
+
+    monkeypatch.setattr(cml, "_collect_readme_data", fake_collect_readme)
+    # Simulate --json mode
+    monkeypatch.setattr(sys, "argv", ["check_md_links.py", "--json"])
+    import io
+    from contextlib import redirect_stdout
+
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        exit_code = cml.main()
+    out = buf.getvalue()
+    data = json.loads(out)
+    assert data["passed"] is True
+    assert data["markdown_files_scanned"] == 0
+    assert data["links_checked"] == 0
+    assert data["resources_checked"] == 0
+    assert data["vendored_files_skipped"] == 0
+    assert data["broken_links"] == []
+    assert data["unlinked_resources"] == []
+    assert exit_code == 0
+
+
+def test_json_output_broken_link(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """JSON mode includes broken link details."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+    import check_md_links as cml
+
+    md_file = tmp_path / "a.md"
+    md_file.write_text("[link](missing.md)\n")
+    monkeypatch.setattr(cml, "tracked_markdown", lambda: [md_file])
+    # Fake readme data
+    monkeypatch.setattr(
+        cml,
+        "_collect_readme_data",
+        lambda: ([], {"resources_checked": 0, "unlinked_resources": []}),
+    )
+    monkeypatch.setattr(sys, "argv", ["check_md_links.py", "--json"])
+    import io
+    from contextlib import redirect_stdout
+
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        exit_code = cml.main()
+    data = json.loads(buf.getvalue())
+    assert data["passed"] is False
+    assert data["markdown_files_scanned"] == 1
+    assert data["links_checked"] == 1
+    assert len(data["broken_links"]) == 1
+    bl = data["broken_links"][0]
+    assert bl["file"].endswith("a.md")
+    assert bl["target"] == "missing.md"
+    assert "resolved_path" in bl
+    assert exit_code == 1
+
+
+def test_json_output_unlinked_resource(monkeypatch: pytest.MonkeyPatch) -> None:
+    """JSON mode reports unlinked resources."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+    import check_md_links as cml
+
+    monkeypatch.setattr(cml, "tracked_markdown", lambda: [])
+
+    # Simulate readme with one unlinked resource
+    def fake_readme():
+        return [], {
+            "resources_checked": 1,
+            "unlinked_resources": [{"kind": "skills", "name": "x", "path": "src/a/SKILL.md"}],
+        }
+
+    monkeypatch.setattr(cml, "_collect_readme_data", fake_readme)
+    monkeypatch.setattr(sys, "argv", ["check_md_links.py", "--json"])
+    import io
+    from contextlib import redirect_stdout
+
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        exit_code = cml.main()
+    data = json.loads(buf.getvalue())
+    assert data["passed"] is False
+    assert data["resources_checked"] == 1
+    assert data["unlinked_resources"] == ["src/a/SKILL.md"]
+    assert exit_code == 1
+
+
+def test_default_output_unchanged(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Default (non-JSON) output format is unchanged."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+    import check_md_links as cml
+
+    monkeypatch.setattr(cml, "tracked_markdown", lambda: [])
+    monkeypatch.setattr(
+        cml,
+        "_collect_readme_data",
+        lambda: ([], {"resources_checked": 0, "unlinked_resources": []}),
+    )
+    monkeypatch.setattr(sys, "argv", ["check_md_links.py"])
+    import io
+    from contextlib import redirect_stderr, redirect_stdout
+
+    out_buf = io.StringIO()
+    err_buf = io.StringIO()
+    with redirect_stdout(out_buf), redirect_stderr(err_buf):
+        exit_code = cml.main()
+    assert out_buf.getvalue() == ""
+    assert err_buf.getvalue() == ""
+    assert exit_code == 0
