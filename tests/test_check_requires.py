@@ -5,13 +5,15 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-# Ensure src on path for imports
+# Ensure src and scripts on path for imports
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+
+import check_requires
 
 
 def test_main_success_prints_inspected_summary(monkeypatch):
     """Normal success prints a greppable inspected summary line and exits 0."""
-    from scripts import check_requires
 
     # Force a non-empty manifest discovery by using the real repo
     # The real repo has manifests, and the current graph is clean.
@@ -38,7 +40,6 @@ def test_main_success_prints_inspected_summary(monkeypatch):
 
 def test_main_zero_discovery_is_hard_failure(monkeypatch):
     """Zero manifest discovery exits non-zero with a clear message."""
-    from scripts import check_requires
 
     # Patch SRC to a path with no manifests
     empty_src = Path("/tmp/check_requires_empty_src")
@@ -65,7 +66,6 @@ def test_main_zero_discovery_is_hard_failure(monkeypatch):
 
 def test_main_genuine_violation_still_fails(monkeypatch):
     """An existing genuine violation still leads to exit 1 and findings printed."""
-    from scripts import check_requires
 
     monkeypatch.setattr(check_requires, "load_resource_keys", lambda: set())
     # Simulate a finding
