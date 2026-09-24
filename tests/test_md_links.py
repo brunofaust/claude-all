@@ -227,3 +227,153 @@ def test_claude_hook_examples_use_timeout_seconds() -> None:
                 findings.append(f"{path.relative_to(ROOT)}: timeout={value}")
 
     assert findings == []
+
+
+def test_json_output_has_expected_keys(monkeypatch, capsys):
+    """JSON mode emits a valid object with the documented shape."""
+    import importlib
+    import json
+    import sys
+
+    monkeypatch.setattr(sys, "argv", ["check_md_links.py", "--json"])
+    import check_md_links
+
+    importlib.reload(check_md_links)
+    code = check_md_links.main()
+    out = capsys.readouterr().out
+    data = json.loads(out)
+    assert isinstance(data, dict)
+    assert "pass" in data
+    assert isinstance(data["pass"], bool)
+    assert "counts" in data
+    counts = data["counts"]
+    for key in (
+        "markdown_files_scanned",
+        "links_resolved",
+        "resources_checked",
+        "files_skipped_as_vendored",
+    ):
+        assert key in counts
+        assert isinstance(counts[key], int)
+    assert "broken_links" in data
+    assert isinstance(data["broken_links"], list)
+    assert "unlinked_resources" in data
+    assert isinstance(data["unlinked_resources"], list)
+    assert code in (0, 1)
+
+
+def test_json_output_is_only_json(monkeypatch, capsys):
+    """--json produces only JSON on stdout, no human findings."""
+    import importlib
+    import json
+    import sys
+
+    monkeypatch.setattr(sys, "argv", ["check_md_links.py", "--json"])
+    import check_md_links
+
+    importlib.reload(check_md_links)
+    check_md_links.main()
+    out = capsys.readouterr().out
+    # Should be parseable JSON and nothing else
+    data = json.loads(out.strip())
+    # Human messages must not appear
+    assert "broken-link ->" not in out
+    assert "README.md: undocumented" not in out
+    # Ensure stdout is exactly JSON
+    assert out.strip() == json.dumps(data)
+
+
+def test_default_output_is_human_readable(monkeypatch, capsys):
+    """Without --json, output remains human readable and not JSON."""
+    import importlib
+    import sys
+
+    monkeypatch.setattr(sys, "argv", ["check_md_links.py"])
+    import check_md_links
+
+    importlib.reload(check_md_links)
+    check_md_links.main()
+    out = capsys.readouterr().out
+    # Human output should not be a JSON object starting with {
+    stripped = out.lstrip()
+    assert not stripped.startswith("{"), "Default mode emitted JSON"
+    # Exit code is tested implicitly by main returning int
+
+
+def test_json_with_broken_link(monkeypatch, tmp_path):
+    """--json reports a broken link with file/target/resolved_path."""
+    from pathlib import Path
+
+    import check_md_links
+
+    # Create a real markdown file under ROOT so relative_to works
+    root = Path(check_md_links.ROOT)
+    test_dir = root / ".tmp_test_md_links"
+    test_dir.mkdir(exist_ok=True)
+    md_path = test_dir / "broken.md"
+    md_path.write_text("[link](nonexistent_target.md)")
+    try:
+        # Force tracked_markdown to return only our file
+        monkeypatch.setattr(check_md_links, "tracked_markdown", lambda: [md_path])
+        # Ensure no vendored exemption
+        report = check_md_links._collect_report([])
+        # Should have scanned one file and one link checked
+        assert report["counts"]["markdown_files_scanned"] == 1
+        assert report["counts"]["links_resolved"] == 1
+        assert report["pass"] is False
+        assert len(report["broken_links"]) == 1
+        bl = report["broken_links"][0]
+        assert bl["file"] == md_path.relative_to(root).as_posix()
+        assert bl["target"] == "nonexistent_target.md"
+        # resolved_path should be relative to ROOT and point to missing file
+        assert bl["resolved_path"].endswith("nonexistent_target.md")
+    finally:
+        # Cleanup
+        try:
+            md_path.unlink()
+            test_dir.rmdir()
+        except Exception:
+            pass
+
+
+def test_json_with_unlinked_resource(monkeypatch):
+    """--json reports an unlinked resource when README lacks a link."""
+    from pathlib import Path
+
+    import check_md_links
+
+    # Create a dummy resource path
+    root = Path(check_md_links.ROOT)
+    dummy_src = root / "src" / "claude_all" / "dummy_resource.md"
+
+    # Ensure discover returns one item pointing to dummy_src
+    class DummyItem:
+        kind = "skill"
+        name = "dummy"
+        src = dummy_src
+
+    # Monkeypatch discover to return our dummy
+    import claude_all.cli as cli
+
+    monkeypatch.setattr(cli, "discover", lambda _: [DummyItem()])
+    # Monkeypatch README read to be empty so link is missing
+    real_read_text = Path.read_text
+
+    def fake_read_text(self):
+        if self.name == "README.md":
+            return ""
+        return real_read_text(self)
+
+    monkeypatch.setattr(Path, "read_text", fake_read_text)
+
+    try:
+        # No markdown files to scan
+        monkeypatch.setattr(check_md_links, "tracked_markdown", lambda: [])
+        report = check_md_links._collect_report([])
+        assert report["counts"]["resources_checked"] == 1
+        assert report["pass"] is False
+        assert len(report["unlinked_resources"]) == 1
+        assert report["unlinked_resources"][0] == dummy_src.relative_to(root).as_posix()
+    finally:
+        # Restore is handled by monkeypatch
+        pass
