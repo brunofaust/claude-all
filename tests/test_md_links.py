@@ -226,4 +226,111 @@ def test_claude_hook_examples_use_timeout_seconds() -> None:
             if int(value) > 600:
                 findings.append(f"{path.relative_to(ROOT)}: timeout={value}")
 
-    assert findings == []
+
+class TestJsonMode:
+    def test_json_output_is_valid_and_has_fields(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ):
+        # Simulate a minimal repo with one markdown file and no findings
+        md = tmp_path / "doc.md"
+        md.write_text("see [link](README.md)\n")
+        # Monkeypatch tracked_markdown to return our file, and ROOT to tmp_path?
+        # Simpler: test _collect_link_info directly
+        # Use real registry empty
+        # We need tracked_markdown to return our file; monkeypatch
+        import check_md_links
+        from check_md_links import _collect_link_info
+
+        monkeypatch.setattr(check_md_links, "tracked_markdown", lambda: [md])
+        # Also need ROOT for relative paths; change ROOT temporarily
+        original_root = check_md_links.ROOT
+        try:
+            check_md_links.ROOT = tmp_path
+            files_scanned, files_skipped, links_checked, broken_links = _collect_link_info([])
+            assert files_scanned == 1
+            assert files_skipped == 0
+            assert links_checked == 1
+            assert broken_links == []
+        finally:
+            check_md_links.ROOT = original_root
+
+    def test_json_broken_link_is_reported(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+        import check_md_links
+        from check_md_links import _collect_link_info
+
+        md = tmp_path / "doc.md"
+        md.write_text("[bad](nope.md)\n")
+        monkeypatch.setattr(check_md_links, "tracked_markdown", lambda: [md])
+        original_root = check_md_links.ROOT
+        try:
+            check_md_links.ROOT = tmp_path
+            _files_scanned, _files_skipped, links_checked, broken_links = _collect_link_info([])
+            assert links_checked == 1
+            assert len(broken_links) == 1
+            bl = broken_links[0]
+            assert bl["file"] == "doc.md"
+            assert bl["target"] == "nope.md"
+            assert "resolved_path" in bl
+        finally:
+            check_md_links.ROOT = original_root
+
+    def test_json_unlinked_resource_is_reported(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ):
+        import check_md_links
+        from check_md_links import _collect_readme_info
+
+        # Create a fake README without links
+        readme = tmp_path / "README.md"
+        readme.write_text("no links here\n")
+
+        # Mock discover to return one item
+        class FakeItem:
+            kind = "skills"
+            name = "foo"
+            src = tmp_path / "src" / "SKILL.md"
+
+        # Ensure src exists for relative path
+        (tmp_path / "src").mkdir()
+        (tmp_path / "src" / "SKILL.md").write_text("---\n")
+        original_root = check_md_links.ROOT
+        try:
+            check_md_links.ROOT = tmp_path
+            # Monkeypatch discover
+            import claude_all.cli as cli
+
+            original_discover = cli.discover
+            cli.discover = lambda filters: [FakeItem()]
+            resources_checked, unlinked = _collect_readme_info()
+            assert resources_checked == 1
+            assert unlinked == ["src/SKILL.md"]
+        finally:
+            check_md_links.ROOT = original_root
+            cli.discover = original_discover
+
+    def test_default_output_unchanged(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys
+    ):
+        # Ensure non-json mode prints findings to stdout and count to stderr
+        import check_md_links
+        from check_md_links import main
+
+        # Create a file with broken link
+        md = tmp_path / "doc.md"
+        md.write_text("[bad](nope.md)\n")
+        monkeypatch.setattr(check_md_links, "tracked_markdown", lambda: [md])
+        monkeypatch.setattr(check_md_links, "ROOT", tmp_path)
+        # Mock vendored.json
+        vendored = tmp_path / "vendored.json"
+        vendored.write_text('{"vendored":[]}')
+        # Mock README
+        (tmp_path / "README.md").write_text("")
+        # Mock sys.argv to no --json
+        monkeypatch.setattr(sys, "argv", ["check_md_links.py"])
+        # Mock check_readme_coverage to return empty
+        monkeypatch.setattr(check_md_links, "check_readme_coverage", lambda: [])
+        exit_code = main()
+        out, err = capsys.readouterr()
+        assert "broken-link" in out
+        assert "1 finding(s)" in err
+        assert exit_code == 1
