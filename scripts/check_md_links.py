@@ -14,6 +14,27 @@ Two failures this repo has actually shipped, now mechanical:
 Vendored files are exempt from check 1: they are kept byte-identical to upstream,
 so their upstream-relative links legitimately do not resolve in this tree. Files
 listed under a vendored entry's `local_only` are OURS and stay checked.
+
+JSON output (--json):
+{
+  "pass": <bool>,
+  "counts": {
+    "markdown_files_scanned": <int>,
+    "links_resolved": <int>,
+    "resources_checked": <int>,
+    "files_skipped_as_vendored": <int>
+  },
+  "broken_links": [
+    {
+      "file": "<path relative to repo root>",
+      "target": "<raw link target>",
+      "resolved_path": "<absolute path that does not exist>"
+    }
+  ],
+  "unlinked_resources": [
+    "<path relative to repo root>"
+  ]
+}
 """
 
 import json
@@ -80,6 +101,40 @@ def tracked_markdown() -> list[Path]:
         check=True,
     ).stdout
     return [ROOT / p for p in out.split("\0") if p]
+
+
+def _scan_links(registry: list[dict]):
+    files_scanned = 0
+    files_skipped_vendored = 0
+    links_examined = 0
+    broken = []
+    for md in tracked_markdown():
+        if is_vendored(md, registry):
+            files_skipped_vendored += 1
+            continue
+        if not md.exists():
+            continue
+        files_scanned += 1
+        text = md.read_text()
+        for line_no, line in strip_code_blocks(text):
+            for target in LINK.findall(CODE_SPAN.sub("", line)):
+                if target.startswith(SKIP_PREFIX):
+                    continue
+                bare = target.split("#", 1)[0]
+                if not bare:
+                    continue
+                links_examined += 1
+                resolved = (md.parent / bare).resolve()
+                if not resolved.exists():
+                    broken.append(
+                        {
+                            "file": md.relative_to(ROOT).as_posix(),
+                            "line_no": line_no,
+                            "target": target,
+                            "resolved_path": str(resolved),
+                        }
+                    )
+    return files_scanned, files_skipped_vendored, links_examined, broken
 
 
 def check_links(registry: list[dict]) -> list[str]:
