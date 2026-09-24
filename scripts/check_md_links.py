@@ -14,8 +14,36 @@ Two failures this repo has actually shipped, now mechanical:
 Vendored files are exempt from check 1: they are kept byte-identical to upstream,
 so their upstream-relative links legitimately do not resolve in this tree. Files
 listed under a vendored entry's `local_only` are OURS and stay checked.
+
+JSON output (--json flag):
+
+The script emits a single JSON object with the following shape:
+{
+  "pass": bool,
+  "counts": {
+    "markdown_files_scanned": int,
+    "links_resolved": int,
+    "resources_checked": int,
+    "files_skipped_as_vendored": int
+  },
+  "broken_links": [
+    {"file": str, "target": str, "resolved_path": str}
+  ],
+  "unlinked_resources": [str]
+}
+
+- pass: true when no findings, false when any findings exist
+- counts.markdown_files_scanned: total tracked markdown files from git ls-files
+- counts.links_resolved: total link targets examined (after CODE_SPAN filtering and
+  SKIP_PREFIX/pure anchor filtering)
+- counts.resources_checked: number of resources discovered via claude_all.cli.discover()
+- counts.files_skipped_as_vendored: number of tracked markdown files exempted
+- broken_links: list of broken links with file (relative to ROOT), raw target,
+  and resolved_path (absolute path that does not exist)
+- unlinked_resources: list of resource paths (kind/name) that are not linked from README.md
 """
 
+import argparse
 import json
 import re
 import subprocess
@@ -118,8 +146,79 @@ def check_readme_coverage() -> list[str]:
     ]
 
 
+def _collect_json_data(registry: list[dict]) -> dict:
+    """Collect structured data for JSON output.
+
+    Returns:
+        Dict with keys: pass, counts, broken_links, unlinked_resources
+    """
+    all_files = tracked_markdown()
+    markdown_files_scanned = len(all_files)
+    files_skipped_as_vendored = 0
+    links_resolved = 0
+    broken_links = []
+
+    for md in all_files:
+        if is_vendored(md, registry):
+            files_skipped_as_vendored += 1
+            continue
+        if not md.exists():
+            continue
+        for _line_no, line in strip_code_blocks(md.read_text()):
+            for target in LINK.findall(CODE_SPAN.sub("", line)):
+                if target.startswith(SKIP_PREFIX):
+                    continue
+                bare = target.split("#", 1)[0]
+                if not bare:
+                    continue
+                links_resolved += 1
+                resolved_path = (md.parent / bare).resolve()
+                if not resolved_path.exists():
+                    broken_links.append(
+                        {
+                            "file": md.relative_to(ROOT).as_posix(),
+                            "target": target,
+                            "resolved_path": str(resolved_path),
+                        }
+                    )
+
+    # Collect resources data
+    sys.path.insert(0, str(ROOT / "src"))
+    from claude_all.cli import discover
+
+    resources = list(discover([]))
+    resources_checked = len(resources)
+    readme = (ROOT / "README.md").read_text()
+    unlinked_resources = []
+    for item in resources:
+        if f"]({item.src.relative_to(ROOT).as_posix()})" not in readme:
+            unlinked_resources.append(f"{item.kind}/{item.name}")
+
+    return {
+        "pass": len(broken_links) == 0 and len(unlinked_resources) == 0,
+        "counts": {
+            "markdown_files_scanned": markdown_files_scanned,
+            "links_resolved": links_resolved,
+            "resources_checked": resources_checked,
+            "files_skipped_as_vendored": files_skipped_as_vendored,
+        },
+        "broken_links": broken_links,
+        "unlinked_resources": unlinked_resources,
+    }
+
+
 def main() -> int:
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--json", action="store_true")
+    args, _ = parser.parse_known_args()
+
     registry = json.loads((ROOT / "vendored.json").read_text()).get("vendored", [])
+
+    if args.json:
+        data = _collect_json_data(registry)
+        print(json.dumps(data))
+        return 0 if data["pass"] else 1
+
     findings = check_links(registry) + check_readme_coverage()
     for finding in findings:
         print(finding)
