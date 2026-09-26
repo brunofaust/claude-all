@@ -32,6 +32,16 @@ from vendor_sync import clone_upstream
 ROOT = Path(__file__).resolve().parent.parent
 
 
+@pytest.fixture(autouse=True)
+def _vendored_json(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Create a minimal vendored.json in the temp directory when ROOT is mocked."""
+    # Only create if the test actually mocks ROOT to tmp_path
+    # This fixture runs for every test, but only takes effect when ROOT == tmp_path
+    vendored_file = tmp_path / "vendored.json"
+    if not vendored_file.exists():
+        vendored_file.write_text(json.dumps({"vendored": []}))
+
+
 def test_vendor_clone_supports_pinned_commit_refs(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
