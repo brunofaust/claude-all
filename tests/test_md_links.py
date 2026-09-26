@@ -150,7 +150,11 @@ class TestCheckLinks:
         # which crashed exactly this way.
         missing = tmp_path / "GONE.md"
         monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [missing])
-        assert check_links(registry=[]) == []
+        broken_links, counts = check_links(registry=[])
+        assert broken_links == []
+        assert counts["markdown_files_scanned"] == 0
+        assert counts["links_resolved"] == 0
+        assert counts["files_skipped_as_vendored"] == 0
 
 
 def test_non_vendored_routes_use_discoverable_skill_names() -> None:
@@ -227,3 +231,221 @@ def test_claude_hook_examples_use_timeout_seconds() -> None:
                 findings.append(f"{path.relative_to(ROOT)}: timeout={value}")
 
     assert findings == []
+
+
+# JSON output mode tests
+class TestJsonOutput:
+    """Tests for the --json flag output mode."""
+
+    def test_json_clean_tree(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        """JSON output on a clean tree (no broken links, all resources linked)."""
+        # Mock tracked_markdown to return empty list (no files to check)
+        monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [])
+        # Mock discover to return empty list (no resources to check)
+        monkeypatch.setattr("check_md_links.discover", lambda _: [])
+
+        # Run with --json flag
+        import io
+        import sys
+
+        from check_md_links import main
+
+        old_stdout = sys.stdout
+        sys.stdout = io.StringIO()
+        try:
+            exit_code = main(["--json"])
+            output = sys.stdout.getvalue()
+        finally:
+            sys.stdout = old_stdout
+
+        assert exit_code == 0
+        result = json.loads(output.strip())
+        assert result["pass"] is True
+        assert result["counts"]["markdown_files_scanned"] == 0
+        assert result["counts"]["links_resolved"] == 0
+        assert result["counts"]["resources_checked"] == 0
+        assert result["counts"]["files_skipped_as_vendored"] == 0
+        assert result["broken_links"] == []
+        assert result["unlinked_resources"] == []
+
+    def test_json_with_broken_link(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        """JSON output when a broken link is found."""
+        # Create a temporary markdown file with a broken link
+        md_file = tmp_path / "test.md"
+        md_file.write_text("[broken](does_not_exist.md)\n")
+
+        monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [md_file])
+        # Mock discover to return empty list
+        monkeypatch.setattr("check_md_links.discover", lambda _: [])
+
+        import io
+        import sys
+
+        from check_md_links import main
+
+        old_stdout = sys.stdout
+        sys.stdout = io.StringIO()
+        try:
+            exit_code = main(["--json"])
+            output = sys.stdout.getvalue()
+        finally:
+            sys.stdout = old_stdout
+
+        assert exit_code == 1
+        result = json.loads(output.strip())
+        assert result["pass"] is False
+        assert result["counts"]["markdown_files_scanned"] == 1
+        assert result["counts"]["links_resolved"] == 1
+        assert len(result["broken_links"]) == 1
+        bl = result["broken_links"][0]
+        assert bl["file"] == "test.md"
+        assert bl["line"] == 1
+        assert bl["target"] == "does_not_exist.md"
+        assert "does_not_exist.md" in bl["resolved_path"]
+        assert result["unlinked_resources"] == []
+
+    def test_json_with_unlinked_resource(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """JSON output when an unlinked resource is found."""
+        # Mock tracked_markdown to return empty list (no link checking)
+        monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [])
+
+        # Create a mock resource that is not linked
+        from types import SimpleNamespace
+
+        mock_resource = SimpleNamespace(
+            kind="skill",
+            name="test-skill",
+            src=tmp_path / "skills" / "test-skill" / "SKILL.md",
+        )
+        mock_resource.src.parent.mkdir(parents=True, exist_ok=True)
+        mock_resource.src.write_text("---\nname: test-skill\n---\n")
+
+        monkeypatch.setattr("check_md_links.discover", lambda _: [mock_resource])
+        # Mock README to not contain the link
+        monkeypatch.setattr(
+            "check_md_links.Path.read_text",
+            lambda self, *a, **kw: (
+                "# README\n" if self.name == "README.md" else mock_resource.src.read_text()
+            ),
+        )
+
+        import io
+        import sys
+
+        from check_md_links import main
+
+        old_stdout = sys.stdout
+        sys.stdout = io.StringIO()
+        try:
+            exit_code = main(["--json"])
+            output = sys.stdout.getvalue()
+        finally:
+            sys.stdout = old_stdout
+
+        assert exit_code == 1
+        result = json.loads(output.strip())
+        assert result["pass"] is False
+        assert result["counts"]["markdown_files_scanned"] == 0
+        assert result["counts"]["links_resolved"] == 0
+        assert result["counts"]["resources_checked"] == 1
+        assert len(result["unlinked_resources"]) == 1
+        assert result["unlinked_resources"][0].endswith("SKILL.md")
+        assert result["broken_links"] == []
+
+    def test_default_output_unaffected(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """Default (non-JSON) output is unchanged."""
+        # Create a temporary markdown file with a broken link
+        md_file = tmp_path / "test.md"
+        md_file.write_text("[broken](does_not_exist.md)\n")
+
+        monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [md_file])
+        monkeypatch.setattr("check_md_links.discover", lambda _: [])
+
+        import io
+        import sys
+
+        from check_md_links import main
+
+        old_stdout = sys.stdout
+        old_stderr = sys.stderr
+        sys.stdout = io.StringIO()
+        sys.stderr = io.StringIO()
+        try:
+            exit_code = main([])  # No --json flag
+            stdout_output = sys.stdout.getvalue()
+            stderr_output = sys.stderr.getvalue()
+        finally:
+            sys.stdout = old_stdout
+            sys.stderr = old_stderr
+
+        assert exit_code == 1
+        # Human-readable output should contain the finding
+        assert "test.md:1: broken-link -> does_not_exist.md" in stdout_output
+        assert "1 finding(s)." in stderr_output
+        # Should NOT be valid JSON
+        import json
+
+        try:
+            json.loads(stdout_output.strip())
+            assert False, "Default output should not be JSON"
+        except json.JSONDecodeError:
+            pass  # Expected
+
+    def test_json_exit_code_matches_human(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """Exit codes are identical in both modes for the same input."""
+        # Test with clean tree
+        monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [])
+        monkeypatch.setattr("check_md_links.discover", lambda _: [])
+
+        import io
+        import sys
+
+        from check_md_links import main
+
+        # JSON mode
+        old_stdout = sys.stdout
+        sys.stdout = io.StringIO()
+        try:
+            json_exit = main(["--json"])
+        finally:
+            sys.stdout = old_stdout
+
+        # Human mode
+        sys.stdout = io.StringIO()
+        sys.stderr = io.StringIO()
+        try:
+            human_exit = main([])
+        finally:
+            sys.stdout = old_stdout
+            sys.stderr = old_stderr
+
+        assert json_exit == human_exit == 0
+
+        # Test with broken link
+        md_file = tmp_path / "test.md"
+        md_file.write_text("[broken](does_not_exist.md)\n")
+        monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [md_file])
+
+        # JSON mode
+        sys.stdout = io.StringIO()
+        try:
+            json_exit = main(["--json"])
+        finally:
+            sys.stdout = old_stdout
+
+        # Human mode
+        sys.stdout = io.StringIO()
+        sys.stderr = io.StringIO()
+        try:
+            human_exit = main([])
+        finally:
+            sys.stdout = old_stdout
+            sys.stderr = old_stderr
+
+        assert json_exit == human_exit == 1
