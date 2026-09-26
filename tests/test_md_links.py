@@ -22,6 +22,8 @@ from check_md_links import (
     CODE_SPAN,
     LINK,
     check_links,
+    format_human_output,
+    format_json_output,
     is_vendored,
     strip_code_blocks,
 )
@@ -150,7 +152,145 @@ class TestCheckLinks:
         # which crashed exactly this way.
         missing = tmp_path / "GONE.md"
         monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [missing])
-        assert check_links(registry=[]) == []
+        broken_links, scanned, checked, skipped = check_links(registry=[])
+        assert broken_links == []
+        assert scanned == 0
+        assert checked == 0
+        assert skipped == 0
+
+    def test_vendored_file_is_skipped_and_counted(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        vendored_file = tmp_path / "VENDORED.md"
+        vendored_file.write_text("[link](target.md)\n")
+        monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [vendored_file])
+        registry = [{"path": str(tmp_path), "vendor_mode": "dir"}]
+        broken_links, scanned, checked, skipped = check_links(registry=registry)
+        assert broken_links == []
+        assert scanned == 0
+        assert checked == 0
+        assert skipped == 1
+
+
+class TestFormatHumanOutput:
+    def test_formats_broken_link(self) -> None:
+        broken_links = [
+            {
+                "file": "docs/foo.md",
+                "line": 10,
+                "raw_target": "../bar.md",
+                "resolved_path": "/abs/path/bar.md",
+            }
+        ]
+        out = format_human_output(broken_links, [])
+        assert out == ["docs/foo.md:10: broken-link -> ../bar.md"]
+
+    def test_formats_unlinked_resource(self) -> None:
+        out = format_human_output([], ["src/skill/SKILL.md"])
+        assert out == [
+            "README.md: undocumented -> src/skill/SKILL.md (add a row linking src/skill/SKILL.md)"
+        ]
+
+    def test_formats_both(self) -> None:
+        broken_links = [
+            {
+                "file": "docs/foo.md",
+                "line": 10,
+                "raw_target": "../bar.md",
+                "resolved_path": "/abs/path/bar.md",
+            }
+        ]
+        out = format_human_output(broken_links, ["src/skill/SKILL.md"])
+        assert out == [
+            "docs/foo.md:10: broken-link -> ../bar.md",
+            "README.md: undocumented -> src/skill/SKILL.md (add a row linking src/skill/SKILL.md)",
+        ]
+
+
+class TestFormatJsonOutput:
+    def test_clean_tree(self) -> None:
+        output = format_json_output(
+            broken_links=[],
+            unlinked_resources=[],
+            markdown_files_scanned=5,
+            links_checked=10,
+            resources_checked=3,
+            vendored_files_skipped=2,
+        )
+        assert output["passed"] is True
+        assert output["counts"] == {
+            "markdown_files_scanned": 5,
+            "links_checked": 10,
+            "resources_checked": 3,
+            "vendored_files_skipped": 2,
+        }
+        assert output["broken_links"] == []
+        assert output["unlinked_resources"] == []
+
+    def test_with_broken_link(self) -> None:
+        broken_links = [
+            {
+                "file": "docs/foo.md",
+                "line": 10,
+                "raw_target": "../bar.md",
+                "resolved_path": "/abs/path/bar.md",
+            }
+        ]
+        output = format_json_output(
+            broken_links=broken_links,
+            unlinked_resources=[],
+            markdown_files_scanned=5,
+            links_checked=10,
+            resources_checked=3,
+            vendored_files_skipped=2,
+        )
+        assert output["passed"] is False
+        assert output["broken_links"] == broken_links
+
+    def test_with_unlinked_resource(self) -> None:
+        output = format_json_output(
+            broken_links=[],
+            unlinked_resources=["src/skill/SKILL.md"],
+            markdown_files_scanned=5,
+            links_checked=10,
+            resources_checked=3,
+            vendored_files_skipped=2,
+        )
+        assert output["passed"] is False
+        assert output["unlinked_resources"] == ["src/skill/SKILL.md"]
+
+    def test_schema_stability(self) -> None:
+        """All expected keys are present and have the right types."""
+        output = format_json_output(
+            broken_links=[
+                {"file": "a.md", "line": 1, "raw_target": "b.md", "resolved_path": "/x/b.md"}
+            ],
+            unlinked_resources=["c.md"],
+            markdown_files_scanned=1,
+            links_checked=1,
+            resources_checked=1,
+            vendored_files_skipped=0,
+        )
+        assert set(output.keys()) == {"passed", "counts", "broken_links", "unlinked_resources"}
+        assert isinstance(output["passed"], bool)
+        assert set(output["counts"].keys()) == {
+            "markdown_files_scanned",
+            "links_checked",
+            "resources_checked",
+            "vendored_files_skipped",
+        }
+        for v in output["counts"].values():
+            assert isinstance(v, int)
+        assert isinstance(output["broken_links"], list)
+        for bl in output["broken_links"]:
+            assert set(bl.keys()) == {"file", "line", "raw_target", "resolved_path"}
+            assert isinstance(bl["file"], str)
+            assert isinstance(bl["line"], int)
+            assert isinstance(bl["raw_target"], str)
+            assert isinstance(bl["resolved_path"], str)
+        assert isinstance(output["unlinked_resources"], list)
+        for ur in output["unlinked_resources"]:
+            assert isinstance(ur, str)
 
 
 def test_non_vendored_routes_use_discoverable_skill_names() -> None:
@@ -227,3 +367,264 @@ def test_claude_hook_examples_use_timeout_seconds() -> None:
                 findings.append(f"{path.relative_to(ROOT)}: timeout={value}")
 
     assert findings == []
+
+
+class TestJsonOutputMode:
+    """Integration tests for the --json CLI flag."""
+
+    def test_json_on_clean_tree(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        """--json on a clean tree emits valid JSON with passed=true."""
+        # Create a temp markdown file with a valid link
+        md_file = tmp_path / "test.md"
+        target_file = tmp_path / "target.md"
+        target_file.write_text("# Target\n")
+        md_file.write_text("[link](target.md)\n")
+
+        monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [md_file])
+        monkeypatch.setattr("check_md_links.ROOT", tmp_path)
+
+        # Also mock check_readme_coverage to return clean
+        monkeypatch.setattr("check_md_links.check_readme_coverage", lambda: ([], 0))
+
+        # Capture stdout
+        import io
+        from contextlib import redirect_stderr, redirect_stdout
+
+        import check_md_links
+
+        stdout_capture = io.StringIO()
+        stderr_capture = io.StringIO()
+
+        with redirect_stdout(stdout_capture), redirect_stderr(stderr_capture):
+            # Simulate --json argument
+            import sys
+
+            original_argv = sys.argv
+            sys.argv = ["check_md_links.py", "--json"]
+            try:
+                exit_code = check_md_links.main()
+            finally:
+                sys.argv = original_argv
+
+        assert exit_code == 0
+        stderr_output = stderr_capture.getvalue()
+        assert stderr_output == ""  # No diagnostics on stderr for clean run
+
+        stdout_output = stdout_capture.getvalue().strip()
+        # Should be valid JSON
+        data = json.loads(stdout_output)
+        assert data["passed"] is True
+        assert data["counts"]["markdown_files_scanned"] == 1
+        assert data["counts"]["links_checked"] == 1
+        assert data["counts"]["vendored_files_skipped"] == 0
+        assert data["broken_links"] == []
+        assert data["unlinked_resources"] == []
+
+    def test_json_with_broken_link(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        """--json with broken link emits JSON with passed=false and broken_links."""
+        md_file = tmp_path / "test.md"
+        md_file.write_text("[link](missing.md)\n")
+
+        monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [md_file])
+        monkeypatch.setattr("check_md_links.ROOT", tmp_path)
+        monkeypatch.setattr("check_md_links.check_readme_coverage", lambda: ([], 0))
+
+        import io
+        import sys
+        from contextlib import redirect_stderr, redirect_stdout
+
+        import check_md_links
+
+        stdout_capture = io.StringIO()
+        stderr_capture = io.StringIO()
+
+        with redirect_stdout(stdout_capture), redirect_stderr(stderr_capture):
+            original_argv = sys.argv
+            sys.argv = ["check_md_links.py", "--json"]
+            try:
+                exit_code = check_md_links.main()
+            finally:
+                sys.argv = original_argv
+
+        assert exit_code == 1
+        stderr_output = stderr_capture.getvalue()
+        assert stderr_output == ""  # No diagnostics on stderr
+
+        stdout_output = stdout_capture.getvalue().strip()
+        data = json.loads(stdout_output)
+        assert data["passed"] is False
+        assert len(data["broken_links"]) == 1
+        bl = data["broken_links"][0]
+        assert bl["file"] == "test.md"
+        assert bl["line"] == 1
+        assert bl["raw_target"] == "missing.md"
+        assert bl["resolved_path"] == str((tmp_path / "missing.md").resolve())
+        assert data["unlinked_resources"] == []
+
+    def test_json_with_unlinked_resource(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """--json with unlinked resource emits JSON with passed=false and unlinked_resources."""
+        md_file = tmp_path / "test.md"
+        target_file = tmp_path / "target.md"
+        target_file.write_text("# Target\n")
+        md_file.write_text("[link](target.md)\n")
+
+        monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [md_file])
+        monkeypatch.setattr("check_md_links.ROOT", tmp_path)
+        monkeypatch.setattr(
+            "check_md_links.check_readme_coverage", lambda: (["src/unlinked.md"], 1)
+        )
+
+        import io
+        import sys
+        from contextlib import redirect_stderr, redirect_stdout
+
+        import check_md_links
+
+        stdout_capture = io.StringIO()
+        stderr_capture = io.StringIO()
+
+        with redirect_stdout(stdout_capture), redirect_stderr(stderr_capture):
+            original_argv = sys.argv
+            sys.argv = ["check_md_links.py", "--json"]
+            try:
+                exit_code = check_md_links.main()
+            finally:
+                sys.argv = original_argv
+
+        assert exit_code == 1
+        stderr_output = stderr_capture.getvalue()
+        assert stderr_output == ""  # No diagnostics on stderr
+
+        stdout_output = stdout_capture.getvalue().strip()
+        data = json.loads(stdout_output)
+        assert data["passed"] is False
+        assert data["broken_links"] == []
+        assert data["unlinked_resources"] == ["src/unlinked.md"]
+
+    def test_default_output_unaffected(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture
+    ) -> None:
+        """Default (non-JSON) output is byte-identical to before."""
+        md_file = tmp_path / "test.md"
+        target_file = tmp_path / "target.md"
+        target_file.write_text("# Target\n")
+        md_file.write_text("[link](target.md)\n")
+
+        monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [md_file])
+        monkeypatch.setattr("check_md_links.ROOT", tmp_path)
+        monkeypatch.setattr("check_md_links.check_readme_coverage", lambda: ([], 0))
+
+        import sys
+
+        import check_md_links
+
+        original_argv = sys.argv
+        sys.argv = ["check_md_links.py"]
+        try:
+            exit_code = check_md_links.main()
+        finally:
+            sys.argv = original_argv
+
+        assert exit_code == 0
+        captured = capsys.readouterr()
+        # Clean run: no findings printed to stdout, nothing on stderr
+        assert captured.out == ""
+        assert captured.err == ""
+
+    def test_default_output_with_findings(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture
+    ) -> None:
+        """Default output with findings matches the original format."""
+        md_file = tmp_path / "test.md"
+        md_file.write_text("[link](missing.md)\n")
+
+        monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [md_file])
+        monkeypatch.setattr("check_md_links.ROOT", tmp_path)
+        monkeypatch.setattr("check_md_links.check_readme_coverage", lambda: ([], 0))
+
+        import sys
+
+        import check_md_links
+
+        original_argv = sys.argv
+        sys.argv = ["check_md_links.py"]
+        try:
+            exit_code = check_md_links.main()
+        finally:
+            sys.argv = original_argv
+
+        assert exit_code == 1
+        captured = capsys.readouterr()
+        # Should have the human-readable finding on stdout
+        assert "test.md:1: broken-link -> missing.md" in captured.out
+        # And the summary on stderr
+        assert "1 finding(s)." in captured.err
+
+    def test_exit_codes_identical(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        """Exit codes are identical in both modes for the same input."""
+        # Test with broken link
+        md_file = tmp_path / "test.md"
+        md_file.write_text("[link](missing.md)\n")
+
+        monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [md_file])
+        monkeypatch.setattr("check_md_links.ROOT", tmp_path)
+        monkeypatch.setattr("check_md_links.check_readme_coverage", lambda: ([], 0))
+
+        import io
+        import sys
+        from contextlib import redirect_stderr, redirect_stdout
+
+        import check_md_links
+
+        # Non-JSON mode
+        stdout_capture = io.StringIO()
+        stderr_capture = io.StringIO()
+        original_argv = sys.argv
+        sys.argv = ["check_md_links.py"]
+        try:
+            with redirect_stdout(stdout_capture), redirect_stderr(stderr_capture):
+                exit_code_human = check_md_links.main()
+        finally:
+            sys.argv = original_argv
+
+        # JSON mode
+        stdout_capture = io.StringIO()
+        stderr_capture = io.StringIO()
+        sys.argv = ["check_md_links.py", "--json"]
+        try:
+            with redirect_stdout(stdout_capture), redirect_stderr(stderr_capture):
+                exit_code_json = check_md_links.main()
+        finally:
+            sys.argv = original_argv
+
+        assert exit_code_human == exit_code_json == 1
+
+        # Test clean tree
+        target_file = tmp_path / "target.md"
+        target_file.write_text("# Target\n")
+        md_file.write_text("[link](target.md)\n")
+
+        # Non-JSON mode
+        stdout_capture = io.StringIO()
+        stderr_capture = io.StringIO()
+        sys.argv = ["check_md_links.py"]
+        try:
+            with redirect_stdout(stdout_capture), redirect_stderr(stderr_capture):
+                exit_code_human = check_md_links.main()
+        finally:
+            sys.argv = original_argv
+
+        # JSON mode
+        stdout_capture = io.StringIO()
+        stderr_capture = io.StringIO()
+        sys.argv = ["check_md_links.py", "--json"]
+        try:
+            with redirect_stdout(stdout_capture), redirect_stderr(stderr_capture):
+                exit_code_json = check_md_links.main()
+        finally:
+            sys.argv = original_argv
+
+
+assert exit_code_human == exit_code_json == 0
