@@ -14,8 +14,46 @@ Two failures this repo has actually shipped, now mechanical:
 Vendored files are exempt from check 1: they are kept byte-identical to upstream,
 so their upstream-relative links legitimately do not resolve in this tree. Files
 listed under a vendored entry's `local_only` are OURS and stay checked.
+
+**JSON output mode**
+When invoked with `--json`, the script outputs a single JSON object to stdout
+containing the results in a machine-readable format. The JSON schema is:
+
+{
+  "passed": boolean,
+  "counts": {
+    "markdown_files_scanned": integer,
+    "links_resolved": integer,
+    "resources_checked": integer,
+    "files_skipped_as_vendored": integer
+  },
+  "broken_links": [
+    {
+      "file": string,   // relative path from repository root
+      "line": integer,  // 1-based line number in the markdown file
+      "target": string, // the raw link target as found in the markdown
+      "resolved_path": string   // absolute path that was checked and did not exist
+    }
+  ],
+  "unlinked_resources": [
+    {
+      "kind": string,   // e.g., "skill", "agent"
+      "name": string,   // the resource name
+      "src": string     // relative path from repository root to the resource's source file
+    }
+  ]
+}
+
+The overall pass/fail is indicated by "passed": true when there are no broken links
+and no unlinked resources.
+
+Diagnostic messages (if any) are written to stderr; stdout contains only the JSON
+object when `--json` is specified.
+
+Without `--json`, the output and exit code are unchanged from the original behavior.
 """
 
+import argparse
 import json
 import re
 import subprocess
@@ -118,15 +156,111 @@ def check_readme_coverage() -> list[str]:
     ]
 
 
+def compute_link_data(registry: list[dict]):
+    """Compute link checking data for JSON output.
+
+    Returns a tuple (files_scanned, files_skipped_as_vendored, links_resolved, broken_links)
+    where:
+        files_scanned: number of non-vendored markdown files that exist
+        files_skipped_as_vendored: number of markdown files skipped due to vendored exemption
+        links_resolved: number of link targets attempted to resolve (excluding skipped prefixes and pure anchors)
+        broken_links: list of dicts, each with keys: file (str, relative to ROOT), line (int),
+                      target (str), resolved_path (str, absolute)
+    """
+    files_scanned = 0
+    files_skipped_as_vendored = 0
+    links_resolved = 0
+    broken_links = []
+
+    for md in tracked_markdown():
+        if is_vendored(md, registry):
+            files_skipped_as_vendored += 1
+            continue
+        if not md.exists():
+            continue
+        files_scanned += 1
+        text = md.read_text()
+        for line_no, line in strip_code_blocks(text):
+            for target in LINK.findall(CODE_SPAN.sub("", line)):
+                if target.startswith(SKIP_PREFIX):
+                    continue
+                bare = target.split("#", 1)[0]
+                if not bare:
+                    continue  # pure anchor
+                links_resolved += 1
+                if not (md.parent / bare).resolve().exists():
+                    rel = md.relative_to(ROOT)
+                    broken_links.append(
+                        {
+                            "file": rel.as_posix(),
+                            "line": line_no,
+                            "target": target,
+                            "resolved_path": (md.parent / bare).resolve().as_posix(),
+                        }
+                    )
+    return files_scanned, files_skipped_as_vendored, links_resolved, broken_links
+
+
+def compute_readme_data():
+    """Compute README coverage data for JSON output.
+
+    Returns a tuple (resources_checked, unlinked_resources) where:
+        resources_checked: number of resources discovered by `discover([])`
+        unlinked_resources: list of dicts, each with keys: kind (str), name (str), src (str, relative to ROOT)
+    """
+    sys.path.insert(0, str(ROOT / "src"))
+    from claude_all.cli import discover
+
+    readme = (ROOT / "README.md").read_text()
+    resources = discover([])
+    resources_checked = len(resources)
+    unlinked_resources = []
+    for item in resources:
+        if f"]({item.src.relative_to(ROOT).as_posix()})" not in readme:
+            unlinked_resources.append(
+                {"kind": item.kind, "name": item.name, "src": item.src.relative_to(ROOT).as_posix()}
+            )
+    return resources_checked, unlinked_resources
+
+
 def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--json", action="store_true", help="Output results in JSON format")
+    args = parser.parse_args()
+
     registry = json.loads((ROOT / "vendored.json").read_text()).get("vendored", [])
-    findings = check_links(registry) + check_readme_coverage()
-    for finding in findings:
-        print(finding)
-    if findings:
-        print(f"\n{len(findings)} finding(s).", file=sys.stderr)
-        return 1
-    return 0
+
+    if args.json:
+        # JSON mode: compute structured data and output JSON to stdout
+        files_scanned, files_skipped_as_vendored, links_resolved, broken_links = compute_link_data(
+            registry
+        )
+        resources_checked, unlinked_resources = compute_readme_data()
+
+        passed = len(broken_links) == 0 and len(unlinked_resources) == 0
+
+        result = {
+            "passed": passed,
+            "counts": {
+                "markdown_files_scanned": files_scanned,
+                "links_resolved": links_resolved,
+                "resources_checked": resources_checked,
+                "files_skipped_as_vendored": files_skipped_as_vendored,
+            },
+            "broken_links": broken_links,
+            "unlinked_resources": unlinked_resources,
+        }
+        print(json.dumps(result))
+        return 0 if passed else 1
+    else:
+        # Default behavior: human-readable output
+        findings = check_links(registry) + check_readme_coverage()
+        for finding in findings:
+            print(finding)
+        if findings:
+            print(f"\n{len(findings)} finding(s).", file=sys.stderr)
+            return 1
+        return 0
 
 
 if __name__ == "__main__":
