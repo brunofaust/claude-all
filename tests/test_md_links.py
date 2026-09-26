@@ -612,7 +612,7 @@ class TestJsonOutputMode:
         sys.argv = ["check_md_links.py"]
         try:
             with redirect_stdout(stdout_capture), redirect_stderr(stderr_capture):
-                exit_code_human = check_md_links.main()
+                exit_code_human_clean = check_md_links.main()
         finally:
             sys.argv = original_argv
 
@@ -622,9 +622,8 @@ class TestJsonOutputMode:
         sys.argv = ["check_md_links.py", "--json"]
         try:
             with redirect_stdout(stdout_capture), redirect_stderr(stderr_capture):
-                exit_code_json = check_md_links.main()
+                exit_code_json_clean = check_md_links.main()
         finally:
             sys.argv = original_argv
 
-
-assert exit_code_human == exit_code_json == 0
+        assert exit_code_human_clean == exit_code_json_clean == 0
