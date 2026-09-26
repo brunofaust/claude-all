@@ -11,7 +11,7 @@ It resolves targets by importing the installer's own `discover()` /`state_key`,
 so "what counts as a resource" is defined in exactly one place (the installer),
 never re-derived here.
 
-Exit codes: 0 = every entry resolves · 1 = a dangling/malformed entry.
+Exit codes: 0 = every entry resolves · 1 = a dangling/malformed entry · 2 = zero discovery
 """
 
 from __future__ import annotations
@@ -22,6 +22,13 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SRC = REPO_ROOT / "src"
+
+# Glob patterns used to discover manifest files — kept as constants so the
+# zero-discovery message can name them explicitly.
+MANIFEST_GLOBS = (
+    "src/claude_all/**/claude-all.json",
+    "src/claude_all/**/*.claude-all.json",
+)
 
 
 def load_resource_keys() -> set[str]:
@@ -37,19 +44,25 @@ def load_resource_keys() -> set[str]:
     return {state_key(it.kind, it.name) for it in discover([])}
 
 
-def find_violations(known: set[str]) -> list[str]:
+def find_manifests() -> list[Path]:
+    """Return all manifest files matching the discovery globs, sorted."""
+    return sorted((SRC / "claude_all").rglob("claude-all.json")) + sorted(
+        (SRC / "claude_all").rglob("*.claude-all.json")
+    )
+
+
+def find_violations(known: set[str], manifests: list[Path]) -> list[str]:
     """Return one finding per dangling/malformed ``requires`` entry.
 
     Args:
         known: Every resolvable resource key.
+        manifests: Manifest files to validate (pre-discovered by caller).
 
     Returns:
         Stable ``path: message`` findings (empty when the graph is clean).
     """
     findings: list[str] = []
-    for manifest in sorted((SRC / "claude_all").rglob("claude-all.json")) + sorted(
-        (SRC / "claude_all").rglob("*.claude-all.json")
-    ):
+    for manifest in manifests:
         rel = manifest.relative_to(REPO_ROOT)
         try:
             config = json.loads(manifest.read_text(encoding="utf-8"))
@@ -71,11 +84,38 @@ def find_violations(known: set[str]) -> list[str]:
     return findings
 
 
+def count_requires_entries(manifests: list[Path]) -> int:
+    """Count valid string requires entries across all manifests."""
+    total = 0
+    for manifest in manifests:
+        try:
+            config = json.loads(manifest.read_text(encoding="utf-8"))
+            requires = config.get("requires", [])
+            if isinstance(requires, list):
+                total += sum(1 for d in requires if isinstance(d, str))
+        except (json.JSONDecodeError, OSError):
+            pass
+    return total
+
+
 def main() -> int:
-    """CLI entry point — print findings to stdout, exit 1 on any."""
-    findings = find_violations(load_resource_keys())
+    """CLI entry point — print findings to stdout, exit 1 on any, 2 on zero discovery."""
+    known = load_resource_keys()
+    manifests = find_manifests()
+
+    # Zero-discovery hard failure: the glob patterns matched nothing.
+    if not manifests:
+        patterns = " and ".join(f"'{g}'" for g in MANIFEST_GLOBS)
+        print(
+            f"check_requires: FAIL — zero manifest files matched by glob pattern(s) {patterns}",
+            file=sys.stderr,
+        )
+        return 2
+
+    findings = find_violations(known, manifests)
     for finding in findings:
         print(finding)
+
     if findings:
         print(
             f"\n{len(findings)} dangling/invalid requires entry(ies) — a dependency "
@@ -83,6 +123,12 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
+
+    # Success: print a single greppable summary line.
+    requires_count = count_requires_entries(manifests)
+    print(
+        f"check_requires: inspected {len(manifests)} manifest file(s) with {requires_count} requires entry(ies)"
+    )
     return 0
 
 
