@@ -1832,7 +1832,7 @@ def install_mcp(item: Item, scope: str) -> str:
     )
 
     subprocess.run(cmd, check=True)
-    record_install(item.kind, item.name, None)
+    record_install(item.kind, item.name, None, scope=scope)
 
     msg = meta.get("post_install_message")
     if msg:
@@ -2400,12 +2400,13 @@ def install_standalone_hook(item: Item, scope: str) -> str:
     )
 
     settings_file.write_text(json.dumps(settings, indent=2) + "\n")
-    record_install(item.kind, item.name, None)
-    record_artifact(item.kind, item.name, {"type": "symlink", "path": str(dest)})
+    record_install(item.kind, item.name, None, scope=scope)
+    record_artifact(item.kind, item.name, {"type": "symlink", "path": str(dest)}, scope=scope)
     record_artifact(
         item.kind,
         item.name,
         {"type": "settings_hook", "file": str(settings_file), "command": cmd_str},
+        scope=scope,
     )
     return f"installed hook {item.name} → {dest} ({event}/{matcher or '*'})"
 
@@ -2918,27 +2919,18 @@ def install_item(item: Item, target_root: Path) -> str:
 # ---------------------- update ----------------------
 
 
-def update_item(kind: str, name: str, install_record: dict, all_items: list[Item]) -> str:
-    """Update a single installed item. Looks up live meta from repo.
+def update_item(kind: str, name: str, all_items: list[Item]) -> str:
+    """Update one scope-less installed item (a plugin or a tool) from live repo metadata.
+
+    Scope-tracked kinds are refreshed by ``refresh_scoped_record`` instead.
 
     Args:
-        kind: Item category — ``'mcps'``, ``'plugins'``, ``'agents'``, ``'skills'``, or ``'tools'``.
+        kind: Item category — ``'plugins'`` or ``'tools'``.
         name: Item name within its kind.
-        install_record: The entry from the install state file for this item.
         all_items: Full list of available items from the current repo.
     """
     # Find matching item in current repo
     match = next((it for it in all_items if it.kind == kind and it.name == name), None)
-
-    if kind == "mcps":
-        if match is None:
-            return f"  ✗ mcps/{name}: not found in repo (removed?)"
-        # Re-install at user scope by default (mcps don't track scope in state)
-        try:
-            msg = install_mcp(match, "user")
-            return f"  ✓ refreshed {msg}"
-        except subprocess.CalledProcessError as e:
-            return f"  ✗ mcps/{name}: claude mcp add failed ({e.returncode})"
 
     if kind == "plugins":
         if match is None:
@@ -2983,56 +2975,28 @@ def update_item(kind: str, name: str, install_record: dict, all_items: list[Item
         except subprocess.CalledProcessError as e:
             return f"  ✗ tools/{name}: install command failed ({e.returncode})"
 
-    if kind == "hooks":
-        if match is None:
-            return f"  ✗ hooks/{name}: not found in repo (removed?)"
-        # Re-install at user scope by default (hooks don't track scope in state)
-        return f"  ✓ refreshed {install_standalone_hook(match, 'user')}"
+    return f"  ✗ {kind}/{name}: unknown kind"
 
-    if kind == "instructions":
-        if match is None:
-            return f"  ✗ instructions/{name}: not found in repo (removed?)"
-        # No symlink — re-inject the snippet. Infer scope from the recorded
-        # CLAUDE.md target path (falls back to user).
-        recorded = install_record.get("target") or ""
-        scope = "project" if recorded.startswith(str(Path.cwd())) else "user"
-        md = inject_claude_md(match, scope)
-        return f"  ✓ refreshed instructions/{name}" + (f"\n    ↳ {md}" if md else "")
 
-    # agents / skills — re-create symlink at recorded target
-    target = install_record.get("target")
-    if not target:
-        return f"  ✗ {kind}/{name}: missing target path in state"
-    target_path = Path(target)
+def refresh_scoped_record(record: dict, all_items: list[Item]) -> str:
+    """Reinstall one scope-tracked record through the guarded install path.
+
+    Args:
+        record: One flattened scope record from ``scoped_records``.
+        all_items: Full list of available items from the current repo.
+
+    Returns:
+        A one-line refresh report.
+    """
+    kind, name, scope = record["kind"], record["name"], record["scope"]
+    match = next((it for it in all_items if it.kind == kind and it.name == name), None)
     if match is None:
         return f"  ✗ {kind}/{name}: not found in repo (removed?)"
-
-    src = match.src.parent if kind == "skills" else match.src
-
-    target_path.parent.mkdir(parents=True, exist_ok=True)
-    if target_path.is_symlink() or target_path.exists():
-        if target_path.is_symlink() or target_path.is_file():
-            target_path.unlink()
-        else:
-            shutil.rmtree(target_path)
-    os.symlink(src, target_path)
-    # Infer scope from target path for record and injection
-    scope = "user" if target_path.is_relative_to(USER_CLAUDE_DIR) else "project"
-    # Refresh timestamp
-    record_install(kind, name, target_path, scope=scope)
-
-    extras = []
-    md = inject_claude_md(match, scope)
-    if md:
-        extras.append(md)
-    hk = inject_hook(match, scope)
-    if hk:
-        extras.append(hk)
-
-    msg = f"  ✓ refreshed {kind}/{name} ({target_path})"
-    for extra in extras:
-        msg += f"\n    ↳ {extra}"
-    return msg
+    target_root = USER_CLAUDE_DIR if scope == "user" else Path.cwd() / ".claude"
+    try:
+        return f"  ✓ refreshed ({scope}) {install_item(match, target_root)}"
+    except subprocess.CalledProcessError as e:
+        return f"  ✗ {kind}/{name}: command failed ({e.returncode})"
 
 
 def run_update_all() -> None:
@@ -3045,7 +3009,12 @@ def run_update_all() -> None:
     print(f"Updating {len(installs)} installed item(s)...\n")
     for _, rec in sorted(installs.items()):
         try:
-            msg = update_item(rec["kind"], rec["name"], rec, all_items)
+            if rec["kind"] in ("plugins", "tools"):
+                msg = update_item(rec["kind"], rec["name"], all_items)
+            else:
+                msg = "\n".join(
+                    refresh_scoped_record(record, all_items) for record in scoped_records(rec)
+                )
             print(msg)
         except subprocess.CalledProcessError as e:
             print(
