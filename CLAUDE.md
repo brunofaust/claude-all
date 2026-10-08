@@ -351,6 +351,9 @@ Standalone snippet naming: `src/claude_all/instructions/<name>/claude_md.md` —
 whose ONLY effect is injecting that block (no agent/skill/hook to install). Use it
 for main-session dispatch rules that target built-in agents (e.g. routing broad
 searches to `Explore`). Install with `claude-all --all --user <name>`.
+A standalone snippet that names another resource in a code span (e.g. ``load `mock-drift-sweep` ``)
+must list it in `instructions/<name>/claude-all.json` `requires`, so installing the snippet alone
+pulls the resource in. The `check-requires` prek hook enforces this.
 
 ### Rules
 
