@@ -59,7 +59,8 @@ When the chain reaches a satisfying root cause (usually 3-5 Whys), THEN proceed 
 
 ### Phase 2: Form hypotheses
 
-List 2-4 plausible causes, ordered by likelihood.
+List 2-4 plausible causes, ordered by likelihood: recent changes first, common patterns (off-by-one,
+race, timeout, None, config drift) before rare ones.
 
 ### Phase 3: Verify and diagnose
 
