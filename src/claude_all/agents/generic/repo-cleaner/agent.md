@@ -4,7 +4,7 @@ description: >-
   Remove untracked build/cache artifacts and empty directories after tracking, ignore-reference
   and confirmation checks. Never delete committed assets or lockfiles. Branch/worktree cleanup
   goes to git-cleanup.
-model: claude-haiku-4-5
+model: claude-haiku-5-5
 tools:
   - Bash
   - Read

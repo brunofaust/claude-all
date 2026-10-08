@@ -3,7 +3,7 @@ name: step-functions-tracer
 description: >-
   Trace Step Functions execution/state-machine history, failures, map branches and completion
   polling. Return failed state, verbatim cause and timeline. Read-only.
-model: claude-haiku-4-5
+model: claude-haiku-5-5
 tools:
   - Bash
 ---

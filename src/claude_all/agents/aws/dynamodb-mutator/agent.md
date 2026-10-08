@@ -4,7 +4,7 @@ description: >-
   Execute explicitly confirmed DynamoDB put/update/delete, batch or transactional writes,
   including lock resets. Preview exact key/table/region and capture BEFORE state. Production
   requires prod delete confirmed plus backup and justification.
-model: claude-sonnet-5
+model: claude-sonnet-5-5
 tools:
   - Bash
   - Read

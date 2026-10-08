@@ -4,7 +4,7 @@ description: >-
   Audit named files/subsystems for races, data loss, transaction/error-handling and boundary
   bugs. Require scope/hot spots/emphasis; report severity with file:line, never fix. Lint goes
   to code-quality, PR diffs to code-review, whole-repo scorecards to repo-audit.
-model: claude-sonnet-5
+model: claude-sonnet-5-5
 tools:
   - Bash
   - Read

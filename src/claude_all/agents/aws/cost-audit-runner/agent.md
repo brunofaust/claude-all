@@ -4,7 +4,7 @@ description: >-
   Find idle/orphaned AWS resources and waste across services. Return prioritized findings and
   unexecuted fix_commands; never mutate or fetch secret values. Spend totals, trends and
   forecasts go to cost-explorer.
-model: claude-sonnet-5
+model: claude-sonnet-5-5
 tools:
   - Bash
   - Read

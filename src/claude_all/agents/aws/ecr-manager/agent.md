@@ -3,7 +3,7 @@ name: ecr-manager
 description: >-
   Inspect ECR repositories, image tags, age and size; prune only with explicit delete confirmed
   or yes prune authorization.
-model: claude-haiku-4-5
+model: claude-haiku-5-5
 tools:
   - Bash
 ---

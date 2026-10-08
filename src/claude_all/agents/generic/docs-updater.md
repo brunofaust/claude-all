@@ -7,7 +7,7 @@ description: >-
   applies specific diffs after confirmation. Does not create or maintain a CHANGELOG.md — a
   hand-maintained changelog is a merge-conflict magnet across parallel PRs; release notes should
   come from Conventional Commits history instead.
-model: claude-sonnet-5
+model: claude-sonnet-5-5
 tools:
   - Bash
   - Read

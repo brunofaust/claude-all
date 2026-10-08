@@ -3,7 +3,7 @@ name: ecs-inspector
 description: >-
   Inspect ECS services, task definitions, tasks, images, environment key names and stopped
   reasons. Report desired/running counts; never register, update, run or stop tasks.
-model: claude-haiku-4-5
+model: claude-haiku-5-5
 tools:
   - Bash
 ---

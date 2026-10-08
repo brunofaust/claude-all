@@ -5,7 +5,7 @@ description: >-
   to async", "add type hints", "make this more Pythonic", "apply our style guide". Applies
   brunofaust-python-style conventions (PEP 695, asyncio.TaskGroup, strict typing). Proposes diffs for
   review — never auto-applies. For bugs use `debugger`; for new code just use main session.
-model: claude-sonnet-5
+model: claude-sonnet-5-5
 tools:
   - Bash
   - Read

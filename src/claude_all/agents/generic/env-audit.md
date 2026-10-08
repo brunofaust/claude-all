@@ -5,7 +5,7 @@ description: >-
   out of date in dev", "which lambdas need update", "is dev in sync", "deployment status". Compares
   Lambda last-modified vs git commits, checks Terraform drift, detects pending migrations. Read-only —
   no changes applied. Requires ENV and AWS_PROFILE before starting.
-model: claude-haiku-4-5
+model: claude-haiku-5-5
 tools:
   - Bash
   - Read

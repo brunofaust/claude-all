@@ -5,7 +5,7 @@ description: >-
   "find errors in these logs", "format this JSON log", "what happened in this log". Works on logs
   already in context (CloudWatch stdout, structlog JSON, container logs). For fetching from CloudWatch
   use `cloudwatch-inspector`.
-model: claude-haiku-4-5
+model: claude-haiku-5-5
 tools:
   - Bash
   - Read

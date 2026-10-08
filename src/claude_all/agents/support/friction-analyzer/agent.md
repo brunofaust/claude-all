@@ -4,7 +4,7 @@ description: >-
   Analyze coding-session friction and propose minimal preventive rules with verbatim redacted
   evidence. Read transcripts selectively, never dump raw JSONL. Read-only: do not edit hooks,
   instructions or configuration.
-model: claude-sonnet-5
+model: claude-sonnet-5-5
 tools:
   - Bash
   - Read

@@ -4,7 +4,7 @@ description: >-
   Review HTML/JSX/TSX, metadata, structured data, robots and sitemap source for SEO/GEO/AEO.
   Return severity and file:line evidence; never edit or fetch URLs. Live audits go to
   seo-runner.
-model: claude-sonnet-5
+model: claude-sonnet-5-5
 tools:
   - Read
   - Glob

@@ -4,7 +4,7 @@ description: >-
   Run frontend production builds: npm/pnpm/yarn build, Vite/Next/Astro/Nuxt, tsc -b,
   webpack/rollup/esbuild. Return output directory, bundle sizes and failures. Never start dev
   servers or edit source/config.
-model: claude-haiku-4-5
+model: claude-haiku-5-5
 tools:
   - Bash
   - Read

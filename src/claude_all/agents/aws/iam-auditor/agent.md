@@ -3,7 +3,7 @@ name: iam-auditor
 description: >-
   Inspect IAM roles/policies and simulate principal permissions. Return severity-tagged
   permission findings; never create, modify or delete IAM resources.
-model: claude-haiku-4-5
+model: claude-haiku-5-5
 tools:
   - Bash
 ---

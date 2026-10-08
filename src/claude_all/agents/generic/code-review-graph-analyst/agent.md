@@ -9,7 +9,7 @@ description: >-
   mutates code. Requires the code-review-graph MCP server registered and `code-review-graph build`
   already run once in the target repo; reports plainly if the graph is missing or stale rather than
   guessing.
-model: claude-haiku-4-5
+model: claude-haiku-5-5
 tools:
   - mcp__code-review-graph__build_or_update_graph_tool
   - mcp__code-review-graph__detect_changes_tool

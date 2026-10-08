@@ -4,7 +4,7 @@ description: >-
   Fetch running/stopped Docker or Compose logs and diagnose crashes, OOM and restart loops.
   Return redacted verbatim exceptions plus exit/restart evidence. Read-only; operations go to
   docker-runner, supplied logs to log-filter.
-model: claude-haiku-4-5
+model: claude-haiku-5-5
 tools:
   - Bash
   - Read

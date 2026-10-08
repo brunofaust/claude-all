@@ -4,7 +4,7 @@ description: >-
   Inspect Secrets Manager metadata and secret JSON key names. Return ARN/rotation/key names
   only; never expose secret values. For consumers needing values, provide a private point-of-use
   recipe. Read-only.
-model: claude-haiku-4-5
+model: claude-haiku-5-5
 tools:
   - Bash
 ---

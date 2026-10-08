@@ -4,7 +4,7 @@ description: >-
   Review Alembic migration safety, locks, rollback and divergent/duplicate revisions. Read-only
   introspection (heads/current/history); never modify or apply migrations. Return actionable
   BLOCK/WARN/INFO findings.
-model: claude-sonnet-5
+model: claude-sonnet-5-5
 tools:
   - Read
   - Glob

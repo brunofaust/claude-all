@@ -4,7 +4,7 @@ description: >-
   Run read-only queries, EXPLAIN and catalog inspection on any Postgres — local/Docker/
   Supabase/Neon and AWS RDS/Aurora. Resolve RDS IAM and Secrets Manager authentication
   without exposing passwords. Reject writes and side-effecting SQL.
-model: claude-haiku-4-5
+model: claude-haiku-5-5
 tools:
   - Bash
 ---

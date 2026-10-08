@@ -4,7 +4,7 @@ description: >-
   Audit live URLs with PageSpeed/Lighthouse, Observatory, W3C, metadata, robots/sitemap/llms.txt
   and headers. Report severity and failed checks without modifying the site. Source review goes
   to seo-reviewer.
-model: claude-haiku-4-5
+model: claude-haiku-5-5
 tools:
   - Bash
   - Read

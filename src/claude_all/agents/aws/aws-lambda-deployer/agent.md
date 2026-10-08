@@ -4,7 +4,7 @@ description: >-
   Build, deploy, invoke or inspect Lambda functions, including Makefile wrappers and smoke
   tests. Discover targets in the caller checkout. Config changes/deletion require explicit
   authorization; return deploy and invocation evidence.
-model: claude-haiku-4-5
+model: claude-haiku-5-5
 tools:
   - Bash
   - Read

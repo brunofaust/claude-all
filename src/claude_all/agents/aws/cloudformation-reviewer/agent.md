@@ -4,7 +4,7 @@ description: >-
   Review CloudFormation templates/change sets before deployment: security, IAM, cost and
   operational risks. Report severity and BLOCK/WARNING/APPROVE; do not edit or deploy. Execution
   goes to cloudformation-deployer.
-model: claude-sonnet-5
+model: claude-sonnet-5-5
 tools:
   - Bash
   - Read

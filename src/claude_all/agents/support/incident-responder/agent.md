@@ -4,7 +4,7 @@ description: >-
   Investigate cross-service alarms, growing DLQs and production/dev failures before ad-hoc
   probes. Coordinate specialist evidence into a UTC error timeline and mitigation
   recommendations. Destructive operations require explicit confirmation.
-model: claude-sonnet-5
+model: claude-sonnet-5-5
 tools:
   - Bash
   - Read

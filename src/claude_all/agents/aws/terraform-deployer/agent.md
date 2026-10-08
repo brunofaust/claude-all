@@ -4,7 +4,7 @@ description: >-
   Execute Terraform init/fmt/validate/plan/apply/destroy and reads (output/state/workspace),
   including Makefile wrappers. Show plan before apply; apply/destroy require explicit
   confirmation. Review code/plans with terraform-reviewer.
-model: claude-haiku-4-5
+model: claude-haiku-5-5
 tools:
   - Bash
   - Read

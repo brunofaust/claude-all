@@ -4,7 +4,7 @@ description: >-
   Run lint/type/quality checks and report verbatim findings. Use the project prek chain when
   configured. Never fix; snapshot content before/after hooks and always report [FILES MODIFIED
   BY THE GATE]. Fix requests go to lint-fixer.
-model: claude-haiku-4-5
+model: claude-haiku-5-5
 tools:
   - Bash
   - Read
