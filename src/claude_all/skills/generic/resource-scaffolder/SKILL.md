@@ -60,10 +60,10 @@ only the approved generic placeholders. Then `./claude-all --all --user <name>` 
 ## Conventions to honour (both targets)
 
 - **Description = router fuel.** Be explicit about WHEN to trigger AND when not; list real phrasings.
-- **Model strategy** (agents): `haiku` (claude-haiku-5-5) = mechanical read/run/report; `sonnet`
-  (claude-sonnet-5-5) = judgment (review, debug, refactor); `opus` (claude-opus-5-5) = hard multi-step
-  reasoning/design, used sparingly; `fable` (claude-fable-5-1) = only when explicitly requested — it
-  costs more than Opus. Don't put judgment work on Haiku.
+- **Model strategy** (agents) — write the full ID in `model:` (`tests/test_agent_models.py` enforces
+  it): `claude-haiku-5-5` = mechanical read/run/report; `claude-sonnet-5-5` = judgment (review, debug,
+  refactor); `claude-opus-5-5` = hard multi-step reasoning/design, used sparingly; `claude-fable-5-1` =
+  only when explicitly requested — it costs more than Opus. Don't put judgment work on Haiku.
 - **Generic + public-safe** — no real project/company/domain/ARN/secret names; scrub evidence snippets.
 - **Hooks fail safe** — guards block deliberately; utilities never break a turn.
 
