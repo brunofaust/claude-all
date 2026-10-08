@@ -45,7 +45,7 @@ Write into the repo's own `.claude/` (these are what session-history mining usua
   triggers, `disable-model-invocation`, `user-invocable`; add supporting files in the dir as needed).
   A user-invocable skill surfaces as the `/<name>` slash command.
 - **subagent** → `.claude/agents/<name>.md` (frontmatter: `name`, `description` with when-to/when-NOT,
-  `model` — haiku for mechanical, sonnet for judgment — and a focused `tools` list).
+  `model` per the model strategy below, and a focused `tools` list).
 - **hook** → a script in `.claude/hooks/<name>.py` + an entry merged into `.claude/settings.json`
   (`event`, `matcher`, `timeout`). Follow the two archetypes (guard → exit 2; utility → exit 0 + JSON
   `additionalContext`) — see the `hook-authoring` skill.
@@ -60,8 +60,10 @@ only the approved generic placeholders. Then `./claude-all --all --user <name>` 
 ## Conventions to honour (both targets)
 
 - **Description = router fuel.** Be explicit about WHEN to trigger AND when not; list real phrasings.
-- **Model strategy** (agents): Haiku = read/report/run mechanical; Sonnet = judgment (review, debug,
-  refactor). Don't put judgment work on Haiku.
+- **Model strategy** (agents): `haiku` (claude-haiku-5-5) = mechanical read/run/report; `sonnet`
+  (claude-sonnet-5-5) = judgment (review, debug, refactor); `opus` (claude-opus-5-5) = hard multi-step
+  reasoning/design, used sparingly; `fable` (claude-fable-5-1) = only when explicitly requested — it
+  costs more than Opus. Don't put judgment work on Haiku.
 - **Generic + public-safe** — no real project/company/domain/ARN/secret names; scrub evidence snippets.
 - **Hooks fail safe** — guards block deliberately; utilities never break a turn.
 

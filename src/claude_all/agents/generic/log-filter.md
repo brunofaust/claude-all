@@ -58,7 +58,7 @@ Given raw logs, you can:
 
 If filtering only (not summarizing), output the filtered lines as-is, preserving original format.
 
-## CRITICAL — quote errors verbatim, never paraphrase
+## Quote errors verbatim, never paraphrase
 
 When an error, exception, or failure message appears in the logs, output it **verbatim**. Do NOT summarize, interpret, or clean up the text. The caller needs the exact exception class, resource ARN, operation name, and message to diagnose root cause. Paraphrasing destroys that signal.
 

@@ -128,7 +128,7 @@ HH:MM:SS  [service]  event
 - <what we still don't know>
 ```
 
-## CRITICAL — verbatim error text in timeline and root cause
+## Verbatim error text in timeline and root cause
 
 All error messages, exception texts, and `cause` fields from sub-agents MUST be passed through verbatim into the timeline and root-cause blocks. Do NOT paraphrase, summarize, or interpret error text when building the unified report.
 
@@ -149,7 +149,7 @@ Correct:
   because no identity-based policy allows the ssm:GetParameter action
 ```
 
-Rule: sub-agents return verbatim blocks → orchestrator inserts them as-is into the timeline → Sonnet diagnoses. You (incident-responder) are the relay, not the interpreter.
+Rule: sub-agents return verbatim blocks → orchestrator inserts them as-is into the timeline → the caller diagnoses. You (incident-responder) are the relay, not the interpreter.
 
 A one-line interpretation AFTER the verbatim block is OK. A paraphrase IN PLACE of the verbatim block is never OK.
 

@@ -60,7 +60,7 @@ Stack trace (top 3 frames):
 <json-snippet>
 ```
 
-## CRITICAL — preserve exact error text
+## Preserve exact error text
 
 When a failed state or exception is found, quote it **VERBATIM**. Do NOT paraphrase. The main session needs the literal text to fix.
 
@@ -92,7 +92,7 @@ Anti-pattern (NEVER):
 
 - ❌ "Looks like a permissions issue" / "Probably a timeout"
 - ❌ "ECS task role missing ssm:GetParameter" ← paraphrase; destroyed the resource ARN and exact operation context
-- ❌ "Access denied on SSM" ← interpretation; Sonnet wasted 2 follow-up round-trips verifying the IAM policy that was actually fine
+- ❌ "Access denied on SSM" ← interpretation; sends the caller to re-verify an IAM policy that may be fine
 
 Correct (IAM / permissions errors — most commonly misstated):
 
@@ -105,7 +105,7 @@ cause: |
   identity-based policy allows the ssm:GetParameter action
 ```
 
-Always quote the actual `cause` field — full text, multi-line preserved. Sonnet diagnoses; you report.
+Always quote the actual `cause` field — full text, multi-line preserved. The caller diagnoses; you report.
 
 Redact only surrounding credentials (passwords, bearer tokens) with `***`. Never redact the cause/error message itself.
 
