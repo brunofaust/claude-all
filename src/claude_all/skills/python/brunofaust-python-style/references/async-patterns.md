@@ -495,7 +495,7 @@ Worker functions (the ones passed to `tg.create_task`) follow the `_name_do` suf
 
 ```python
 # Public orchestrator — creates the TaskGroup, distributes work
-async def process_items(items: Sequence[item_dtype], db: database_client) -> None:
+async def process_items(items: Sequence[Item], db: database_client) -> None:
     """Process all items in parallel with concurrency control."""
     parallel_semaphore = asyncio.Semaphore(10)
     async with asyncio.TaskGroup() as tg:
@@ -506,7 +506,7 @@ async def process_items(items: Sequence[item_dtype], db: database_client) -> Non
 # Private worker — does the actual work for a single item
 async def _process_item_do(
     parallel_semaphore: asyncio.Semaphore,
-    item: item_dtype,
+    item: Item,
     db: database_client,
 ) -> None:
     """Process a single item (worker function)."""
@@ -518,20 +518,20 @@ async def _process_item_do(
 
 ```python
 async def validate_items(
-    items: Sequence[item_dtype],
+    items: Sequence[Item],
     db: database_client,
     concurrency: int = 10,
-) -> list[item_dtype]:
+) -> list[Item]:
     """Validate items in parallel and return only valid ones."""
     parallel_semaphore = asyncio.Semaphore(concurrency)
-    tasks: list[asyncio.Task[item_dtype | None]] = []
+    tasks: list[asyncio.Task[Item | None]] = []
 
     async with asyncio.TaskGroup() as tg:
         for item in items:
             tasks.append(tg.create_task(_validate_item_do(parallel_semaphore, item, db)))
 
     # Collect results after TaskGroup completes (all tasks are done here)
-    valid_items: list[item_dtype] = []
+    valid_items: list[Item] = []
     for task in tasks:
         result = task.result()
         if result is not None:
@@ -551,7 +551,7 @@ Use the `except*` syntax to handle them gracefully:
 If you want the caller to decide how to handle failures:
 
 ```python
-async def process_batch_strict(items: Sequence[item_dtype]) -> None:
+async def process_batch_strict(items: Sequence[Item]) -> None:
     """Process batch — any failure cancels all tasks and raises."""
     async with asyncio.TaskGroup() as tg:
         for item in items:
@@ -614,7 +614,7 @@ from collections import defaultdict
 
 
 async def process_ordered_groups(
-    groups: Mapping[str, Sequence[item_dtype]],
+    groups: Mapping[str, Sequence[Item]],
     concurrency: int = 10,
 ) -> None:
     """
@@ -627,7 +627,7 @@ async def process_ordered_groups(
         groups: Mapping of group_id to ordered items.
         concurrency: Maximum concurrent groups.
     """
-    queues: dict[str, asyncio.Queue[item_dtype]] = defaultdict(lambda: asyncio.Queue())
+    queues: dict[str, asyncio.Queue[Item]] = defaultdict(lambda: asyncio.Queue())
 
     for group_id, items in groups.items():
         for item in items:
@@ -642,7 +642,7 @@ async def process_ordered_groups(
 async def _group_worker_do(
     semaphore: asyncio.Semaphore,
     group_id: str,
-    q: asyncio.Queue[item_dtype],
+    q: asyncio.Queue[Item],
 ) -> None:
     """Process items from a single group's queue sequentially."""
     async with semaphore:

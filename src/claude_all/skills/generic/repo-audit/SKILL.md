@@ -204,9 +204,9 @@ Where a cell is blank or no tool exists, **audit the boundary by reasoning + `gr
 | Complexity & size (3) | ruff `PLR0911/12/13/15`, fn ≤ 50 / file ≤ 800 | eslint `complexity`, `max-lines`, `max-depth`, `max-params` | `gocyclo`/`gocognit`/`funlen` (golangci-lint) | clippy `cognitive_complexity`, `too_many_arguments` |
 | Layering / direction (4) | `import-linter` contracts | `dependency-cruiser`, `eslint-plugin-boundaries`, Nx tags | `depguard`, `go-arch-lint`, `internal/` | crate/module boundaries, `clippy` |
 | Single-owner + banned-api (5) | ruff `banned-api` (TID251) | `eslint` `no-restricted-imports` | `depguard` | module privacy / `disallowed_methods` |
-| Typed contracts (6) | Pydantic / frozen dataclass | `zod` / `io-ts` at I/O edges | structs + validation | `serde` structs |
+| Typed contracts (6) | Pydantic everywhere (no dataclass/TypedDict) | `zod` / `io-ts` at I/O edges | structs + validation | `serde` structs |
 | No silent swallow (7) | ruff `BLE001`; ban `suppress(Exception)` | eslint `no-empty`, `no-floating-promises` | `errcheck`; wrap with `%w` | no `unwrap`/`expect` in prod; `Result` + `?` |
-| Docs (8) | `interrogate` | TSDoc/JSDoc coverage | `godoc` on exported | `rustdoc` on `pub` (`missing_docs`) |
+| Docs (8) | docstring size budget (`docstring_budget.py`), docs optional | TSDoc/JSDoc coverage | `godoc` on exported | `rustdoc` on `pub` (`missing_docs`) |
 | Dead code / visibility (9) | `vulture`; `__all__` over `_` | `knip` / `ts-prune` | `staticcheck U1000` | clippy `dead_code`; minimal `pub` |
 | Tests + coverage (10) | `pytest --cov` | `vitest`/`jest --coverage` + testing-library | `go test -cover` | `cargo test` / `tarpaulin` |
 | Config discipline (11) | Settings singleton; no scattered `os.getenv` | central config; no scattered `process.env` | config pkg; no scattered `os.Getenv` | config crate; no scattered `env!` |

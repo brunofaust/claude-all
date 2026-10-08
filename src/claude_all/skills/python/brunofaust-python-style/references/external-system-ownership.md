@@ -137,6 +137,26 @@ store surface ("everything that reads the `orders` table") rather than by diff.
 "src/*/core/aws/**" = ["TID251"]      # the boto3/aiobotocore owners live here
 ```
 
+## Shared documents in stores without conditional writes need a distributed lock
+
+Some stores replace the whole value on write and have **no conditional put / ETag**, e.g. AWS
+SSM Parameter Store `put_parameter`. Every writer is then a read-modify-write, and two writers
+that both read before either writes silently destroy each other's change. In the incident, a
+write landing 47 ms after another erased a customer's API token it never targeted.
+
+- **An `asyncio.Lock` is not a fix.** Lambda and ECS scale across processes and containers.
+  The lock must be **distributed**, e.g. a DynamoDB conditional-put lock keyed `secrets#{org_id}`
+  with a TTL, a bounded retry, then **raise**. Release it in `finally`.
+- **Fail closed.** If the lock table is not configured, a write raises. It never runs unlocked.
+- **Keep a detector, not a second mutex.** Version-check each write and log
+  `clobbered_concurrent_write` at **error**. With the lock in place it should never fire.
+- The owner module is the **only** writer of that document (a checker can enforce single
+  ownership). Before you "fix" contention by splitting into one parameter per entity, check
+  service quotas: SSM allows 10,000 standard parameters per account and region, and every extra
+  parameter is another KMS decrypt.
+- Never write credentials into a transit layer (queues, workflow inputs, DynamoDB items). Fetch
+  them from the secret store at the point of use.
+
 ## Semantic exceptions — own the SDK's error type too
 
 Owning the SDK isn't only about the *client*; own its *exceptions*. A `core/aws` wrapper catches the

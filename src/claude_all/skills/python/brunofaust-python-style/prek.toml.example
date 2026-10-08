@@ -228,7 +228,7 @@ id = "text-unicode-replacement-char"
 name = "🐍 python · No U+FFFD replacement char"
 
 
-# ⚠️ language_version MUST be pinned per-hook on bandit / vulture / interrogate.
+# ⚠️ language_version MUST be pinned per-hook on bandit / vulture.
 # They parse with the interpreter's own `ast`, so on an older interpreter they
 # silently SKIP files they cannot parse and still exit 0 — a vacuous pass. A
 # repo-level `default_language_version` does NOT reach a hook's isolated env.
@@ -255,18 +255,6 @@ rev = "v2.14"
 [[repos.hooks]]
 id = "vulture"
 name = "🐍 python · Dead code"
-language_version = "python3.12"
-
-
-[[repos]]
-repo = "https://github.com/econchick/interrogate"
-rev = "1.7.0"
-
-# Docstring COVERAGE only — it cannot tell a real docstring from a restatement of
-# the function name. Pair with review; don't read 100% as "documented".
-[[repos.hooks]]
-id = "interrogate"
-name = "🐍 python · Docstring coverage"
 language_version = "python3.12"
 
 
@@ -384,6 +372,16 @@ language = "system"
 types_or = ["python"]
 pass_filenames = false
 always_run = true
+language_version = "python3.12"
+
+[[repos.hooks]]
+id = "docstring-budget"
+name = "📝 docs · Docstring/comment size budget (optional, bounded)"
+entry = "uv run python scripts/docstring_budget.py"
+language = "system"
+types = ["python"]
+pass_filenames = true
+exclude = "^alembic/versions/"
 language_version = "python3.12"
 
 [[repos.hooks]]

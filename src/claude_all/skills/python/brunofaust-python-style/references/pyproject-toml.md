@@ -46,7 +46,6 @@ high-value subset and record the count so the next person does not re-enable it.
 | `BLE` | flake8-blind-exception: BLE001 = no bare `except Exception` |
 | `C4` | flake8-comprehensions |
 | `C90` | mccabe cyclomatic complexity (cap in `lint.mccabe`) |
-| `D` | pydocstyle — presence, structural syntax, formatting |
 | `E` / `W` / `F` / `I` | pycodestyle, pyflakes, isort |
 | `RUF` | ruff-specific rules |
 | `S` | flake8-bandit (security) |
@@ -58,7 +57,7 @@ high-value subset and record the count so the next person does not re-enable it.
 
 | Rejected | Measured | Keep instead |
 | --- | --- | --- |
-| `DOC` (pydoclint) | DOC501/DOC502 **cannot trace exceptions through function calls: 196 false positives.** The `D` rules already enforce presence, structure, and Google convention. | nothing — `D` covers it |
+| `D` (pydocstyle) / `DOC` (pydoclint) | Docstrings are optional and format-free (they are read mostly by models, see `docstrings.md`). `D` would demand presence and Google sections; DOC501/DOC502 also produced 196 false positives. | `checkers/docstring_budget.py` — size budget only |
 | blanket `PLR` | The full group lights up **~346 style findings** (PLR2004 magic-value, PLR6301 no-self-use, PLR0914 too-many-locals) that are explicitly unwanted. | the COMPLEXITY caps only: `PLR0911`, `PLR0912`, `PLR0913`, `PLR0915` |
 | umbrella `TRY` (tryceratops) | `TRY003` (long inline exception messages) is idiomatic here and lights up **~185 findings**; `TRY300` (move-to-else-block) is low-value stylistic churn (**~30**). | the high-value subset: `TRY002`, `TRY004`, `TRY201` (+ `TRY301`, `TRY400`) |
 
@@ -70,9 +69,8 @@ lint.select = [
   "BLE",     # flake8-blind-exception: BLE001 = no bare `except Exception`
   "C4",      # flake8-comprehensions
   "C90",     # mccabe cyclomatic complexity (cap in lint.mccabe below)
-  "D",       # pydocstyle (checks presence, structural syntax, formatting)
-  # DOC (pydoclint) NOT selected: DOC501/DOC502 can't trace exceptions through function
-  # calls (196 false positives). D-rules already enforce presence, structure, and Google convention.
+  # D / DOC NOT selected: docstrings are optional; size budgets live in
+  # [tool.docstring-budget] (checkers/docstring_budget.py).
   "E",       # pycodestyle errors
   "F",       # pyflakes
   "I",       # isort
@@ -99,8 +97,6 @@ lint.select = [
   "W",       # pycodestyle warnings
 ]
 lint.ignore = [
-  "D105",   # Missing docstring in magic method (e.g. __str__)
-  "D107",   # Missing docstring in __init__ (document the class instead)
   "E501",   # line length handled by formatter
 ]
 lint.isort.known-first-party = [ "myapp" ]
@@ -178,7 +174,7 @@ lint.per-file-ignores."scripts/**" = [ "D301", "T201", "TID251" ]
 # Tests are LINTED (see the exclude note above) — only the genuinely test-only rules relax.
 # S105/S106: hardcoded dummy credentials are fine in tests.
 # TID251: test files may import raw SDKs to mock connector internals.
-lint.per-file-ignores."tests/**" = [ "D", "S105", "S106", "TID251" ]
+lint.per-file-ignores."tests/**" = [ "S105", "S106", "TID251" ]
 ```
 
 Every per-file-ignore carries a comment naming *why that path owns that exemption*. An exemption
@@ -244,21 +240,19 @@ paths = [ "src/myapp" ]
 min_confidence = 80
 ```
 
-## `[tool.interrogate]`
+## `[tool.docstring-budget]`
+
+Docstrings and comments are optional; when present they are size-bounded. No coverage floor
+(`interrogate` is not used). Keys and defaults: [`docstrings.md`](docstrings.md#size-budget-enforced).
 
 ```toml
-[tool.interrogate]
-# 100 is the FLOOR, not an aspiration. A percentage floor below 100 cannot say
-# WHICH missing docstring is acceptable, so the gap silently fills with whatever
-# was written last — the number drifts down to whatever today's code happens to
-# score. Carve out the genuinely-noise cases by NAME instead, so each exemption is
-# a decision someone made rather than slack in a percentage.
-fail-under = 100
-ignore-init-module = true          # a re-export-only __init__.py documents nothing
-ignore-magic = true                # __repr__ / __eq__ — the dunder IS the contract
-ignore-setters = true              # the property's getter carries the docstring
-ignore-overloaded-functions = true # @overload stubs; the implementation documents it
-exclude = [ "__init__.py", "tests", ".venv", "conftest.py", "alembic" ]
+[tool.docstring-budget]
+function.docstring_max_chars = 150
+function.docstring_code_ratio = 1.0  # never longer than the code it documents
+function.comments_max_chars = 150
+function.comments_code_ratio = 0.5
+module.docstring_max_chars = 500
+# class.* and method.* take the same four keys
 ```
 
 ## `[tool.importlinter]` — dependency direction
@@ -317,10 +311,30 @@ Run with:
 uv run ruff check --fix .  # Lint and auto-fix
 uv run ruff format .       # Format code
 uv run mypy .              # Type check
-uv run interrogate -c pyproject.toml .  # Docstring coverage (fail-under = 100)
+uv run python scripts/docstring_budget.py src  # Docstring/comment size budget
 uv run lint-imports         # Architectural dependency direction
 uv run vulture              # Dead code
 ```
+
+## Dependency groups and lockfile upgrades
+
+- **One dependency group per deploy unit** (one per Lambda ZIP, ECS image, Dockerfile), and
+  each image installs exactly one: `uv sync --locked --group lambda-worker`. Never install
+  `--group a --group b` on one image, and never `uv pip install <pkg>` in a Dockerfile, Makefile
+  or build script. Out-of-pyproject installs are where image drift comes from. If a build fails
+  on a missing package, add it to **that unit's group**, not to base `[project].dependencies`.
+- **A dependency sweep has two halves.** `uv lock` re-resolves only what an edited constraint
+  forces, so **transitive** pins in `uv.lock` (which are what actually ships) do not move. Move
+  them with `uv lock --upgrade-package <name>` (selective; it respects intentional holds) or
+  `uv lock --upgrade` (moves held packages too). In the incident, bumping 18 declared packages
+  left **40 stale** transitive ones, written off as "not ours". A transitive pin in our lockfile
+  is ours.
+- **Close the loop with `uv pip list --outdated`** on the merged result. Don't measure a sweep
+  by how many lines `pyproject.toml` changed. Whatever remains should be upstream caps (e.g. a
+  library pinning its own core exactly); list those so the next sweep doesn't retry them.
+- **A hold that exists only in someone's head is not a hold.** If a package must stay put, give
+  it an explicit constraint with a comment. The resolver will happily move vendored ABIs and
+  agent frameworks on a blanket `--upgrade`.
 
 ## Checker exception config — `[tool.*]` / hook flags
 
@@ -398,7 +412,7 @@ entry = "python scripts/flat_test_mirror.py --root tests/unit src/"
 entry = "python scripts/all_contract.py --package myapp src/"
 ```
 
-### `model_contract.py` — config symbol + two `(path, name)` allowlists
+### `model_contract.py` — config symbol + one `(path, name)` allowlist
 
 ```toml
 [[repos]]
@@ -409,10 +423,8 @@ hooks = [{
   # --config-symbol: the shared ConfigDict every model_config must START FROM
   #   (`PYDANTIC_CONFIG | ConfigDict(...)`). A bare ConfigDict(...) silently drops
   #   extra="forbid"/strict=True, so `pydantic-config` flags it.
-  # --allow-dataclass PATHSUFFIX=ClassName (repeatable): a @dataclass survivor with
-  #   a PROVEN structural reason — holds a live object / DI container / a
-  #   TYPE_CHECKING-only import / a `dataclasses.replace()` target. `(path, name)`
-  #   keyed, so it can't leak to another class of the same name elsewhere.
+  # no-dataclass has NO allowlist: live objects go in a model with
+  #   arbitrary_types_allowed=True (see data-modeling.md).
   # --allow-private PATHSUFFIX=attr: a `_name` that is public-despite-underscore
   #   (e.g. SQLAlchemy Row's `_mapping`), likewise `(path, attr)` keyed.
   # verbatim-strip's field-name pattern
@@ -420,8 +432,6 @@ hooks = [{
   #   is built in — set str_strip_whitespace=False on the model, don't widen it.
   entry = """python scripts/model_contract.py \
     --config-symbol PYDANTIC_CONFIG \
-    --allow-dataclass core/container.py=AppContainer \
-    --allow-dataclass core/typing_shim.py=VendorStub \
     --allow-private core/db/row.py=_mapping \
     src/""",
   language = "system",
@@ -436,11 +446,9 @@ Read each allowlist entry as `(path suffix, name)` + a REQUIRED reason:
 
 | Flag | `(path suffix, name)` | Required reason (inline comment) |
 | --- | --- | --- |
-| `--allow-dataclass` | `(core/container.py, AppContainer)` | wires live singletons; a Pydantic model would validate the DI graph on every access |
-| `--allow-dataclass` | `(core/typing_shim.py, VendorStub)` | `TYPE_CHECKING`-only shim for an untyped vendor class — never instantiated at runtime |
 | `--allow-private` | `(core/db/row.py, _mapping)` | SQLAlchemy's documented public accessor that happens to be underscore-prefixed |
 
-`no-alias`, `no-dataclass` (beyond the allowlist), `barrel-init`,
+`no-alias`, `no-dataclass`, `barrel-init`,
 `json-parse-then-validate`, and cross-object `private-access` (beyond the
 allowlist) have **no** escape hatch — they are always wrong. If one of the two
 `--allow-*` entries above ever matches no code (the class was deleted, the attr

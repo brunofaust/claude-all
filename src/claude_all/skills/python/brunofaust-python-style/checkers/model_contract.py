@@ -53,10 +53,11 @@ Each rule below has a production incident behind it. None of them is style.
                     renamed vendor key fails LOUD at the parse site instead of
                     arriving as a default.
   no-dataclass      A ``@dataclass`` (or ``@dataclasses.dataclass``). A dataclass
-                    validates nothing — prefer a Pydantic model. Survivors are
-                    ALLOWLISTED with ``--allow-dataclass`` for a proven structural
-                    reason (holds a live non-serializable object / DI container /
-                    TYPE_CHECKING-only import / target of ``dataclasses.replace()``).
+                    validates nothing — use a Pydantic model. There is NO
+                    allowlist: a live object goes in a model with
+                    ``arbitrary_types_allowed=True`` (an isinstance check), a
+                    Protocol field is ``@runtime_checkable``, and a changed copy is
+                    ``type(m).model_validate({**dict(m), **changes})``.
   private-access    A ``_name`` reached ACROSS objects (``store._conn``,
                     ``connector._client``). The leading underscore IS the contract
                     ("may change without notice"), so an external caller depending
@@ -103,8 +104,7 @@ USAGE
     python checkers/model_contract.py src/
     python checkers/model_contract.py --select json-parse-then-validate,no-alias src/
     python checkers/model_contract.py --config-symbol MY_CONFIG \\
-        --model-base BaseModel --model-base RootModel \\
-        --allow-dataclass core/di.py=Container src/
+        --model-base BaseModel --model-base RootModel src/
 
     # regression-only ratchet — the baseline lives in baseline_gate.py, not here
     baseline_gate.py --baseline model_baseline.txt -- \\
@@ -222,7 +222,6 @@ class Options(NamedTuple):
     model_bases: frozenset[str]
     config_symbol: str
     verbatim_pattern: re.Pattern[str]
-    dataclass_allow: tuple[tuple[str, str], ...]
     verbatim_allow: tuple[tuple[str, str], ...]
     private_allow: tuple[tuple[str, str], ...]
     private_attr_allow: frozenset[str]
@@ -640,14 +639,12 @@ class _Visitor(ast.NodeVisitor):
         qual = self._qual()
 
         for decorator in node.decorator_list:
-            if is_dataclass_decorator(decorator) and not allowlisted(
-                self.path, qual, self.opts.dataclass_allow
-            ):
+            if is_dataclass_decorator(decorator):
                 self._add(
                     "no-dataclass",
                     qual,
-                    "@dataclass validates nothing — use a Pydantic model, or allowlist it "
-                    "with --allow-dataclass for a proven structural reason",
+                    "@dataclass validates nothing — use a Pydantic model (live objects: "
+                    "arbitrary_types_allowed=True)",
                 )
 
         if is_model_class(node, self.opts.model_bases):
@@ -945,7 +942,6 @@ def build_options(args: argparse.Namespace, parser: argparse.ArgumentParser) -> 
         model_bases=frozenset(args.model_base) if args.model_base else DEFAULT_MODEL_BASES,
         config_symbol=args.config_symbol,
         verbatim_pattern=re.compile(args.verbatim_pattern),
-        dataclass_allow=parse_allow(args.allow_dataclass, parser, "--allow-dataclass"),
         verbatim_allow=parse_allow(args.allow_verbatim, parser, "--allow-verbatim"),
         private_allow=parse_allow(args.allow_private, parser, "--allow-private"),
         private_attr_allow=(
@@ -1001,12 +997,6 @@ def main(argv: list[str] | None = None) -> int:
         default=DEFAULT_VERBATIM_PATTERN,
         metavar="REGEX",
         help="field-name pattern for verbatim-content fields (default: content/body/diff/...)",
-    )
-    parser.add_argument(
-        "--allow-dataclass",
-        action="append",
-        metavar="PATHSUFFIX=Class",
-        help="exempt a @dataclass at (path suffix, class) — repeatable; proven reason",
     )
     parser.add_argument(
         "--allow-verbatim",

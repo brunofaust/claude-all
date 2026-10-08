@@ -29,15 +29,15 @@ result: str | int = 0
 async def get_path(layer: Literal["raw", "curated"]) -> str: ...
 
 
-# TypedDict for structured dictionaries
-class entity_info_dtype(TypedDict):
-    """Entity metadata for processing."""
+# Structured data is a Pydantic model, never a TypedDict (banned — validates nothing)
+class EntityInfo(BaseModel):
+    model_config = PYDANTIC_CONFIG | ConfigDict(frozen=True)
 
-    bucket: str
-    source: str
-    schema: str
-    table: str
-    customer: NotRequired[str]
+    bucket: RequiredText
+    source: RequiredText
+    schema_name: RequiredText
+    table: RequiredText
+    customer: OptionalText = None
 
 
 # Overloads for polymorphic return types
@@ -46,7 +46,7 @@ async def get_items(
     self,
     bucket: str,
     include_versions: Literal[False] = False,
-) -> Sequence[item_dtype]: ...
+) -> Sequence[Item]: ...
 
 
 @overload
@@ -54,14 +54,14 @@ async def get_items(
     self,
     bucket: str,
     include_versions: Literal[True] = True,
-) -> Sequence[item_version_dtype]: ...
+) -> Sequence[ItemVersion]: ...
 
 
 async def get_items(
     self,
     bucket: str,
     include_versions: bool = False,
-) -> Sequence[item_dtype] | Sequence[item_version_dtype]: ...
+) -> Sequence[Item] | Sequence[ItemVersion]: ...
 
 
 # TYPE_CHECKING guard — still needed for runtime type swapping
@@ -176,9 +176,9 @@ class on_progress(Protocol):
 
 # Usage in function signatures
 async def process_batch(
-    items: Sequence[item_dtype],
+    items: Sequence[Item],
     on_progress: ProgressCallback | None = None,
-) -> Sequence[result_dtype]:
+) -> Sequence[ProcessResult]:
     """Process items with optional progress callback."""
     for i, item in enumerate(items):
         if on_progress:
@@ -259,8 +259,35 @@ class Stack(Generic[T]):  # legacy equivalent of `class Stack[T]`
 
 #### Naming for Types
 
-- TypedDict names: `snake_case_dtype` suffix (e.g., `entity_info_dtype`, `keys_dtype`)
+- Model names: `PascalCase` (e.g., `EntityInfo`, `OrderRow`). `TypedDict` is banned, see [data-modeling.md](data-modeling.md)
 - Protocol names: `snake_case` matching the class convention (e.g., `loadable_client`, `cacheable`)
 - Type aliases (PEP 695 `type` statement): `PascalCase` (e.g., `type EntityId = str`, `type AsyncHandler = ...`)
 - Type variables: declared inline, PEP 695 — `def func[T]()`, `class Foo[T]:`, `async def run[**P, T]()`
 - Type variables (legacy, in pre-3.12 code you read): `T = TypeVar("T")`, `P = ParamSpec("P")`
+
+#### Constrained id aliases — zero is not an identifier
+
+Every numeric `*_id` uses **one shared alias**. Never use a bare `int`, and never repeat
+`Field(gt=0)` at each site:
+
+```python
+# myapp/core/type_utils.py — the one owner
+type PositiveId = Annotated[int, Field(gt=0)]
+type OptionalPositiveId = PositiveId | None  # absence is spelled ONLY as None
+
+
+class TicketRow(BaseModel):
+    model_config = PYDANTIC_CONFIG
+
+    org_id: PositiveId
+    parent_id: OptionalPositiveId = None
+    linked_ids: list[PositiveId]  # collections take the element type
+```
+
+`SERIAL`/`IDENTITY` columns start at 1, so a `0` or a negative id can only come from an `or 0`
+fallback, an unset default, or a column the query forgot to project. That is the org-0 incident
+([error-handling.md](error-handling.md#no-identity-or-falsy-literal-fallbacks)). `gt` is a
+constraint, not a coercion, so it also holds under a lax request config: a request DTO answers
+`0` with a 422. **Never widen it back.** A required id that defaults to `0` is the same bug in
+Pydantic clothing. If `0` is a live "none" sentinel somewhere, that is a naming bug. Track it as
+the single named exception and model the sentinel as `None`.

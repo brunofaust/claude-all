@@ -72,8 +72,12 @@ def main() -> int:
                     "strict type hints (Literal, @overload) — TypedDict and typing.cast "
                     "are BANNED: a TypedDict validates nothing at runtime, so "
                     "cast(row_dtype, dict(row)) is a no-op that only pretends to type. "
-                    "Every payload crossing a boundary is a Pydantic model with "
-                    'extra="forbid" — and when a gate fires, fix the contract, never '
+                    "ALL structured data is a Pydantic model with "
+                    'extra="forbid", validated where it is created — @dataclass is '
+                    "banned too (live objects: arbitrary_types_allowed=True; changed "
+                    "copies: model_validate, never model_copy(update=...)). Docstrings "
+                    "are optional and size-bounded, never Args:/Returns: boilerplate. "
+                    "When a gate fires, fix the contract, never "
                     'widen the gate (never relax to extra="ignore", never add a '
                     '"safe-looking" default); '
                     "structured logging via structlog; "

@@ -244,7 +244,7 @@ because their absence caused real incidents, not for tidiness:
 
 - Still Pydantic at every boundary, `extra="forbid"`, no masking defaults — a
   model is a *present* need (untrusted input), not speculation. → `data-modeling.md`
-- Still full type hints, docstrings, no silent except. Minimal ≠ terse-and-cryptic.
+- Still full type hints, no silent except. Minimal ≠ terse-and-cryptic.
 - Still one owner class per external system — that owner carries real translation
   logic; it is not a pass-through. → `external-system-ownership.md`
 

@@ -68,9 +68,9 @@ class DataTransformer(DataPipeline):
     """Handles transformation of data between layers."""
 
     _bucket: str
-    _keys: Sequence[full_keys_dtype]
-    _source_info: source_info_dtype
-    _target_info: target_info_dtype
+    _keys: Sequence[FullKeys]
+    _source_info: SourceInfo
+    _target_info: TargetInfo
 
     _metadata_columns: Sequence[str] = [
         "metadata_file_pk",

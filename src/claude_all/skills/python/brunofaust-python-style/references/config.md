@@ -424,6 +424,51 @@ DATABASE__PASSWORD=secret
 REDIS__URL=redis://redis.example.com:6379
 ```
 
+### Pattern 7b: Lazy settings groups — a required field only breaks its readers
+
+In a repo with many deploy units (Lambdas, ECS tasks, CLIs) sharing one `settings.py`, eager
+group construction is a trap. Adding **one** required (no-default) field to **one** group makes
+**every** unit raise `ValidationError` at start, including units that never read that group.
+Make each group a `functools.cached_property`, so a group is built and validated only the first
+time something reads it:
+
+```python
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", extra="forbid")
+
+    @cached_property
+    def db(self) -> DatabaseSettings:
+        return DatabaseSettings()
+
+    @cached_property
+    def queue(self) -> QueueSettings:
+        return QueueSettings()
+
+
+def get_settings() -> Settings:  # the ONE sanctioned process-global
+    ...
+```
+
+- **Never revert to eager construction** in `Settings.__init__` or with plain fields.
+- `cached_property` is the permanent exception to the ad-hoc-cache ban ([caching.md](caching.md)).
+- Read `get_settings().<group>.<FIELD>` **inside** the function that uses it, never at module top.
+- A wiring checker can parse the `cached_property` return annotations to work out which deploy
+  units read which group. Use that to scope the "required field must be set in this unit's
+  Terraform block" rule to the units that actually read it.
+
+**Every value comes through settings, even per-invocation ones.** `settings.py` is the only
+module allowed to touch the environment. A value that varies per run (an orchestrator's
+task-input env vars) is still a settings field, just one with **no default**, so a missing value
+raises instead of silently defaulting. Enforce this with an AST gate over the package that has no
+allowlist for `os.environ`/`os.getenv` outside `settings.py`.
+
+**No placeholder literals to satisfy a wiring check.** When a required field arrives only at
+runtime (e.g. container overrides injected at `RunTask`) and so never appears in the static task
+definition, do NOT put `"0"`/`""` in Terraform to make the "required ⇒ wired" check pass. That
+is a masking default one layer down: the same bug the Python rule exists to catch. Exempt the
+field in a per-field allowlist (`[tool.myapp.settings-wiring].allow`) with a **written reason**
+for each entry, and only ever shrink that list.
+
 ### Pattern 8: Secrets from Files
 
 For container environments, read secrets from mounted files.

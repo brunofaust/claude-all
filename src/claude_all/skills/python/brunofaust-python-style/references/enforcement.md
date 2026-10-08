@@ -7,7 +7,6 @@ Every rule in this skill has an enforcement mechanism. If a rule has no enforcem
 | Rule                                  | Enforced by                                                        | Bypass                                     |
 | ------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------ |
 | Pydantic on boundaries                | mypy strict + `pydantic_contract.py` (regression baseline) — the eight rules below. **Supersedes** `skill_enforcer.py` rule `no_dict_any_in_signatures`, which only saw *parameters*; the checker also covers **returns** and **model fields**. Retire the old rule rather than running both. | none — see the per-rule rows below |
-| Frozen dataclasses internally         | `skill_enforcer.py` rule `dataclass_must_be_frozen`                | `# skill-allow: mutable-dataclass` comment |
 | No raw boto3 outside core/aws/        | ruff `banned-api` (TID251)                                         | `[per-file-ignores]` in pyproject.toml     |
 | No raw httpx outside integrations/    | ruff `banned-api` (TID251)                                         | `[per-file-ignores]` in pyproject.toml     |
 | No silent except                      | ruff `BLE001`, `skill_enforcer.py` rule `no_debug_in_except`       | `# noqa: BLE001` with explanation          |
@@ -19,7 +18,7 @@ Every rule in this skill has an enforcement mechanism. If a rule has no enforcem
 | Docs updated with code                | `precommit_docs.sh` + GitHub Action                                | `skip-docs` label                          |
 | Resource CLAUDE.md updated            | `precommit_resource_docs.sh` + GitHub Action                       | none                                       |
 | Conventional commits                  | commitizen `commit-msg` hook                                       | none                                       |
-| Docstring coverage 100%               | `interrogate` (`fail-under = 100`)                                 | none — carve out the noise case explicitly (`ignore-magic`, `ignore-setters`, `ignore-overloaded-functions`, `ignore-init-module`), never lower the floor |
+| Docstrings optional, size-bounded     | `docstring_budget.py` (`[tool.docstring-budget]`)                  | none — shorten it or move the prose to a reference doc; never raise a budget to fit one symbol |
 | No bare `# type: ignore`              | `python-check-blanket-type-ignore`                                 | use specific code                          |
 | No bare `# noqa`                      | ruff `RUF100`                                                      | use specific code                          |
 | No `Any` from a typed return          | mypy strict `no-any-return`                                        | none — `Model.model_validate(...)` at the seam. **Not** `cast(...)`: that asserts a type instead of proving one and is itself banned by `pydantic_contract.py` rule `no-cast` |
@@ -73,7 +72,7 @@ written, the ruff ban stops it being merged.
 | `model_config` starts from the shared config | `model_contract.py` rule `pydantic-config` — `model_config` must be `PYDANTIC_CONFIG \| ConfigDict(...)`; a bare `ConfigDict(...)` silently drops `extra="forbid"`/`strict=True`. | `--config-symbol NAME` names the shared config — a project knob, not a per-model exemption |
 | Verbatim content field keeps whitespace | `model_contract.py` rule `verbatim-strip` — a field whose name matches `content\|body\|text\|diff\|snippet\|patch\|raw\|chunk_text\|output\|source\|html\|preview` on a model that does NOT set `str_strip_whitespace=False`; the shared strict config strips whitespace and silently corrupted RAG code chunks. | none — set `str_strip_whitespace=False` on the model; the field-name pattern is the trigger |
 | No pydantic field alias               | `model_contract.py` rule `no-alias` — bans `Field(alias=...)` / `populate_by_name`; dig the wire key out explicitly so a renamed key fails loud. | none |
-| No `@dataclass`                       | `model_contract.py` rule `no-dataclass` — a dataclass validates nothing; use Pydantic. | `--allow-dataclass PATHSUFFIX=ClassName` (repeatable) + a `dataclasses`-import exempt list. Each survivor carries a proven STRUCTURAL reason (holds a live object / DI container / TYPE_CHECKING import / `dataclasses.replace()` target); the `(path, name)` key can't drift to another class |
+| No `@dataclass`                       | `model_contract.py` rule `no-dataclass` — a dataclass validates nothing; use Pydantic. | none — live objects go in a model with `arbitrary_types_allowed=True` (an isinstance check); see data-modeling.md |
 | No cross-object private access        | `model_contract.py` rule `private-access` — a `_name` reached ACROSS objects (`other._conn`); `self._x`/`cls._x`/`super()._x`/`OwnClass._x` and dunders are allowed. | `--allow-private PATHSUFFIX=attr` + a documented-public-despite-underscore set (e.g. SQLAlchemy's `_mapping`); re-verified and `(path, attr)`-keyed so it can't drift silently |
 
 ### Positively-verified allowlists
@@ -378,6 +377,20 @@ is silently skipped and the run reports green. The tell:
 - Run the other stage too: `prek run --all-files --hook-stage pre-push`.
 - Prove the gate bites before believing it: introduce one violation, confirm the
   hook fails, revert, confirm it passes.
+
+### Every checker prints its denominator and fails closed on zero
+
+A green checker over 800 files looks exactly like a green checker over 0 files: a glob that
+stopped matching, a hook passed the wrong paths, a matcher that no longer recognises the pattern.
+So every checker:
+
+- prints `scanned=<files>`, plus a second denominator for the candidates it classified
+  (e.g. `candidates=314 flagged=53`);
+- exits **2** (error, not pass) when either count is zero;
+- is itself checked: a meta-gate fails when a `check_*.py` never prints `scanned=`, or when a
+  checker script exists that no hook in `prek.toml` runs. In the incident, the checker, its
+  baseline and its tests all landed, but the hook registration did not, and it stayed unarmed
+  for three days.
 
 ### Baseline hygiene — baseline the SAME paths the hook `--check`s
 
