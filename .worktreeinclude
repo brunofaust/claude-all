@@ -1,0 +1,9 @@
+# Gitignored files copied into new worktrees (`wt step copy-ignored --require-include`,
+# also read by Claude Code desktop). A file must be both gitignored AND listed here.
+
+# Per-user Claude Code settings for this repo (hook wiring, permission grants).
+.claude/settings.json
+.claude/settings.local.json
+
+# codecongruence cache — speeds up the first prek run in a fresh worktree.
+.codecongruence/
