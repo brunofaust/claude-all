@@ -23,6 +23,10 @@ uv sync --dev
 
 # Lint (single entry point — runs ruff, mypy, typos)
 prek run --all-files
+
+# New task worktree (worktrunk): runs .config/wt.toml — per-worktree git hooks dir,
+# `uv sync --locked`, copies .worktreeinclude files, `uv run prek install` (all 3 stages)
+wt switch --create <branch>
 ```
 
 ### `--rebuild`

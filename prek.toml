@@ -4,6 +4,10 @@ exclude = { glob = [".claude/**", ".worktrees/**", ".mypy_cache/**"] }
 
 default_stages = ["pre-commit"]
 
+# `prek install` installs every stage this config uses: commitizen runs at commit-msg and the
+# lockfile/typos hooks at pre-push; without this only the pre-commit hook gets installed.
+default_install_hook_types = ["pre-commit", "commit-msg", "pre-push"]
+
 [[repos]]
 repo = "https://github.com/pre-commit/pre-commit-hooks"
 rev = "v6.0.0"

@@ -1,0 +1,25 @@
+# Worktrunk project config: https://worktrunk.dev — hooks run once when `wt switch --create`
+# makes a worktree. Each [[...]] block is one pipeline step; keys inside a block run concurrently.
+
+# Give each worktree its own git hooks directory. Otherwise `prek install` below writes the
+# shared .git/hooks, pointing every worktree's hooks at this worktree's .venv — and removing
+# the worktree breaks commits everywhere else.
+[[pre-start]]
+hooks_path = """set -eu
+worktree_git_dir="$(git rev-parse --absolute-git-dir)"
+git config extensions.worktreeConfig true
+git config --worktree core.hooksPath "$worktree_git_dir/hooks"
+mkdir -p "$worktree_git_dir/hooks"
+"""
+
+# Build this worktree's own .venv from the lockfile (fails if uv.lock is stale).
+[[pre-start]]
+python = "uv sync --locked"
+
+# Copy the local, gitignored files listed in .worktreeinclude from the primary worktree.
+[[post-start]]
+copy = "wt step copy-ignored --require-include"
+
+# Install the prek git hooks into the per-worktree hooks directory set above.
+[[post-start]]
+hooks = "uv run prek install"
