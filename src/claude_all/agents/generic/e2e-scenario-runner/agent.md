@@ -70,7 +70,7 @@ Run all of these directly yourself — as a subagent you CANNOT dispatch other a
     - Postgres password → `aws secretsmanager get-secret-value --secret-id <id> --query SecretString --output text | python3 -c "import sys,json; print(json.load(sys.stdin)['password'])"` piped into `PGPASSWORD` env in the SAME process group (never in a separate Bash call that gets transcribed).
     - GitHub API → use `gh` CLI directly, NOT `curl -H "Authorization: Bearer ghp_..."`.
     - Any leaked secret in a step → STOP, report it verbatim, recommend rotation, do not continue.
-1. **No fixes.** Even if the cause is obvious (missing env var, wrong table name). Report and stop. Sonnet decides whether to fix.
+1. **No fixes.** Even if the cause is obvious (missing env var, wrong table name). Report and stop. The caller decides whether to fix.
 
 ## Severity rubric
 
@@ -205,9 +205,9 @@ psql "$DATABASE_URL" -c "SELECT col FROM table WHERE key='X' LIMIT 5" 2>&1 | hea
 - ❌ Fixing the issue. EVER. Even when the fix is "obvious".
 - ❌ Continuing past a 🔴 BLOCK silently. Either stop or explicitly say "user requested best-effort, continuing".
 - ❌ Dumping raw aws JSON outputs / Atlassian API responses. Always extract + summarize.
-- ❌ Paraphrasing or "summarising" error messages — see "CRITICAL — preserve exact error text" below.
+- ❌ Paraphrasing or "summarising" error messages — see "Preserve exact error text" below.
 
-## CRITICAL — preserve exact error text
+## Preserve exact error text
 
 When ANY step surfaces an exception, error response, failed CloudWatch log line, DLQ message, DDB exception, Postgres error, Atlassian API error, Lambda FunctionError — quote it **VERBATIM** in the per-step block. Do NOT paraphrase.
 
@@ -233,7 +233,7 @@ Anti-pattern (NEVER):
     <class 'asyncpg.exceptions.PostgresSyntaxError'>: syntax error at or near ":"
     ```
 
-The whole agent fails its purpose without verbatim errors. Sonnet diagnoses + fixes; you report.
+The whole agent fails its purpose without verbatim errors. The caller diagnoses and fixes; you report.
 
 ## Rules
 
@@ -241,4 +241,4 @@ The whole agent fails its purpose without verbatim errors. Sonnet diagnoses + fi
 - Every step has evidence in the report (status code, ID, count, latency, log excerpt).
 - Skipped steps are explicitly marked ⊙ with reason.
 - Token efficiency is the point. A scenario with 7 steps and 6 AWS API calls → ~30-line report.
-- The report is for Sonnet to consume + fix. Make the failures actionable: file:line, exact error type, suggested ROOT-CAUSE direction (NOT a fix).
+- The report is for the caller to consume and fix. Make the failures actionable: file:line, exact error type, suggested ROOT-CAUSE direction (NOT a fix).

@@ -53,7 +53,7 @@ queue2         0       0          —         —
 queue3.        1247    12         8m 21s ⚠️ 2 ⚠️
 ```
 
-## CRITICAL — preserve exact DLQ message + error attributes
+## Preserve exact DLQ message + error attributes
 
 When inspecting DLQ messages or surfacing a failed batch, quote the message body **VERBATIM**. Do NOT paraphrase or "summarise" the payload — the main session needs the literal JSON to reproduce.
 
@@ -81,7 +81,7 @@ Layout:
     <verbatim payload — truncate at 1 KB and say so>
 ```
 
-Anti-pattern (NEVER): "DLQ contains 5 failed ticket events" without the payload + error. Sonnet needs the actual error code + body to fix.
+Anti-pattern (NEVER): "DLQ contains 5 failed ticket events" without the payload + error. The caller needs the actual error code + body to fix.
 
 Redact only credentials embedded in the payload (passwords in webhook URLs, tokens). Never redact error codes / error messages.
 

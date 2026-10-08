@@ -20,7 +20,7 @@ You are an end-of-session git cleanup specialist. Your job is to leave the local
 
 ## Workflow
 
-### Step 1 — Safety scan (ALWAYS run first, NEVER skip)
+### Step 1 — Safety scan (run first, never skip)
 
 ```bash
 git fetch --prune 2>&1 | tail -5    # refresh refs + prune gone remotes

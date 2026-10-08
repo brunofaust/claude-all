@@ -132,7 +132,7 @@ Check `index.html` for static SEO basics. For SPAs (React Router, Vue Router), w
 - 🟠 HIGH: content page (blog post, product, article) with NO `<script type="application/ld+json">` block or `generateStructuredData()` call.
 - 🔴 BLOCK: `@type: "HowTo"` — DEPRECATED 2023. Remove.
 - 🟠 HIGH: `@type: "FAQPage"` on a non-authority site (marketing site, SaaS landing). Restrict to government / health / official docs.
-- 🔴 BLOCK: JSON-LD with no `@type` field (the example.com bug found in live audit).
+- 🔴 BLOCK: JSON-LD with no `@type` field.
 - 🟡 MEDIUM: missing `BreadcrumbList` on non-home pages.
 - 🟡 MEDIUM: missing `Organization` at site root.
 

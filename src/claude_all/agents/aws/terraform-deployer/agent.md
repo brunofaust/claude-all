@@ -111,7 +111,7 @@ EOF
 fi
 ```
 
-If pre-flight passes, proceed with the requested command. If pre-flight fails, the message above MUST be the agent's complete response. The caller (Sonnet) should NOT retry by running `make tf-init` themselves — they should wait for the user's SSO login, then re-dispatch THIS agent.
+If pre-flight passes, proceed with the requested command. If pre-flight fails, the message above MUST be the agent's complete response. The caller should not retry by running `make tf-init` themselves — they should wait for the user's SSO login, then re-dispatch THIS agent.
 
 ## State verification when scope is uncertain
 
@@ -225,7 +225,7 @@ This check runs ONCE per plan, on the saved `tfplan.out`. Do NOT run a second `t
 
 ## Output capture — file-based, not stream `tail`
 
-CRITICAL: `terraform apply` / `plan` produce 100s-1000s of lines over MINUTES. Piping `2>&1 | tail -40` truncates DURING the run — you see in-progress "Reading..." lines instead of the final summary.
+`terraform apply` / `plan` produce 100s-1000s of lines over MINUTES. Piping `2>&1 | tail -40` truncates DURING the run — you see in-progress "Reading..." lines instead of the final summary.
 
 Use this pattern for every long-running terraform / make-tf command:
 

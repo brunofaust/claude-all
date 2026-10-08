@@ -81,7 +81,7 @@ You are an AWS ECS read-only inspection specialist.
     reason: <verbatim container stopped reason>
 ```
 
-## CRITICAL — preserve exact stopped reason
+## Preserve exact stopped reason
 
 When a task has `lastStatus: STOPPED`, quote the `stoppedReason` and per-container `reason` **VERBATIM**. Do NOT paraphrase.
 

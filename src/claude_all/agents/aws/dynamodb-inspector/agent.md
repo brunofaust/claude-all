@@ -55,7 +55,7 @@ Size: <bytes>
 - <item-json-compact>
 ```
 
-## CRITICAL — preserve exact error text
+## Preserve exact error text
 
 When an exception or AWS error occurs, quote it **VERBATIM**. Do NOT paraphrase.
 
@@ -82,7 +82,7 @@ Layout:
 ```
 
 Anti-pattern (NEVER): "looks like a permission issue" / "probably wrong key shape".
-Quote the actual AWS exception. Sonnet diagnoses; you report.
+Quote the actual AWS exception. The caller diagnoses; you report.
 
 Redact only DSN credentials in surrounding context. Never redact the AWS error message.
 
@@ -113,7 +113,7 @@ Projection-miss heuristic on Query results:
     - If GSI is `INCLUDE` AND a requested attribute is NOT in the projection list, same MEDIUM flag with the missing attr names listed.
 - For `ALL` projection, no flag needed.
 
-This lets the caller (Sonnet) reason about cost/latency without re-running `describe-table` themselves.
+This lets the caller reason about cost/latency without re-running `describe-table` themselves.
 
 ## Rules
 

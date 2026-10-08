@@ -19,7 +19,7 @@ Moving Python modules and repointing imports is *mechanical* but *foot-gun-dense
 never the `git mv` — it's the import rewrite: a substring false-positive, a double-nested path, a
 stale `patch("old.path")` string, or an agent that stops mid-batch and leaves the tree broken.
 
-**Decide the target layout first (that's design — Sonnet/you). Then execute the move plan with the
+**Decide the target layout first (that's design — the main session's job). Then execute the move plan with the
 recipe below, or hand it to the `python-module-migrator` agent.** This skill is the recipe + the
 gotchas; the agent is the executor that runs it with finish discipline.
 

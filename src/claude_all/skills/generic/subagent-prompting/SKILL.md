@@ -19,14 +19,15 @@ Subagent has NO memory of:
 - This conversation's prior turns
 - The user's preferences set hours ago
 - Files referenced "above" or "in the plan"
-- TodoWrite items currently in flight
+- Task/todo items currently in flight
 - Previous subagent outputs (unless you paste them in)
 
 If you wrote "see X" / "as discussed" / "the plan file" / "you already know that" — the subagent doesn't. Inline it or fail.
 
 ## The 10-point dispatch-prompt checklist
 
-Fill in EVERY field before sending. Skip one → dispatch usually misfires.
+Fill in every field before sending; a skipped field is the usual cause of a misfire. Set the
+dispatch `model` to the cheapest tier that fits (see `resource-scaffolder` → Model strategy).
 
 ```
 1. GOAL
@@ -58,7 +59,7 @@ Fill in EVERY field before sending. Skip one → dispatch usually misfires.
 
 8. TOOL ALLOW / DENY LIST
    Especially for destructive ops.
-   ✓ "Read, Glob, Grep, Bash (read-only). Never Edit/Write/MultiEdit."
+   ✓ "Read, Glob, Grep, Bash (read-only). Never Edit/Write."
 
 9. RETURN-ONLY-SUMMARY
    Final message ≤ N lines. No narration of intermediate steps.

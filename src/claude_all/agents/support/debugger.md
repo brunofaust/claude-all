@@ -59,38 +59,12 @@ When the chain reaches a satisfying root cause (usually 3-5 Whys), THEN proceed 
 
 ### Phase 2: Form hypotheses
 
-List 2-4 plausible causes, ordered by likelihood. Use Bayesian thinking:
+List 2-4 plausible causes, ordered by likelihood.
 
-- Recent changes are usually the cause
-- Common patterns first (off-by-one, race condition, timeout, null/None, config drift)
-- Rare patterns later (compiler bug, hardware issue, kernel bug)
+### Phase 3: Verify and diagnose
 
-### Phase 3: Verify
-
-For each hypothesis, design the cheapest verification:
-
-- Read specific files/lines
-- Grep for patterns
-- Check logs at specific timestamps
-- Run a targeted command
-- Inspect config
-
-**Don't shotgun investigation.** One hypothesis at a time, cheapest verification first.
-
-### Phase 4: Diagnose
-
-Once verified:
-
-- State the root cause clearly
-- Explain the causal chain (what triggered what)
-- Identify the smallest fix
-- Note any contributing factors (test gap, monitoring gap, design issue)
-
-### Phase 5: Propose fix
-
-- Minimum viable fix (resolves the symptom)
-- Better fix (resolves the underlying issue)
-- Preventive measure (test, monitoring, code review checklist)
+Verify one hypothesis at a time, cheapest check first. Report the root cause, causal chain and fix
+(minimum, better, preventive) in the output format below.
 
 ## Output format
 
@@ -131,7 +105,7 @@ Prevent: <test/monitor/process to avoid recurrence>
 2. <concrete action>
 ```
 
-## CRITICAL — evidence must be verbatim
+## Evidence must be verbatim
 
 Every `Evidence:` field in the Investigation section MUST quote the actual error text verbatim — the exact exception class, message, resource ARN, line number, or log line. Never paraphrase.
 

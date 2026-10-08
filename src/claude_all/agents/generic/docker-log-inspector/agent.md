@@ -99,7 +99,7 @@ Interpret common signals:
 
 If the container is healthy and quiet: `✓ no errors/warnings in the last <N> lines — container running <uptime>.`
 
-## CRITICAL — preserve exact error text
+## Preserve exact error text
 
 When an error / exception / stack trace is found, return it **VERBATIM**. Do NOT paraphrase, summarise, or "clean up" the message — the main session needs the literal exception type, module path, and message to find root cause.
 

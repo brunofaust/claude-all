@@ -142,7 +142,7 @@ await session.execute(text(query), params)
 
 Header + 5-line snippet + cleaned subject. No HTML wrappers, no quoted-reply chain.
 
-## CRITICAL — preserve exact error / alarm text
+## Preserve exact error / alarm text
 
 When an email contains an error, alarm reason, exception, stack trace, or any technical failure description, quote it **VERBATIM**. Do NOT paraphrase ("threshold breached" — wrong; quote the literal `Threshold Crossed: ...` line).
 

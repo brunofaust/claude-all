@@ -154,13 +154,8 @@ number (someone else's, or a re-review after pushes), use the existing **`review
 
 - **Confirm the two outward steps** (commit, then PR) separately; open the PR ready for review (not a
   draft); never push force / enable auto-merge from here.
-- **Three phases; the review/gate phase runs in PARALLEL.** Phase 1 (mutating: the simplification
-  audit + lint-fixer) is serial and finishes first, so the code is final. Phase 2 — tests, the full
-  prek gate, code review, security, SEO, architecture — is **read-only and independent, so dispatch it
-  as concurrent subagents (multiple Agent tool-uses in one message), not one after another.** Collect
-  results, stop the ship on any hard-fail/Block, else proceed to Phase 3 (docs → commit → PR, serial).
-  This is what keeps `/ship-pr` from being a 30-minute serial crawl. Never parallelize a mutator with a
-  reader of the same files — that is exactly why Phase 1 is serial and comes first.
+- **Never parallelize a mutator with a reader of the same files** — that is why Phase 1 is serial
+  and finishes before the parallel Phase 2.
 - **The simplification audit is standard, not optional.** Every changed file is audited against
   `yagni.md` (Python) or the same over-engineering shapes (other stacks). It *scales* to the diff — a
   trivial rename/format gets a one-line pass, feature code gets the full checklist — but it is never

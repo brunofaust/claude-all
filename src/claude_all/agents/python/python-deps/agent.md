@@ -342,4 +342,4 @@ Single number, single line — easy for downstream scripts to grep.
   alike). Only the numbers change; never the operator, extras, or markers.
 - Never auto-retry on failure. Report and let the caller decide.
 - If the user asked for a specific tool and it's missing on PATH, say so + how to install (`brew install uv`, `pipx install poetry`, etc.) and stop.
-- Keep the response tight — the whole point of you being haiku is token efficiency.
+- Keep the response tight: the caller needs the outcome and any verbatim errors, not the full tool output.
