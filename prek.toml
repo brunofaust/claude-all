@@ -1,4 +1,4 @@
-default_language_version.python = "3.11"
+default_language_version.python = "3.12"
 
 exclude = { glob = [".claude/**", ".worktrees/**", ".mypy_cache/**"] }
 
@@ -108,8 +108,8 @@ rev = "v3.21.2"
 hooks = [
   {
     id = "pyupgrade",
-    name = "🐍 python · Upgrade version 3.11+",
-    args = ["--py311-plus"]
+    name = "🐍 python · Upgrade version 3.12+",
+    args = ["--py312-plus"]
   }
 ]
 
@@ -236,10 +236,7 @@ rev = "v0.9.0"
 hooks = [
   {
     id = "codecongruence",
-    name = "🧠 semantic · codecongruence",
-    # codecongruence >= 0.9 requires Python >= 3.12; the repo-wide default (3.11)
-    # matches requires-python and would make the hook env uninstallable.
-    language_version = "3.14"
+    name = "🧠 semantic · codecongruence"
   }
 ]
 

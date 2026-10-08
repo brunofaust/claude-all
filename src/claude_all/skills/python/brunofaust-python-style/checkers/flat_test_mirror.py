@@ -70,11 +70,9 @@ taking the staged-file list, so a rename that leaves a nested file behind is sti
 caught on the commit that did not touch it.
 """
 
-# NOTE: this import looks like it violates the very standard this file enforces —
-# the skill's baseline is 3.14, where PEP 649 makes annotations lazy and the import
-# is dead weight. It stays because this is TOOLING, not an example: it lives in the
-# claude-all repo, which is deliberately `requires-python = ">=3.11"` so the
-# installer runs anywhere. Delete it only if claude-all's own floor moves to 3.14.
+# NOTE: on the skill's 3.12 baseline (no PEP 649 lazy annotations — that is
+# 3.14-only), `from __future__ import annotations` is the recommended way to keep
+# forward references and TYPE_CHECKING-only imports free at runtime.
 from __future__ import annotations
 
 import argparse

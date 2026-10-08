@@ -94,7 +94,7 @@ caused by: linker `cc` failed
 ```
 ✓ docker run --rm myapp:latest sh -c "python -V"
 **Exit:** 0
-**Output:** Python 3.14.4
+**Output:** Python 3.12.10
 ```
 
 ### `docker run` (detached)

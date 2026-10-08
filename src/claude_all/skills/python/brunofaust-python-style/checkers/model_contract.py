@@ -114,8 +114,8 @@ PARSER NOTE — pin this hook's interpreter
 -----------------------------------------
 This checker parses with the ``ast`` of the interpreter it RUNS ON, so an
 interpreter older than the project's silently fails to parse new syntax (PEP 695
-``type X = int``, ``async def run[**P, T]``, PEP 758 ``except A, B:``). Any
-Python-AST-based gate shares this: unpinned, bandit's env resolved to 3.12 and
+``type X = int``, ``async def run[**P, T]``). Any
+Python-AST-based gate shares this: unpinned, bandit's env resolved to 3.11 and
 logged "syntax error while parsing AST" for 25 files, SKIPPED them, and **still
 exited success** — a security gate silently not scanning.
 
@@ -128,11 +128,9 @@ does NOT reach a hook's isolated env. Gates with their own non-Python parser
 (ruff, jscpd, tree-sitter-based tools) are immune and need no pin.
 """
 
-# NOTE: this import looks like it violates the very standard this file enforces —
-# the skill's baseline is 3.14, where PEP 649 makes annotations lazy and the import
-# is dead weight. It stays because this is TOOLING, not an example: it lives in the
-# claude-all repo, which is deliberately `requires-python = ">=3.11"` so the
-# installer runs anywhere. Delete it only if claude-all's own floor moves to 3.14.
+# NOTE: on the skill's 3.12 baseline (no PEP 649 lazy annotations — that is
+# 3.14-only), `from __future__ import annotations` is the recommended way to keep
+# forward references and TYPE_CHECKING-only imports free at runtime.
 from __future__ import annotations
 
 import argparse

@@ -60,17 +60,15 @@ except ValueError as e:
     logger.error("Invalid input", error=str(e))
     raise BadRequestError(str(e))
 
-# Pattern 4b: Multiple exceptions in one handler (PEP 758)
-# On the 3.14 baseline, write the paren-less form when you do NOT bind the
-# exception. Parentheses remain REQUIRED whenever you bind with `as` — that is
-# a language rule, not a style choice, so both forms are current code:
+# Pattern 4b: Multiple exceptions in one handler
+# On the 3.12 baseline, always use the parenthesised tuple. PEP 758's paren-less
+# `except A, B:` is 3.14-only and a SyntaxError on 3.12:
 try:
     process()
-except ConnectionError, TimeoutError:  # no `as` → no parentheses
+except (ConnectionError, TimeoutError):
     logger.warning("Transient failure, will retry")
     raise
 
-# Binding with `as` → parenthesised tuple, always:
 try:
     process()
 except (ConnectionError, TimeoutError) as e:
@@ -80,8 +78,6 @@ except (ValueError, TypeError) as e:
     logger.error("Invalid input", error=str(e))
     raise BadRequestError(str(e))
 
-# Older code parenthesises unconditionally (`except (ValueError, TypeError):`).
-# That still works and is never wrong — don't churn it just to drop the parens.
 
 # Pattern 5: Suppress expected exceptions using contextlib.suppress
 from contextlib import suppress

@@ -73,14 +73,10 @@ if TYPE_CHECKING:
 else:
     from botocore.client import BaseClient as S3Client
 
-# NOTE: On the 3.14 baseline, do NOT add `from __future__ import annotations`.
-# PEP 649 makes annotations lazy natively: they are no longer evaluated at
-# def-time, but compiled into a per-object `__annotate__` function that only runs
-# when something actually asks for `__annotations__`. So forward references and
-# TYPE_CHECKING-only imports already work with zero runtime cost — and, unlike
-# PEP 563's stringification, the annotations still evaluate to REAL objects when
-# introspected (`typing.get_type_hints()`, Pydantic, dataclasses keep working).
-# The future-import is dead weight on 3.14; don't carry it into new code.
+# NOTE: On the 3.12 baseline, annotations are evaluated eagerly at def-time
+# (PEP 649 lazy annotations are 3.14-only). Add `from __future__ import annotations`
+# (PEP 563) for forward references and TYPE_CHECKING-only imports — without it,
+# an annotation naming a TYPE_CHECKING-only import raises NameError at runtime.
 # TYPE_CHECKING is STILL needed regardless for:
 #   - Runtime type swapping (as above — different type for static vs. runtime)
 #   - Imports that have heavy side effects you want to avoid at runtime

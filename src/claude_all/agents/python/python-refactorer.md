@@ -31,7 +31,7 @@ You are a Python refactoring specialist. Apply the brunofaust-python-style skill
 ### Async patterns
 
 - `async def` for I/O-bound code
-- `asyncio.TaskGroup()` over `asyncio.gather()` for structured concurrency (Python 3.11+)
+- `asyncio.TaskGroup()` over `asyncio.gather()` for structured concurrency (Python 3.12+ baseline)
 - `async with` for async context managers
 - Use `anyio` if compatibility across asyncio/trio is needed
 - Never mix `time.sleep` with async; use `asyncio.sleep`

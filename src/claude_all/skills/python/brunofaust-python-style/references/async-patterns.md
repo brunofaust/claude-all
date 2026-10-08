@@ -400,7 +400,8 @@ class thread:
 #### InterpreterPoolExecutor
 
 `concurrent.futures.InterpreterPoolExecutor` (PEP 734, added in Python 3.14) is
-available on the baseline — reach for it directly. Subinterpreters provide true
+**not available on the 3.12 baseline** — use `ProcessPoolExecutor` there, and
+adopt this only once the project's floor is 3.14. Subinterpreters provide true
 parallelism (each has its own GIL) with lower overhead than
 `ProcessPoolExecutor`. Use it for **CPU-bound** work that doesn't need to share
 mutable state.

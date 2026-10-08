@@ -11,7 +11,7 @@ for Ruff, mypy, and project metadata.
 
 ```toml
 [tool.ruff]
-target-version = "py314"
+target-version = "py312"
 line-length = 120
 preview = true
 fix = true
@@ -117,8 +117,8 @@ lint.pylint.max-returns = 8
 lint.pylint.max-statements = 60
 ```
 
-Do **not** add flake8-future-annotations (`FA100`/`FA102`). On Python 3.14, PEP 649 makes
-`from __future__ import annotations` an anti-pattern — that rule would enforce one.
+flake8-future-annotations (`FA100`/`FA102`) is optional on the 3.12 baseline: annotations are
+still evaluated eagerly (PEP 649 is 3.14-only), so `from __future__ import annotations` is allowed.
 
 ## `banned-api` (TID251) — external-system ownership, made mechanical
 
@@ -188,7 +188,7 @@ without a stated reason is indistinguishable from an accident and never gets rem
 
 ```toml
 [tool.mypy]
-python_version = "3.14"
+python_version = "3.12"
 strict = true
 plugins = [ "pydantic.mypy" ]
 warn_return_any = true
@@ -351,7 +351,7 @@ hooks = [{
   # --select: adopt rules one at a time on a legacy tree (one baseline per rule).
   entry = "python scripts/pydantic_contract.py --model-base myapp.core.model.StrictModel --select no-cast,extra-forbid src/",
   language = "system",
-  language_version = "3.14",
+  language_version = "3.12",
   pass_filenames = false,
   always_run = true,
   files = "\\.py$"
@@ -425,7 +425,7 @@ hooks = [{
     --allow-private core/db/row.py=_mapping \
     src/""",
   language = "system",
-  language_version = "3.14",
+  language_version = "3.12",
   pass_filenames = false,
   always_run = true,
   files = "\\.py$"
