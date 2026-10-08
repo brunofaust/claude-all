@@ -79,7 +79,7 @@ uv run claude-all   # picks up local edits immediately
 
 ## Agents
 
-Subagents Claude Code delegates to for specific jobs. Haiku for mechanical work, Sonnet for judgment calls.
+Subagents Claude Code delegates to for specific jobs. Haiku 5.5 for mechanical work, Sonnet 5.5 for judgment calls.
 
 ### Generic
 
@@ -312,9 +312,10 @@ Standalone rules injected into `~/.claude/CLAUDE.md` — no agent or skill attac
 
 ## Model strategy
 
-- **Haiku** — mechanical work: read, run, report.
-- **Sonnet** — judgment work: review, refactor, debug.
-- **Opus** — reserved for the main session, not delegated to agents.
+- **Haiku** (`claude-haiku-5-5`) — mechanical work: read, run, report.
+- **Sonnet** (`claude-sonnet-5-5`) — judgment work: review, refactor, debug.
+- **Opus** (`claude-opus-5-5`) — reserved for the main session, not delegated to agents.
+- **Fable** (`claude-fable-5-1`) — not used by any shipped agent; costs more than Opus, so opt in per agent only when you need it.
 
 ## Contributing back
 
