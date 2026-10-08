@@ -59,12 +59,6 @@ could not read is a file it did not check. Pin ``language_version`` on THIS hook
 a repo-level ``default_language_version`` does NOT reach a hook's isolated env.
 """
 
-# NOTE: this import looks like it violates the very standard the skill enforces —
-# the skill's baseline is 3.14, where PEP 649 makes annotations lazy. It stays
-# because this is TOOLING that lives in the claude-all repo, which is deliberately
-# `requires-python = ">=3.11"` so the installer runs anywhere. Delete it only if
-# claude-all's own floor moves to 3.14.
-
 import argparse
 import ast
 import sys

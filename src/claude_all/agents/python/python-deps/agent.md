@@ -30,7 +30,7 @@ Detecting the tool isn't enough for a version bump — you must edit the *right 
 Dependencies can live in either place, and they use different specifier grammars:
 
 - `[project].dependencies` / `[project.optional-dependencies]` → PEP 508 grammar
-  (`pkg>=1.2`, `pkg==1.2.3`, `pkg~=1.2`, `pkg[extra]>=1 ; python_version>='3.11'`). **uv reads this.**
+  (`pkg>=1.2`, `pkg==1.2.3`, `pkg~=1.2`, `pkg[extra]>=1 ; python_version>='3.12'`). **uv reads this.**
 - `[tool.poetry.dependencies]` → Poetry grammar, which additionally allows **bare caret `^`** and
   **bare tilde `~`** (`pkg = "^1.2.3"`, `pkg = "~1.2"`). Those two bare forms are Poetry-only — uv cannot
   parse them.
@@ -87,7 +87,7 @@ alone" case.
 | `pkg = "^1.2.3"` (caret, poetry) | `pkg = "^2.0.0"` |
 | `pkg = "~1.2"` / `pkg~=1.2` (tilde) | `pkg = "~2.0"` / `pkg~=2.0` |
 | `pkg>=1.2,<2` (compound) | update the number(s) so the target is admitted; keep **both** operators |
-| `pkg[http]==1.2.3 ; python_version>='3.11'` | `pkg[http]==2.0.0 ; python_version>='3.11'` |
+| `pkg[http]==1.2.3 ; python_version>='3.12'` | `pkg[http]==2.0.0 ; python_version>='3.12'` |
 
 **Hard rules:**
 
@@ -267,12 +267,12 @@ keeping the operator; `uv lock` + `uv sync` (validation); `uv lock --check` + `u
 
 ```
 **Tool:** uv  •  **Action:** bump declared versions  •  **Status:** ✗ reverted (conflict)
-**Attempted:** pydantic `==2.7.4` → `==2.11.0`
+**Attempted:** mylib `==2.7.4` → `==3.0.0`
 **Resolver rejected it (verbatim):**
-  `Because the current Python version (3.11) does not satisfy Python>=3.12
-   and pydantic==2.11.0 requires Python>=3.12, we can conclude that pydantic==2.11.0 cannot be used.`
+  `Because the current Python version (3.12) does not satisfy Python>=3.13
+   and mylib==3.0.0 requires Python>=3.13, we can conclude that mylib==3.0.0 cannot be used.`
 **Reverted** the pyproject.toml edit — lock + pyproject left as they were.
-**Fix:** pin `pydantic==2.10.x` (last 3.11-compatible), or raise `requires-python` to `>=3.12`.
+**Fix:** pin `mylib==2.x` (last 3.12-compatible), or raise `requires-python` to `>=3.13`.
 ```
 
 **Request:** "Bump versions." — mismatch case (uv.lock present, caret specifiers)

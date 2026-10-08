@@ -732,14 +732,14 @@ ancestor image) + `LAMBDA_DOCKER_FLAGS=-m 512m` + `LAMBDA_ACCOUNT_CONCURRENCY`.
 | `PERSIST_STATE`                  | `0`       | No persistence — the provisioner re-creates all resources on each start                          |
 
 **Pin the Lambda runtime to your codebase's Python.** LocalStack runs a function
-under a default/bundled interpreter unless told otherwise — so a 3.14 codebase
+under a default/bundled interpreter unless told otherwise — so a 3.12 codebase
 must declare it explicitly, or you hit the same wrong-Python failures as the
 `docker-reuse` warm pool. Pin it **per function** in the `CreateFunction` call:
 
 ```python
 client.create_function(
     FunctionName="myapp-local-worker",
-    Runtime="python3.14",  # match the codebase — don't inherit LocalStack's default
+    Runtime="python3.12",  # match the codebase — don't inherit LocalStack's default
     Handler="handler.main",
     ...,
 )

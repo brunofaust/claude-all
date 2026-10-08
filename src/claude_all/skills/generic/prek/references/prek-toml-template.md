@@ -9,7 +9,7 @@ Merge of multiple projects (e.g. myapp, my-service). Pick the sections relevant 
 # checkers) MUST carry their own per-hook `language_version`, or they resolve an
 # older Python, hit SyntaxError on modern syntax, SKIP those files and still exit 0.
 # See "The vacuous PASS" in SKILL.md.
-default_language_version.python = "3.14"   # or "3.11" for older projects
+default_language_version.python = "3.12"   # or your project's version
 
 exclude = { glob = [
   ".claude/**",        # Claude Code internal files
@@ -130,8 +130,8 @@ rev = "v3.21.2"
 hooks = [
   {
     id = "pyupgrade",
-    name = "🐍 python · Upgrade version 3.14+",
-    args = ["--py314-plus"]              # match your min Python version
+    name = "🐍 python · Upgrade version 3.12+",
+    args = ["--py312-plus"]              # match your min Python version
   }
 ]
 
@@ -269,7 +269,7 @@ hooks = [
     # interpreter it RUNS ON; an older resolved env logs "syntax error while
     # parsing AST", SKIPS those files, and still exits 0 — a security gate
     # silently not scanning. default_language_version does not reach this env.
-    language_version = "3.14"        # or your project's version
+    language_version = "3.12"        # or your project's version
   }
 ]
 
@@ -333,7 +333,7 @@ hooks = [
 #     name = "🐍 python · Enforce single-ownership + visibility (AST)",
 #     entry = "python scripts/skill_enforcer.py",
 #     language = "system",
-#     language_version = "3.14",   # or your project's version
+#     language_version = "3.12",   # or your project's version
 #     files = "\\.py$"
 #   }
 # ]
@@ -391,11 +391,11 @@ hooks = [
   {
     id = "interrogate",
     name = "🐍 python · Check docstrings",
-    # AST-PARSING HOOK — pin the interpreter. interrogate 1.7.0 resolves a Python
-    # 3.12 hook env by default, whose parser chokes on PEP 758 syntax
-    # (unparenthesized `except A, B:`) used by a 3.14 codebase. Unpinned it skips
+    # AST-PARSING HOOK — pin the interpreter. interrogate 1.7.0 can resolve an older
+    # Python hook env (e.g. 3.11), whose parser chokes on PEP 695 syntax
+    # (`type X = ...`, `def f[T]()`) used by a 3.12 codebase. Unpinned it skips
     # what it cannot parse and still exits 0. See "The vacuous PASS" in SKILL.md.
-    language_version = "3.14",       # or your project's version
+    language_version = "3.12",       # or your project's version
     pass_filenames = false
     # configure thresholds in [tool.interrogate] in pyproject.toml
   }
@@ -411,11 +411,10 @@ hooks = [
     name = "🐍 python · Detect unused code",
     # AST-PARSING HOOK — pin the interpreter (same class of bug as bandit).
     # Unpinned, vulture's isolated env resolves non-deterministically to an older
-    # Python whose ast rejects PEP 695 generics ("invalid syntax at type X = ...")
-    # and PEP 758 except-clauses ("multiple exception types must be parenthesized").
+    # Python whose ast rejects PEP 695 generics ("invalid syntax at type X = ...").
     # It then SKIPS every such file from dead-code analysis and exits 0 — observed
     # blinding the gate to 35 real files. default_language_version does not help.
-    language_version = "3.14"        # or your project's version
+    language_version = "3.12"        # or your project's version
   }
   # requires vulture_whitelist.py at repo root for intentional unused symbols
 ]
@@ -443,7 +442,7 @@ hooks = [
 # hooks = [
 #   { id = "nbqa-ruff-format", name = "📓 notebook · Format with Ruff",   args = ["--fix"], additional_dependencies = ["ruff"] },
 #   { id = "nbqa-ruff-check",  name = "📓 notebook · Check with Ruff",    additional_dependencies = ["ruff"] },
-#   { id = "nbqa-pyupgrade",   name = "📓 notebook · Upgrade version 3.14+", args = ["--py314-plus"], additional_dependencies = ["pyupgrade"] }
+#   { id = "nbqa-pyupgrade",   name = "📓 notebook · Upgrade version 3.12+", args = ["--py312-plus"], additional_dependencies = ["pyupgrade"] }
 # ]
 
 # ── Optional: CloudFormation linting ─────────────────────────────────────────
@@ -552,14 +551,14 @@ hooks = [
 
 ```toml
 [tool.ruff]
-target-version = "py314"
+target-version = "py312"
 line-length = 100
 lint.select = ["B", "C4", "E", "F", "I", "RUF", "SIM", "UP", "W"]
 lint.ignore = ["RUF001"]
 
 [tool.mypy]
 strict = true
-python_version = "3.14"
+python_version = "3.12"
 
 [tool.markdownlint]
 default = true

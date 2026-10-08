@@ -4,7 +4,7 @@ Agents, skills, and hooks that customize Claude Code and Codex — install them 
 
 ## Requirements
 
-Python 3.11+, [uv](https://docs.astral.sh/uv/), and the `claude` CLI.
+Python 3.12+, [uv](https://docs.astral.sh/uv/), and the `claude` CLI.
 
 ## Install
 

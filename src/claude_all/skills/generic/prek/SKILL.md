@@ -132,9 +132,9 @@ ______________________________________________________________________
 ```toml
 # Global Python version — a DEFAULT only. It does NOT reach a hook's isolated
 # env; AST-parsing hooks need their own `language_version` (see below).
-default_language_version.python = "3.14"
+default_language_version.python = "3.12"
 # OR:
-# default_language_version = { python = "python3.14" }
+# default_language_version = { python = "python3.12" }
 
 # Global file exclusion (applies to all hooks unless overridden)
 exclude = { glob = [".claude/**", ".worktrees/**", ".venv/**"] }
@@ -150,7 +150,7 @@ hooks = [
     args = ["--arg"],                      # optional CLI args
     files = "^src/",                       # regex: only run on matching paths
     exclude = { glob = ["tests/**"] },     # glob exclusion for this hook
-    language_version = "3.14",             # REQUIRED on Python-AST-parsing hooks
+    language_version = "3.12",             # REQUIRED on Python-AST-parsing hooks
     types_or = ["python", "pyi"],          # file type filter
     pass_filenames = false,                # don't pass file list to entry
     stages = ["pre-commit"],               # only run at this git hook stage
@@ -194,9 +194,9 @@ only reliable fix is a **per-hook `language_version`**:
   name = "🐍 python · Detect unused code",
   # vulture parses with the ast of the interpreter it RUNS ON. Unpinned, its
   # isolated env resolves non-deterministically to an older Python whose ast
-  # cannot parse PEP 695 generics / PEP 758 except-clauses — it then SKIPS those
+  # cannot parse PEP 695 generics / `type` aliases — it then SKIPS those
   # files and still exits 0. default_language_version does not reach this env.
-  language_version = "3.14"   # or your project's version
+  language_version = "3.12"   # or your project's version
 }
 ```
 
@@ -208,7 +208,7 @@ Pin where it matters — **do not cargo-cult `language_version` onto every hook*
 | **IMMUNE — no pin** | `ruff` (Rust parser), `jscpd` (own parser), tree-sitter-based tools | ship their own parser, independent of the hook env |
 | **IMMUNE — no pin** | `pyright` | bypasses prek's env entirely |
 
-Observed cost: unpinned `vulture` resolved to 3.11 despite `default_language_version.python = "3.14"`
+Observed cost: unpinned `vulture` resolved to 3.11 despite `default_language_version.python = "3.12"`
 at the top of the file, silently skipped **35 files** from dead-code analysis, and exited green — which
 is why real dead modules survived in that repo for months.
 
@@ -218,7 +218,7 @@ The tell is a hook that prints a parse complaint **and still exits 0**:
 
 - `syntax error while parsing AST` (bandit)
 - `invalid syntax at type X = ...` (PEP 695 generics on an old parser)
-- `multiple exception types must be parenthesized` / `expected '('` (PEP 758 `except A, B:`)
+- `invalid syntax` at `def first[T](...)` / `class Stack[T]` (PEP 695 type parameters)
 
 **Don't theorise about which interpreter a hook got — inspect the cached hook env.** That empirical
 method is the lesson; the config is just the fix:

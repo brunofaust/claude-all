@@ -23,7 +23,7 @@ stdout — keyed by the kind + name, NOT by line number, so it composes with
 PARSER NOTE
 -----------
 Uses the running interpreter's ``ast``. New syntax only parses on a new enough
-interpreter (e.g. PEP 758 ``except A, B:`` needs 3.14+); on older interpreters
+interpreter (e.g. PEP 695 ``type X = int`` needs 3.12+); on older interpreters
 such a file fails to parse and is skipped (fail-open) rather than crashing the
 gate — pin the hook interpreter if you need those files checked.
 """

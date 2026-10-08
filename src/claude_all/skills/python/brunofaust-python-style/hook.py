@@ -67,7 +67,7 @@ def main() -> int:
                     "(Skill tool) and read the matching references/<topic>.md "
                     "(type-hints, error-handling, async-patterns, class-design, config, testing) "
                     "before editing — don't rely on this summary alone. "
-                    "Quick rules: Python 3.14+ syntax (pipe unions, match, asyncio.TaskGroup, "
+                    "Quick rules: Python 3.12+ syntax (pipe unions, match, asyncio.TaskGroup, "
                     "exception.add_note, PEP 695 generics/aliases); "
                     "strict type hints (Literal, @overload) — TypedDict and typing.cast "
                     "are BANNED: a TypedDict validates nothing at runtime, so "

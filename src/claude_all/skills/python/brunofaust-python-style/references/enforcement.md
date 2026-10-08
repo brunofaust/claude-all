@@ -323,11 +323,11 @@ hooks = [{
   language = "system",
   # Pin the interpreter. This checker parses with the `ast` of the Python it RUNS
   # ON, so an env older than the project silently fails to parse new syntax (PEP
-  # 695 `type X = int`, PEP 758 `except A, B:`) — see the interpreter-pin rule in
+  # 695 `type X = int`, `def first[T]()`) — see the interpreter-pin rule in
   # the `prek` skill. A repo-level `default_language_version` does NOT reach a
   # hook's isolated env. The checker exits 2 rather than skipping, so a wrong pin
   # fails loudly instead of silently reporting clean.
-  language_version = "3.14",  # or your project's Python
+  language_version = "3.12",  # or your project's Python
   pass_filenames = false,
   always_run = true,
   files = "\\.py$"

@@ -561,10 +561,10 @@ Failure:
 
 ```
 **Lambdas (12):**
-- myapp-dev-api                Active     python3.13    updated 2h ago
-- myapp-dev-dispatcher         Active     python3.13    updated 2h ago
+- myapp-dev-api                Active     python3.12    updated 2h ago
+- myapp-dev-dispatcher         Active     python3.12    updated 2h ago
 - myapp-dev-log-export         Active     Image         updated 1d ago
-- myapp-dev-feature-pii-detection  Failed (build pending)  python3.13  updated 14m ago
+- myapp-dev-feature-pii-detection  Failed (build pending)  python3.12  updated 14m ago
 - ... +8 more
 ```
 
@@ -575,7 +575,7 @@ Mark anything with `LastUpdateStatus != Successful` so the caller notices.
 ```
 **Function:** myapp-dev-api
 **State:** Active  •  **LastUpdateStatus:** Successful  •  **Updated:** 12m ago
-**Runtime:** python3.13  •  **Arch:** arm64  •  **Memory:** 512 MB  •  **Timeout:** 30s
+**Runtime:** python3.12  •  **Arch:** arm64  •  **Memory:** 512 MB  •  **Timeout:** 30s
 **CodeSize:** 142 MB  •  **Image:** —
 **Role:** arn:aws:iam::...:role/myapp-dev-api-role
 **Env vars:** 14 (don't dump values)

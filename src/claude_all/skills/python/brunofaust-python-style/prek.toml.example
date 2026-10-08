@@ -42,7 +42,7 @@
 #    must be green before you claim a change is clean.
 # ─────────────────────────────────────────────────────────────────────────────
 
-default_language_version.python = "3.14"
+default_language_version.python = "3.12"
 
 # Hooks without an explicit `stages` run ONLY at pre-commit. Without this, every
 # unstaged hook runs at EVERY stage — so anything invoking the whole suite (a
@@ -200,7 +200,7 @@ rev = "v3.19.1"
 [[repos.hooks]]
 id = "pyupgrade"
 name = "🐍 python · Modern syntax"
-args = ["--py314-plus"]
+args = ["--py312-plus"]
 
 
 [[repos]]
@@ -242,7 +242,7 @@ rev = "1.8.2"
 id = "bandit"
 name = "🔒 security · SAST (bandit)"
 args = ["-c", "pyproject.toml"]
-language_version = "python3.14"
+language_version = "python3.12"
 
 
 [[repos]]
@@ -255,7 +255,7 @@ rev = "v2.14"
 [[repos.hooks]]
 id = "vulture"
 name = "🐍 python · Dead code"
-language_version = "python3.14"
+language_version = "python3.12"
 
 
 [[repos]]
@@ -267,7 +267,7 @@ rev = "1.7.0"
 [[repos.hooks]]
 id = "interrogate"
 name = "🐍 python · Docstring coverage"
-language_version = "python3.14"
+language_version = "python3.12"
 
 
 [[repos]]
@@ -384,7 +384,7 @@ language = "system"
 types_or = ["python"]
 pass_filenames = false
 always_run = true
-language_version = "python3.14"
+language_version = "python3.12"
 
 [[repos.hooks]]
 id = "pydantic-contract"
@@ -394,7 +394,7 @@ language = "system"
 types_or = ["python"]
 pass_filenames = false
 always_run = true
-language_version = "python3.14"
+language_version = "python3.12"
 
 [[repos.hooks]]
 id = "all-contract"
@@ -404,7 +404,7 @@ language = "system"
 types_or = ["python"]
 pass_filenames = false
 always_run = true
-language_version = "python3.14"
+language_version = "python3.12"
 
 [[repos.hooks]]
 id = "flat-test-mirror"
@@ -413,7 +413,7 @@ entry = "uv run python scripts/flat_test_mirror.py tests/unit src"
 language = "system"
 pass_filenames = false
 always_run = true
-language_version = "python3.14"
+language_version = "python3.12"
 
 [[repos.hooks]]
 id = "lambda-event-validation"
@@ -423,7 +423,7 @@ language = "system"
 types_or = ["python"]
 pass_filenames = false
 always_run = true
-language_version = "python3.14"
+language_version = "python3.12"
 
 
 # ── Mock-drift family — from the `mock-drift-sweep` skill's checkers/ ─────────
@@ -450,7 +450,7 @@ language = "system"
 types_or = ["python"]
 pass_filenames = false
 always_run = true
-language_version = "python3.14"
+language_version = "python3.12"
 
 [[repos.hooks]]
 id = "patch-target-exists"
@@ -460,7 +460,7 @@ language = "system"
 types_or = ["python"]
 pass_filenames = false
 always_run = true
-language_version = "python3.14"
+language_version = "python3.12"
 
 # Regression-only — expect real findings on an existing codebase. Seed once with
 # --baseline, then enforce with --check.
@@ -472,7 +472,7 @@ language = "system"
 types_or = ["python"]
 pass_filenames = false
 always_run = true
-language_version = "python3.14"
+language_version = "python3.12"
 
 # Regression-only — the noisiest rule of the family by design.
 [[repos.hooks]]
@@ -483,7 +483,7 @@ language = "system"
 types_or = ["python"]
 pass_filenames = false
 always_run = true
-language_version = "python3.14"
+language_version = "python3.12"
 
 
 # ── Migration graph — from the `regression-gates` skill's checkers/ ───────────
@@ -512,4 +512,4 @@ entry = "uv run python scripts/baseline_gate.py --baseline migration_head_baseli
 language = "system"
 pass_filenames = false
 always_run = true
-language_version = "python3.14"
+language_version = "python3.12"
