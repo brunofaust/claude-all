@@ -3,7 +3,7 @@ name: aws-events-scheduler
 description: >-
   Inspect or change EventBridge rules, buses, targets and Scheduler schedules; trace what fires
   a Lambda. Read-only by default; writes require explicit confirmation.
-model: claude-haiku-4-5
+model: claude-haiku-5-5
 tools:
   - Bash
   - Read

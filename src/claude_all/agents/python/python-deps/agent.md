@@ -4,7 +4,7 @@ description: >-
   Manage Python dependencies with uv/pip/poetry/pipx: install, sync, add/remove, lock or bump.
   Explicit bumps update declared version numbers while preserving operators/extras/markers, then
   relock/validate. Tests go to test-runner; lint/types to code-quality or lint-fixer.
-model: claude-haiku-4-5
+model: claude-haiku-5-5
 tools:
   - Bash
   - Read

@@ -4,7 +4,7 @@ description: >-
   Write behavior-asserting unit tests for missing coverage or acceptance criteria. Measure
   coverage, preserve source and gates; report product bugs instead of hiding them. Existing
   suite execution goes to test-runner.
-model: claude-sonnet-5
+model: claude-sonnet-5-5
 tools:
   - Bash
   - Read

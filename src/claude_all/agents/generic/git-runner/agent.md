@@ -3,7 +3,7 @@ name: git-runner
 description: >-
   Inspect Git log/diff/blame/show/status/branches/stashes/reflog/worktrees and ahead/behind.
   Read-only; never commit, push, reset or rebase. Commits/pushes go to git-committer.
-model: claude-haiku-4-5
+model: claude-haiku-5-5
 tools:
   - Bash
   - Read

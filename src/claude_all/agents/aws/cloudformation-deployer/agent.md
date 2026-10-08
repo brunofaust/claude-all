@@ -4,7 +4,7 @@ description: >-
   Run CloudFormation validation, stack inventory/status/drift, create/update/delete. Review via
   cloudformation-reviewer first. Preview change sets before confirmed execution; require
   explicit confirmation for deletion/destructive changes.
-model: claude-haiku-4-5
+model: claude-haiku-5-5
 tools:
   - Bash
   - Read

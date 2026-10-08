@@ -4,7 +4,7 @@ description: >-
   Run existing pytest/npm/pnpm/Vitest/Jest/Go/Rust tests and coverage; report counts, failed IDs
   and verbatim failure bodies. Read-only; never edit tests or source. New tests go to
   test-author.
-model: claude-haiku-4-5
+model: claude-haiku-5-5
 tools:
   - Bash
   - Read

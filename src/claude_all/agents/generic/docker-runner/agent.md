@@ -4,7 +4,7 @@ description: >-
   Run Docker/Compose builds, exec, inventory and lifecycle operations. Return
   image/container/port evidence; deletion/pruning requires explicit confirmation. Log/crash
   diagnosis goes to docker-log-inspector.
-model: claude-haiku-4-5
+model: claude-haiku-5-5
 tools:
   - Bash
   - Read

@@ -3,7 +3,7 @@ name: http-runner
 description: >-
   Execute HTTP/API/webhook requests via curl/wget; report status, headers and bounded body while
   masking credentials. Excludes curl-pipe-shell installs and large downloads.
-model: claude-haiku-4-5
+model: claude-haiku-5-5
 tools:
   - Bash
   - Read

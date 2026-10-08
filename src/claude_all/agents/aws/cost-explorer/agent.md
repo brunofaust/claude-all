@@ -4,7 +4,7 @@ description: >-
   Query AWS Cost Explorer spend, trends, forecasts, anomalies and Savings Plan utilization by
   service/tag. Read-only; API requests cost $0.01 each. Resource waste audits go to
   cost-audit-runner.
-model: claude-haiku-4-5
+model: claude-haiku-5-5
 tools:
   - Bash
 ---

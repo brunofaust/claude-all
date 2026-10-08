@@ -4,7 +4,7 @@ description: >-
   Fix lint/type/quality findings, including codecongruence; use root-cause changes, never
   suppressions or gate bypasses. Max two attempts per category, then verbatim error. Reporting
   goes to code-quality; modernization to python-refactorer.
-model: claude-sonnet-5
+model: claude-sonnet-5-5
 tools:
   - Bash
   - Read

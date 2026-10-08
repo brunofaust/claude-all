@@ -4,7 +4,7 @@ description: >-
   Review any diff touching .tf before shipping, plus Terraform plans, IAM, cost and operational
   risks. Generic review does not replace this. Read source/saved plans only; execution goes to
   terraform-deployer.
-model: claude-sonnet-5
+model: claude-sonnet-5-5
 tools:
   - Bash
   - Read

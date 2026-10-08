@@ -3,7 +3,7 @@ name: gh-runner
 description: >-
   Inspect GitHub PRs, issues, repos, releases and CI runs/logs with gh. Report status/checks and
   verbatim failures. Read-only; creation/merge/close uses GitHub MCP tools.
-model: claude-haiku-4-5
+model: claude-haiku-5-5
 tools:
   - Bash
   - Read

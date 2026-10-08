@@ -3,7 +3,7 @@ name: git-committer
 description: >-
   Stage, commit and optionally push requested changes with Conventional Commits and hooks.
   Remain on the current branch; never create branches, merge or rebase.
-model: claude-haiku-4-5
+model: claude-haiku-5-5
 tools:
   - Bash
   - Read

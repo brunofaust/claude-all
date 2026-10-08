@@ -4,7 +4,7 @@ description: >-
   Read DynamoDB items, tables, indexes, counts and metadata with
   get-item/query/scan/describe/list. Report evidence and AWS errors; never write. Confirmed
   mutations go to dynamodb-mutator.
-model: claude-haiku-4-5
+model: claude-haiku-5-5
 tools:
   - Bash
 ---

@@ -5,7 +5,7 @@ description: >-
   causing this exception", "this test fails intermittently", "find the root cause". Forms hypotheses,
   reads logs/code/configs across multiple services, designs verification steps, proposes fixes. For
   cross-service production incidents use `incident-responder`.
-model: claude-sonnet-5
+model: claude-sonnet-5-5
 tools:
   - Bash
   - Read

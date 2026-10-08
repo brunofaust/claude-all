@@ -3,7 +3,7 @@ name: sqs-monitor
 description: >-
   Inspect SQS depth, in-flight/oldest messages and DLQs; peek with visibility-timeout 0. Redrive
   via start-message-move-task only with explicit yes redrive confirmation.
-model: claude-haiku-4-5
+model: claude-haiku-5-5
 tools:
   - Bash
 ---

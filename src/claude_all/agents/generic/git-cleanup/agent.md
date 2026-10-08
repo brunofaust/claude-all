@@ -4,7 +4,7 @@ description: >-
   Clean branches/worktrees after safety scan, content-in-main reconciliation and user
   confirmation. Include uncommitted/unpushed content; force removal requires containment proof.
   Reports go to git-audit; filesystem artifacts to repo-cleaner.
-model: claude-haiku-4-5
+model: claude-haiku-5-5
 tools:
   - Bash
 ---

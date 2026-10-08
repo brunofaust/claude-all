@@ -4,7 +4,7 @@ description: >-
   Read CloudWatch Logs, metrics and alarm state; investigate Lambda errors and time-window
   queries. Return matching counts and verbatim redacted error blocks. Never change resources or
   alarms.
-model: claude-haiku-4-5
+model: claude-haiku-5-5
 tools:
   - Bash
 ---

@@ -3,7 +3,7 @@ name: s3-inspector
 description: >-
   Inspect S3 bucket/object inventories, counts, prefix size, lifecycle, encryption and
   versioning. Never upload, download, delete objects or alter policies.
-model: claude-haiku-4-5
+model: claude-haiku-5-5
 tools:
   - Bash
 ---

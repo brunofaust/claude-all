@@ -134,7 +134,15 @@ def agent_source(tmp_path: Path, model: str) -> Path:
     return source
 
 
-@pytest.mark.parametrize("claude_model", ["claude-haiku-4-5", "claude-sonnet-5", "claude-opus-5"])
+@pytest.mark.parametrize(
+    "claude_model",
+    [
+        "claude-haiku-5-5",
+        "claude-sonnet-5-5",
+        "claude-opus-5-5",
+        "claude-fable-5-1",
+    ],
+)
 def test_render_codex_agent_omits_model_configuration(tmp_path: Path, claude_model: str) -> None:
     """Claude model aliases do not constrain the generated Codex TOML.
 
@@ -162,7 +170,7 @@ def test_render_codex_agent_emits_toml_safe_non_bmp_unicode(tmp_path: Path) -> N
     Args:
         tmp_path: Isolated filesystem fixture.
     """
-    source = agent_source(tmp_path, "claude-haiku-4-5")
+    source = agent_source(tmp_path, "claude-haiku-5-5")
     source.write_text(
         source.read_text(encoding="utf-8") + "Keep calm 😁\n",
         encoding="utf-8",
@@ -573,7 +581,7 @@ def test_agent_cleanup_removes_unchanged_installer_managed_file(
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(cli, "STATE_DIR", tmp_path / "state")
     monkeypatch.setattr(cli, "STATE_FILE", tmp_path / "state" / "state.json")
-    source = agent_source(tmp_path / "source", "claude-haiku-4-5")
+    source = agent_source(tmp_path / "source", "claude-haiku-5-5")
     item = cli.Item("agents", "test", "demo", source)
 
     cli.install_codex_item(item, "project")
@@ -599,7 +607,7 @@ def test_agent_cleanup_preserves_a_user_modified_installer_file(
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(cli, "STATE_DIR", tmp_path / "state")
     monkeypatch.setattr(cli, "STATE_FILE", tmp_path / "state" / "state.json")
-    item = cli.Item("agents", "test", "demo", agent_source(tmp_path / "source", "claude-haiku-4-5"))
+    item = cli.Item("agents", "test", "demo", agent_source(tmp_path / "source", "claude-haiku-5-5"))
 
     cli.install_codex_item(item, "project")
     destination = tmp_path / ".codex" / "agents" / "demo.toml"
@@ -1207,7 +1215,7 @@ def test_install_item_creates_claude_and_codex_agent_artifacts(tmp_path: Path, m
         "STATE_FILE",
         tmp_path / "home" / ".claude-all" / "state.json",
     )
-    source = agent_source(tmp_path, "claude-haiku-4-5")
+    source = agent_source(tmp_path, "claude-haiku-5-5")
     item = cli.Item("agents", "test", "sample-agent", source)
 
     with pytest.MonkeyPatch.context() as hosts:
@@ -1244,13 +1252,13 @@ def test_rebuild_codex_agents_renders_only_installed_agents_directly(
         "agents",
         "test",
         "first-agent",
-        agent_source(tmp_path / "first", "claude-haiku-4-5"),
+        agent_source(tmp_path / "first", "claude-haiku-5-5"),
     )
     second = cli.Item(
         "agents",
         "test",
         "second-agent",
-        agent_source(tmp_path / "second", "claude-sonnet-5"),
+        agent_source(tmp_path / "second", "claude-sonnet-5-5"),
     )
 
     cli.record_install(
@@ -1339,7 +1347,7 @@ def test_rebuild_flag_generates_global_codex_agents(tmp_path: Path, monkeypatch)
         "agents",
         "test",
         "sample-agent",
-        agent_source(tmp_path, "claude-haiku-4-5"),
+        agent_source(tmp_path, "claude-haiku-5-5"),
     )
     monkeypatch.setattr(cli, "discover", lambda filters: [item])
     monkeypatch.setattr(cli.Path, "home", lambda: tmp_path / "home")
@@ -1403,7 +1411,7 @@ def test_install_migrates_a_legacy_cache_symlink_to_a_direct_file(
         "agents",
         "test",
         "sample-agent",
-        agent_source(tmp_path, "claude-haiku-4-5"),
+        agent_source(tmp_path, "claude-haiku-5-5"),
     )
     old_destination = tmp_path / ".codex" / "agents" / "sample-agent.toml"
     old_destination.parent.mkdir(parents=True)
