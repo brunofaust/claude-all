@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Gate: every `claude-all.json` `requires` entry resolves to a real resource.
+"""Gate: every `claude-all.json` `requires` entry resolves to a real resource,
+and every resource an instruction snippet names is in its `requires`.
 
 A per-resource dependency manifest (`claude-all.json`, key `requires`) is only
 safe if its targets exist — a `requires` pointing at a renamed/deleted resource
@@ -17,11 +18,14 @@ Exit codes: 0 = every entry resolves · 1 = a dangling/malformed entry.
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SRC = REPO_ROOT / "src"
+INSTRUCTIONS_DIR = SRC / "claude_all" / "instructions"
+CODE_SPAN = re.compile(r"`([^`\s]+)`")
 
 
 def load_resource_keys() -> set[str]:
@@ -71,15 +75,58 @@ def find_violations(known: set[str]) -> list[str]:
     return findings
 
 
+def find_undeclared_instruction_refs(
+    known: set[str], instructions_dir: Path = INSTRUCTIONS_DIR
+) -> list[str]:
+    """Return one finding per resource an instruction names without requiring it.
+
+    A standalone instruction has no agent or skill of its own to carry a
+    dependency, so a resource it names in a code span must be in its
+    ``claude-all.json`` ``requires`` — otherwise installing the instruction
+    alone ships a rule that points at nothing.
+
+    Args:
+        known: Every resolvable resource key.
+        instructions_dir: Root holding ``<name>/claude_md.md`` snippets.
+
+    Returns:
+        Stable ``path: message`` findings (empty when every reference is declared).
+    """
+    keys_by_name: dict[str, set[str]] = {}
+    for key in known:
+        keys_by_name.setdefault(key.split("/", 1)[1], set()).add(key)
+    findings: list[str] = []
+    for snippet in sorted(instructions_dir.glob("*/claude_md.md")):
+        manifest = snippet.parent / "claude-all.json"
+        declared: set[str] = set()
+        if manifest.exists():
+            try:
+                declared = set(json.loads(manifest.read_text(encoding="utf-8")).get("requires", []))
+            except (json.JSONDecodeError, OSError, TypeError):
+                declared = set()
+        own = f"instructions/{snippet.parent.name}"
+        rel = snippet.relative_to(instructions_dir.parent)
+        for token in sorted(set(CODE_SPAN.findall(snippet.read_text(encoding="utf-8")))):
+            candidates = keys_by_name.get(token, set()) - {own}
+            if candidates and not candidates & declared:
+                findings.append(
+                    f"{rel}: names `{token}` but its claude-all.json does not require "
+                    + " or ".join(sorted(candidates))
+                )
+    return findings
+
+
 def main() -> int:
     """CLI entry point — print findings to stdout, exit 1 on any."""
-    findings = find_violations(load_resource_keys())
+    known = load_resource_keys()
+    findings = find_violations(known) + find_undeclared_instruction_refs(known)
     for finding in findings:
         print(finding)
     if findings:
         print(
-            f"\n{len(findings)} dangling/invalid requires entry(ies) — a dependency "
-            "manifest points at a resource the installer cannot discover.",
+            f"\n{len(findings)} requires finding(s) — a dependency manifest points at a "
+            "resource the installer cannot discover, or an instruction names one it "
+            "does not require.",
             file=sys.stderr,
         )
         return 1

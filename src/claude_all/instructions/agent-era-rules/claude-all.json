@@ -1,0 +1,7 @@
+{
+  "requires": [
+    "skills/mock-drift-sweep",
+    "skills/regression-gates",
+    "skills/diff-retrospective"
+  ]
+}
