@@ -110,12 +110,16 @@ Skip steps 3-5 only if you have a written reason. "I don't want to revert" isn't
 
 ## Try-to-break-it probe (one per claim)
 
-Before claiming PASS, run at least ONE failure-case probe:
+Before claiming PASS, run at least ONE failure-case probe. Aim it at the most expensive,
+hardest-to-detect failure the change could cause, not the easiest one to write:
 
 - Edge input (empty string, `None`, max int, unicode)
 - Concurrent caller (race the operation)
-- Missing dependency (env var unset, service down)
+- Missing dependency (env var unset, service down, timeout)
 - Stale state (cache hit on wrong key, dirty fixture)
+- Partial failure (crash mid-batch, retry, duplicate delivery: is it idempotent?)
+- Trust boundary (wrong user/tenant, missing permission)
+- Version skew (old schema/data/client against new code)
 
 Quote what you ran + what you observed. If you can't think of a failure case, the claim isn't tested enough.
 
@@ -163,6 +167,7 @@ For `PARTIAL`: list what passed + what's untested + what would need to change to
 - Said "should" in your own response
 - Skipped step 3 (didn't read the output)
 - Used a cached result from earlier in the session as evidence
+- Reused a run from before the latest edit: evidence counts only if it ran against the current tree, so after a fix, rerun every check that edit could invalidate
 - Claimed PASS based on absence of error (no news ≠ good news)
 - Marked a flaky test as PASS after the third re-run "this time it worked"
 - Treated a clean compile as proof of correctness (compiles ≠ works)
@@ -191,6 +196,9 @@ IS, not the attempt:
 
 The flip side of the evidence rule: just as you don't claim success without proof, you don't grant
 partial credit without it either.
+
+Calibration cuts both ways: don't manufacture failures to look rigorous. Every FAIL cites observed
+output (no invented lines or behavior), and when the probes come back clean, report PASS plainly.
 
 ## Hand-offs
 
