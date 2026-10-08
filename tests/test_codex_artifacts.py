@@ -62,7 +62,7 @@ PRE_COMPACTION_INSTRUCTION_IDENTITIES = {
     "instructions/agent-era-rules",
     "instructions/bash-safety",
     "instructions/commit-cadence",
-    "instructions/delegate_search",
+    "instructions/delegate-search",
     "instructions/response-style",
     "instructions/secrets-in-shell",
     "instructions/tool-dispatch",

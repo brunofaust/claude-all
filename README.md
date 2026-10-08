@@ -301,7 +301,7 @@ Standalone rules injected into `~/.claude/CLAUDE.md` — no agent or skill attac
 
 | Instruction | What it does |
 | --- | --- |
-| [`delegate_search`](src/claude_all/instructions/delegate_search/claude_md.md) | Routes broad codebase search to the `Explore` agent instead of grep loops. |
+| [`delegate-search`](src/claude_all/instructions/delegate-search/claude_md.md) | Routes broad codebase search to the `Explore` agent instead of grep loops. |
 | [`agent-era-rules`](src/claude_all/instructions/agent-era-rules/claude_md.md) | Standing rules learned from running AI agents on a real codebase. |
 | [`tool-dispatch`](src/claude_all/instructions/tool-dispatch/claude_md.md) | Prefer built-in tools and agents over raw bash for common commands. |
 | [`bash-safety`](src/claude_all/instructions/bash-safety/claude_md.md) | Avoid credential leaks and destructive writes in shell commands. |
