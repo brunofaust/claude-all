@@ -311,3 +311,39 @@ def test_settings_hook_entry_is_dropped(home: Path) -> None:
 
     assert cli.cmd_uninstall(filters=[], scope="user", assume_yes=True) == 0
     assert command not in settings.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    ("cwd_parts", "target_parts", "expected"),
+    [
+        (("home", "repo"), ("home", "repo", ".claude", "agents", "a.md"), "project"),
+        (("home", "repo"), ("home", ".claude", "agents", "a.md"), "user"),
+        (("home",), ("home", ".claude", "agents", "a.md"), "user"),
+        (("work", "repo"), ("work", "repo", ".claude", "agents", "a.md"), "project"),
+        ((), ("home", ".claude", "agents", "a.md"), "user"),
+    ],
+)
+def test_state_scope_classifies_project_nested_under_home(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    cwd_parts: tuple[str, ...],
+    target_parts: tuple[str, ...],
+    expected: str,
+) -> None:
+    """A repo under $HOME records project installs as project, not user.
+
+    Args:
+        tmp_path: pytest's per-test temporary directory.
+        monkeypatch: fixture used to repoint HOME and the working directory.
+        cwd_parts: Working directory relative to ``tmp_path``.
+        target_parts: Recorded target relative to ``tmp_path``.
+        expected: Scope the target must be attributed to.
+    """
+    home_dir = tmp_path / "home"
+    cwd = tmp_path.joinpath(*cwd_parts)
+    cwd.mkdir(parents=True, exist_ok=True)
+    home_dir.mkdir(exist_ok=True)
+    monkeypatch.setenv("HOME", str(home_dir))
+    monkeypatch.chdir(cwd)
+
+    assert cli.state_scope(tmp_path.joinpath(*target_parts)) == expected

@@ -62,11 +62,20 @@ def state_scope(path: str | Path | None) -> str:
 
     Returns:
         ``"project"`` for paths rooted in the current repository; otherwise
-        ``"user"``.
+        ``"user"``. When the path sits under both the working directory and
+        ``$HOME``, the deeper of the two roots owns it, so a repository nested
+        in ``$HOME`` still owns its project installs.
     """
-    if path and str(Path.cwd()) in str(path) and str(Path.home()) not in str(path):
+    if not path:
+        return "user"
+    target = Path(os.path.abspath(path))
+    cwd = Path.cwd()
+    home = Path.home()
+    if not target.is_relative_to(cwd):
+        return "user"
+    if not target.is_relative_to(home):
         return "project"
-    return "user"
+    return "project" if len(cwd.parts) > len(home.parts) else "user"
 
 
 def state_host(path: str | Path | None) -> str:
@@ -2419,7 +2428,7 @@ def install_claude_item(item: Item, target_root: Path) -> str:
     if item.kind == "instructions":
         # Snippet-only resource: inject the tagged block, nothing to symlink.
         md = inject_claude_md(item, scope)
-        record_install(item.kind, item.name, claude_md_target(scope))
+        record_install(item.kind, item.name, claude_md_target(scope), scope=scope)
         return md or f"instructions/{item.name}: no snippet found"
 
     if item.kind == "plugins":
@@ -2466,7 +2475,7 @@ def install_claude_item(item: Item, target_root: Path) -> str:
     replaced = target_path.is_symlink() or target_path.exists()
     if not replace_with_symlink(target_path, src, allow_identical_file=False):
         return f"skipped {item.kind}/{item.name}: destination is user-owned"
-    record_install(item.kind, item.name, target_path)
+    record_install(item.kind, item.name, target_path, scope=scope)
     migrate_legacy_skill_host(item, scope, "claude", target_root / "skills")
 
     md = inject_claude_md(item, scope)
@@ -2898,7 +2907,7 @@ def install_item(item: Item, target_root: Path) -> str:
         messages.append(install_claude_item(item, target_root))
     else:
         messages.append("Claude skipped: CLI not on PATH")
-        record_install(item.kind, item.name, codex_root(scope))
+        record_install(item.kind, item.name, codex_root(scope), scope=scope)
     if shutil.which("codex"):
         messages.append(install_codex_item(item, scope))
     else:
@@ -3007,11 +3016,10 @@ def update_item(kind: str, name: str, install_record: dict, all_items: list[Item
         else:
             shutil.rmtree(target_path)
     os.symlink(src, target_path)
+    # Infer scope from target path for record and injection
+    scope = "user" if target_path.is_relative_to(USER_CLAUDE_DIR) else "project"
     # Refresh timestamp
-    record_install(kind, name, target_path)
-
-    # Infer scope from target path so claude_md + hook re-injection lands in the right scope
-    scope = "user" if str(target_path).startswith(str(USER_CLAUDE_DIR)) else "project"
+    record_install(kind, name, target_path, scope=scope)
 
     extras = []
     md = inject_claude_md(match, scope)
