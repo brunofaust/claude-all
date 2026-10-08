@@ -14,6 +14,7 @@
   "secret-leak-guard": {"event": "PreToolUse", "matcher": "Bash", "timeout": 5},
   "supply-chain-guard": {"event": "PreToolUse", "matcher": "Bash", "timeout": 15},
   "dev-server-tmux": {"event": "PreToolUse", "matcher": "Bash", "timeout": 2},
+  "uv-run-guard": {"event": "PreToolUse", "matcher": "Bash", "timeout": 2},
   "suggest-compact": {"event": "PreToolUse", "matcher": "", "timeout": 2},
   "edited-files-accumulator": {"event": "PostToolUse", "matcher": "Edit|Write|MultiEdit", "timeout": 2},
   "prek-stop-runner": {"event": "Stop", "matcher": "", "timeout": 60},

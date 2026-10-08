@@ -252,6 +252,7 @@ Scripts Claude Code runs automatically around tool calls — mostly quiet remind
 | [`secret-leak-guard.py`](src/claude_all/hooks/secret-leak-guard.py) | PreToolUse | Blocks a commit that would leak a credential. |
 | [`supply-chain-guard.py`](src/claude_all/hooks/supply-chain-guard.py) | PreToolUse | Flags risky package installs before they run. |
 | [`dev-server-tmux.py`](src/claude_all/hooks/dev-server-tmux.py) | PreToolUse | Blocks starting a dev server outside tmux. |
+| [`uv-run-guard.py`](src/claude_all/hooks/uv-run-guard.py) | PreToolUse | In a uv project, blocks running a `.venv` tool outside `uv run` (`pytest`, `.venv/bin/ruff`, `uvx mypy`, `python -m pytest`) and `pgrep -f`. |
 | [`edited-files-accumulator.py`](src/claude_all/hooks/edited-files-accumulator.py) | PostToolUse | Tracks which files changed this turn. |
 | [`prek-stop-runner.py`](src/claude_all/hooks/prek-stop-runner.py) | Stop | Runs prek once per response instead of once per edit. |
 | [`suggest-compact.py`](src/claude_all/hooks/suggest-compact.py) | PreToolUse | Reminds you to run `/compact` when context is getting full. |
