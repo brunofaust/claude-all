@@ -1,28 +1,8 @@
 #!/usr/bin/env python3
-"""PreToolUse hook — block CREATING a new junk-drawer module (helpers/utils/common/…).
-
-Fires on `Write`/`Edit`/`MultiEdit`. A file called `utils`/`helpers`/`common` has
-no owner and no contract — it is an attractor that collects unrelated functions
-until it becomes a hidden god-module everything imports and nothing can split.
-This is the edit-time layer complementing the CI-time
-`regression-gates/checkers/junk_drawer.py` checker (same banned-stem list, kept
-in sync): that one ratchets existing violations to zero over time; this one
-stops a NEW one from being created in the first place.
-
-Only fires when the TARGET FILE DOES NOT YET EXIST — an edit to an
-already-existing legacy `utils.py` in a brownfield repo is exactly what the
-CI-time ratchet is for, and blocking every edit to it forever would make the
-file impossible to even shrink. Creating a brand-new file at that path is the
-one moment worth stopping.
-
-## Override
-
-- add a `# guard:allow` comment to the content, or
-- set `CLAUDE_ALL_ALLOW_JUNK_DRAWER=1`.
-
-Exit codes: 0 = allow · 2 = block (stderr shown to Claude, edit skipped). Any
-malformed input / missing key / existing file / non-code suffix / non-banned
-stem -> 0.
+"""PreToolUse hook — block CREATING a new junk-drawer module (helpers/utils/common/…). Fires on
+`Write`/`Edit`/`MultiEdit`. A file called `utils`/`helpers`/`common` has no owner and no
+contract — it is an attractor that collects unrelated functions until it becomes a hidden god-
+module everything imports and nothing can split.
 """
 
 from __future__ import annotations
@@ -62,42 +42,19 @@ def _message(stem: str) -> str:
 
 
 def _junk_drawer_name(path: Path) -> str | None:
-    """Return the offending name when `path` creates a junk drawer, else `None`.
-
-    Two shapes, not one — the module form and the PACKAGE form:
-
-    - `utils.py`            -> the stem is banned
-    - `utils/__init__.py`   -> the stem is `__init__`, so a stem-only check misses
-      it entirely; the banned name is the PARENT directory. This is the commonest
-      Python junk drawer of the two, so missing it would gut the guard.
-
-    Args:
-        path: The file being written.
-
-    Returns:
-        The banned name to report, or `None` when this path is fine.
-    """
+    """Return the offending name when `path` creates a junk drawer, else `None`."""
     if path.suffix not in _CODE_SUFFIXES:
         return None
     if path.stem.lower() in _BANNED_STEMS:
         return path.stem
-    # Package form: the barrel file of a directory that is itself a junk drawer.
-    # Both halves lower-cased, same as the module form above — otherwise
-    # `Utils/Index.ts` slips past while `UTILS.ts` is caught.
+    # Barrel file inside a junk-drawer dir; lower-case both halves (`Utils/Index.ts`).
     if path.stem.lower() in _BARREL_STEMS and path.parent.name.lower() in _BANNED_STEMS:
         return path.parent.name
     return None
 
 
 def _block(reason: str) -> int:
-    """Print the block reason to stderr (shown to Claude) and return exit code 2.
-
-    Args:
-        reason: Human-readable explanation of why the edit was blocked.
-
-    Returns:
-        2 — the PreToolUse block exit code (the edit does NOT run).
-    """
+    """Print the block reason to stderr (shown to Claude) and return exit code 2."""
     print(f"[junk-drawer-guard] BLOCKED — {reason}", file=sys.stderr)
     return 2
 

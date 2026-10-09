@@ -307,5 +307,15 @@ hooks = [
     language = "system",
     pass_filenames = false,
     always_run = true
+  },
+  # Docstrings/comments are optional but size-bounded (budgets: [tool.docstring-budget]
+  # defaults in the checker). Whole-tree, zero findings: the trim already landed.
+  {
+    id = "self-docstring-budget",
+    name = "📝 self · Docstring/comment size budget (own checker)",
+    entry = "python3 src/claude_all/skills/python/brunofaust-python-style/checkers/docstring_budget.py",
+    language = "system",
+    types = ["python"],
+    pass_filenames = true
   }
 ]

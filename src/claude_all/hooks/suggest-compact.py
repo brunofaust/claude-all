@@ -1,21 +1,8 @@
 #!/usr/bin/env python3
-"""PreToolUse hook — suggest /compact as the context window fills.
-
-Fires on all tools (matcher ""). Prefers a TOKEN-aware signal: it reads the most
-recent `message.usage` from the session transcript and estimates current context
-occupancy as `input_tokens + cache_read_input_tokens + cache_creation_input_tokens`
-(what the model was actually sent on the last turn). When that crosses a threshold
-it suggests /compact — and re-suggests as occupancy keeps climbing, resetting after
-a compaction drops it back down. Token occupancy tracks context pressure far better
-than a raw tool-call count, since one big tool result can consume the window.
-
-Reading the transcript every call would be wasteful (matcher "" = every tool), so a
-cheap per-session counter amortizes it: the token check runs every CHECK_EVERY calls.
-If the transcript / usage is unavailable, it falls back to the old "suggest every
-SUGGEST_EVERY tool calls" behavior so it still does something useful.
-
-Uses exit 0 + JSON `systemMessage` so it surfaces as a normal warning, not a "hook
-error". Tunables via env: CC_COMPACT_TOKEN_THRESHOLD, CC_COMPACT_SUGGEST_EVERY.
+"""PreToolUse hook — suggest /compact as the context window fills. Fires on all tools (matcher
+""). Prefers a TOKEN-aware signal: it reads the most recent `message.usage` from the session
+transcript and estimates current context occupancy as `input_tokens + cache_read_input_tokens
++ cache_creation_input_tokens` (what the model was actually sent on the last turn).
 """
 
 from __future__ import annotations
@@ -55,11 +42,6 @@ def write_int(path: str, value: int) -> None:
 
 
 def context_tokens(transcript_path: str) -> int | None:
-    """Estimate current context occupancy from the last usage in the transcript tail.
-
-    Args:
-        transcript_path: Path to the session's JSONL transcript file.
-    """
     try:
         with open(transcript_path, "rb") as f:
             f.seek(0, os.SEEK_END)

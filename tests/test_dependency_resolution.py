@@ -31,30 +31,10 @@ from claude_all.cli import (
 
 
 def make_item(kind: str, name: str, src: Path) -> Item:
-    """Build a minimal Item for resolver tests.
-
-    Args:
-        kind: Resource kind (``skills`` / ``agents`` / …).
-        name: Resource name.
-        src: The resource's source path (its parent dir holds `claude-all.json`).
-    """
     return Item(kind=kind, subcategory="test", name=name, src=src)
 
 
 def build_universe(root: Path, graph: dict[str, list[str]]) -> list[Item]:
-    """Materialise a synthetic resource universe on disk.
-
-    One dir per resource, each with a `SKILL.md` and — when it has dependencies —
-    a `claude-all.json`. The single owner of "make test resources", so the tests
-    below never re-implement it.
-
-    Args:
-        root: Directory to create the resources under.
-        graph: ``{name: [dep key, ...]}`` — the dependency graph to write.
-
-    Returns:
-        One :class:`Item` per resource, in ``graph`` order.
-    """
     items = []
     for name, requires in graph.items():
         d = root / name
@@ -68,11 +48,6 @@ def build_universe(root: Path, graph: dict[str, list[str]]) -> list[Item]:
 
 @pytest.fixture
 def universe(tmp_path: Path) -> list[Item]:
-    """A synthetic 4-resource universe: a -> b -> c, plus an unrelated d.
-
-    Args:
-        tmp_path: pytest's per-test temporary directory.
-    """
     return build_universe(tmp_path, {"a": ["skills/b"], "b": ["skills/c"], "c": [], "d": []})
 
 
@@ -85,11 +60,6 @@ class TestResolveClosure:
     """The transitive, cycle-safe install closure."""
 
     def test_pulls_transitive_dependencies(self, universe: list[Item]) -> None:
-        """Selecting `a` installs `a`, its dep `b`, and `b`'s dep `c` — but not `d`.
-
-        Args:
-            universe: The synthetic a->b->c (+d) resource set.
-        """
         a = next(i for i in universe if i.name == "a")
         closure, pulled, external = resolve_closure([a], universe)
         assert keys(closure) == {"skills/a", "skills/b", "skills/c"}
@@ -108,21 +78,11 @@ class TestResolveClosure:
         assert pulled == [] and external == []
 
     def test_cycle_terminates(self, tmp_path: Path) -> None:
-        """A -> B -> A resolves both exactly once instead of looping forever.
-
-        Args:
-            tmp_path: pytest's per-test temporary directory.
-        """
         items = build_universe(tmp_path, {"x": ["skills/y"], "y": ["skills/x"]})
         closure, _, _ = resolve_closure([items[0]], items)
         assert keys(closure) == {"skills/x", "skills/y"}
 
     def test_unknown_dep_is_external_not_installed(self, tmp_path: Path) -> None:
-        """A dep naming no known resource (a built-in) is reported, never installed.
-
-        Args:
-            tmp_path: pytest's per-test temporary directory.
-        """
         items = build_universe(tmp_path, {"solo": ["builtin/code-review"]})
         item = items[0]
         closure, pulled, external = resolve_closure([item], [item])
@@ -131,11 +91,6 @@ class TestResolveClosure:
         assert external == ["builtin/code-review"]
 
     def test_already_selected_dep_not_double_reported(self, universe: list[Item]) -> None:
-        """Selecting both `a` and its dep `b` reports only `c` as pulled in.
-
-        Args:
-            universe: The synthetic a->b->c (+d) resource set.
-        """
         sel = [i for i in universe if i.name in {"a", "b"}]
         closure, pulled, _ = resolve_closure(sel, universe)
         assert keys(closure) == {"skills/a", "skills/b", "skills/c"}
@@ -156,13 +111,6 @@ class TestLoadRequires:
     def test_unusable_manifest_yields_no_deps(
         self, tmp_path: Path, manifest: str | None, label: str
     ) -> None:
-        """Every unusable-manifest shape degrades to "no deps", never an exception.
-
-        Args:
-            tmp_path: pytest's per-test temporary directory.
-            manifest: Raw `claude-all.json` content, or None to omit the file.
-            label: Human-readable case name (surfaces in the assertion message).
-        """
         (tmp_path / "SKILL.md").write_text("# x\n")
         if manifest is not None:
             (tmp_path / "claude-all.json").write_text(manifest)
@@ -170,11 +118,6 @@ class TestLoadRequires:
         assert load_requires(item) == [], label
 
     def test_flat_agent_uses_prefixed_sibling(self, tmp_path: Path) -> None:
-        """A flat agent reads `<name>.claude-all.json`, matching the hook convention.
-
-        Args:
-            tmp_path: pytest's per-test temporary directory.
-        """
         src = tmp_path / "my-agent.md"
         src.write_text("# a\n")
         item = make_item("agents", "my-agent", src)
@@ -182,20 +125,9 @@ class TestLoadRequires:
 
 
 class TestPruneScopeGuard:
-    """Prune only ever touches artifacts inside the CURRENT install scope.
-
-    `state.json` records absolute paths. When the state file and `$HOME` disagree —
-    a copied state file, a container, a test harness overriding HOME — an unguarded
-    prune follows those paths out of its sandbox. This happened for real: a
-    sandboxed run against a copied state file unlinked symlinks in the actual home.
-    """
+    """Prune only ever touches artifacts inside the CURRENT install scope."""
 
     def test_out_of_scope_symlink_is_not_unlinked(self, tmp_path: Path) -> None:
-        """A recorded target outside the install roots is left strictly alone.
-
-        Args:
-            tmp_path: pytest's per-test temporary directory.
-        """
         outsider = tmp_path / "somewhere-else"
         outsider.mkdir()
         link = outsider / "victim"
@@ -208,11 +140,6 @@ class TestPruneScopeGuard:
         assert actions == []
 
     def test_out_of_scope_artifacts_are_skipped(self, tmp_path: Path) -> None:
-        """A recorded CLAUDE.md / settings artifact outside scope is not rewritten.
-
-        Args:
-            tmp_path: pytest's per-test temporary directory.
-        """
         foreign_md = tmp_path / "CLAUDE.md"
         foreign_md.write_text(
             "<!-- claude-all:skills/x:start -->\nBODY\n<!-- claude-all:skills/x:end -->\n"

@@ -27,12 +27,6 @@ from claude_all.cli import (
 
 
 def write_settings(root: Path, hooks: dict) -> None:
-    """Write a `.claude/settings.json` with the given hooks mapping.
-
-    Args:
-        root: The `.claude` directory.
-        hooks: The `hooks` mapping to serialise.
-    """
     (root / "settings.json").write_text(json.dumps({"hooks": hooks}))
 
 
@@ -53,12 +47,6 @@ class TestCheckLinks:
     """Dangling links, and the mixed-install signal."""
 
     def test_dangling_link_is_reported(self, tmp_path: Path, monkeypatch) -> None:
-        """A symlink whose target is gone is a finding.
-
-        Args:
-            tmp_path: pytest's per-test temporary directory.
-            monkeypatch: pytest fixture used to point the project scope at tmp_path.
-        """
         claude = tmp_path / ".claude"
         (claude / "skills").mkdir(parents=True)
         (claude / "skills" / "ghost").symlink_to(tmp_path / "gone")
@@ -67,12 +55,6 @@ class TestCheckLinks:
         assert any("dangling link" in f["label"] and "ghost" in f["label"] for f in findings)
 
     def test_mixed_install_is_reported(self, tmp_path: Path, monkeypatch) -> None:
-        """Links pointing at two different claude-all roots flag a partial install.
-
-        Args:
-            tmp_path: pytest's per-test temporary directory.
-            monkeypatch: pytest fixture used to point the project scope at tmp_path.
-        """
         claude = tmp_path / ".claude"
         (claude / "skills").mkdir(parents=True)
         for root, names in (("rootA", ["a1", "a2"]), ("rootB", ["b1"])):
@@ -85,12 +67,6 @@ class TestCheckLinks:
         assert any("mixed install" in f["label"] for f in findings)
 
     def test_consistent_install_is_quiet(self, tmp_path: Path, monkeypatch) -> None:
-        """Links all pointing at ONE root produce no finding — no false positives.
-
-        Args:
-            tmp_path: pytest's per-test temporary directory.
-            monkeypatch: pytest fixture used to point the project scope at tmp_path.
-        """
         claude = tmp_path / ".claude"
         (claude / "skills").mkdir(parents=True)
         target = tmp_path / "root" / "claude_all" / "skills" / "s"
@@ -105,12 +81,6 @@ class TestCheckSettingsHooks:
     """Broken and double-wired settings.json hook entries."""
 
     def test_orphan_hook_entry_is_reported(self, tmp_path: Path, monkeypatch) -> None:
-        """A hook command pointing at a missing script is a finding.
-
-        Args:
-            tmp_path: pytest's per-test temporary directory.
-            monkeypatch: pytest fixture used to point the project scope at tmp_path.
-        """
         claude = tmp_path / ".claude"
         claude.mkdir(parents=True)
         missing = tmp_path / "nope" / "gone-hook.py"
@@ -123,12 +93,6 @@ class TestCheckSettingsHooks:
         assert any("orphan hook" in f["label"] and "gone-hook.py" in f["label"] for f in findings)
 
     def test_double_wired_hook_is_reported(self, tmp_path: Path, monkeypatch) -> None:
-        """The same script wired under two events may fire twice — a finding.
-
-        Args:
-            tmp_path: pytest's per-test temporary directory.
-            monkeypatch: pytest fixture used to point the project scope at tmp_path.
-        """
         claude = tmp_path / ".claude"
         claude.mkdir(parents=True)
         script = tmp_path / "dup.py"
@@ -149,12 +113,6 @@ class TestCheckClaudeMd:
     """Orphaned, unclosed and duplicated tagged blocks."""
 
     def test_orphan_and_unclosed_and_duplicate(self, tmp_path: Path, monkeypatch) -> None:
-        """Each malformed/unowned block shape produces its own finding.
-
-        Args:
-            tmp_path: pytest's per-test temporary directory.
-            monkeypatch: pytest fixture used to point the project scope at tmp_path.
-        """
         (tmp_path / "CLAUDE.md").write_text(
             "<!-- claude-all:skills/orphan:start -->\nx\n<!-- claude-all:skills/orphan:end -->\n"
             "<!-- claude-all:skills/unclosed:start -->\ny\n"
@@ -168,12 +126,6 @@ class TestCheckClaudeMd:
         assert any("duplicate block" in f["label"] for f in findings)
 
     def test_missing_claude_md_is_quiet(self, tmp_path: Path, monkeypatch) -> None:
-        """No CLAUDE.md at all is not a defect.
-
-        Args:
-            tmp_path: pytest's per-test temporary directory.
-            monkeypatch: pytest fixture used to point the project scope at tmp_path.
-        """
         monkeypatch.chdir(tmp_path)
         assert check_claude_md("project") == []
 
@@ -182,12 +134,6 @@ class TestRemoveLeftovers:
     """`--prune` reverses the removable findings and leaves advisory ones alone."""
 
     def test_removable_are_reversed_advisory_untouched(self, tmp_path: Path, monkeypatch) -> None:
-        """A dangling link is deleted; an unclosed CLAUDE.md block is only reported.
-
-        Args:
-            tmp_path: pytest's per-test temporary directory.
-            monkeypatch: pytest fixture used to point the project scope at tmp_path.
-        """
         claude = tmp_path / ".claude"
         (claude / "skills").mkdir(parents=True)
         link = claude / "skills" / "ghost"

@@ -33,12 +33,6 @@ ROOT = Path(__file__).resolve().parent.parent
 def test_vendor_clone_supports_pinned_commit_refs(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A coherent vendor bundle can be pinned to an exact upstream commit.
-
-    Args:
-        tmp_path: Isolated clone destination.
-        monkeypatch: Pytest fixture for replacing git execution.
-    """
     commit = "4ec6f84b61cd3c931046c3e6e398f3ae7de372f7"
     destination = tmp_path / "upstream"
     calls: list[tuple[list[str], Path | None]] = []
@@ -144,10 +138,7 @@ class TestCheckLinks:
     def test_tracked_file_missing_from_disk_is_skipped(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
-        # `git ls-files` lists a tracked file even after it's deleted from the
-        # working tree but not yet re-staged — check_links() must skip it instead
-        # of crashing on read_text(). Regression for the CHANGELOG.md removal,
-        # which crashed exactly this way.
+        # tracked-but-deleted file must be skipped, not crash read_text()
         missing = tmp_path / "GONE.md"
         monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [missing])
         assert check_links(registry=[]) == []

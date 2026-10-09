@@ -1,132 +1,6 @@
 #!/usr/bin/env python3
 """Checker: enforce the ``__all__`` export contract — import only what a module exports.
-
-WHY
----
-``__all__`` is the real export contract. A module-level name that is not in
-``__all__`` is **not public**, so importing it couples you to an implementation
-detail that can move, be renamed, or vanish without notice — and without any
-signal to the importer. The module never promised that name; the import invented
-the promise.
-
-This pairs with the sibling rule that **module-level names never start with an
-underscore**. A leading ``_`` at module scope blinds dead-code tools — vulture
-treats an underscore-prefixed module-level name as intentionally-unused and stops
-reporting it, so ``_helper`` rots forever instead of being deleted. ``__all__``,
-not a leading underscore, is how a module says "private": list the public names,
-and everything else is private *by omission* while staying visible to tooling.
-
-Three rules enforce that contract:
-
-  not-in-all      ``from x import y`` where ``y`` is not in ``x``'s ``__all__``.
-                  Also fires on attribute access through an imported module
-                  (``import myapp.core as c; c.y`` / ``myapp.core.y``) — reaching
-                  in through a dot is the same coupling as reaching in through an
-                  import, so checking only ``from``-imports would leave the door
-                  open.
-  private-in-all  ``__all__ = ["_helper"]``. Exporting an underscore name is a
-                  contradiction: it declares "public" and "private" at once.
-                  Drop the underscore (it is public — say so) or drop the entry.
-  missing-all     A module that DEFINES a public module-level ``def`` /
-                  ``async def`` / ``class`` but declares no ``__all__``. That
-                  module has no export contract at all, so ``not-in-all`` cannot
-                  verify imports FROM it — deleting ``__all__`` was the escape
-                  hatch out of the whole gate. This flags the module itself, from
-                  the other side. See the section below.
-
-Dunder names (``__version__``, ``__author__``, …) are always allowed: they are
-protocol, not exports. Star imports are skipped — a separate rule bans them.
-
-THE ``missing-all`` RULE — CLOSING THE FAIL-OPEN HOLE
-----------------------------------------------------
-``not-in-all`` validates an import against the *imported* module's ``__all__``,
-and a module that declares none is skipped there — deliberately: you genuinely
-cannot verify ``from x import y`` when ``x`` promises nothing, and flagging the
-*importer* for the *imported* module's omission would punish the wrong file and
-fire on every intra-repo import in a codebase mid-adoption.
-
-But that skip was a fail-open hole big enough to drive a truck through: because a
-module with no ``__all__`` is not checked, **deleting ``__all__`` opted a module
-out of the gate entirely.** In production this bit hard — over half a package's
-modules had no ``__all__`` and got ZERO enforcement while the gate reported
-GREEN. It is not cosmetic: a module with public names and no ``__all__`` also
-breaks mypy strict's ``no_implicit_reexport`` — a re-export from it fails with
-``Module "x" does not explicitly export attribute "Y"``, a real, blocking error.
-
-``missing-all`` closes the hole from the OTHER side. ``not-in-all`` skips ``x``
-from the *importer's* file; ``missing-all`` flags ``x`` in ``x``'s OWN file the
-moment ``x`` defines a public name and declares no ``__all__``. Once ``x`` gets
-its ``__all__``, ``not-in-all`` can enforce every import from it. The two rules
-coexist: one names the missing contract, the other enforces the declared one.
-
-The exemption is BY CONSTRUCTION, not by path — there is no allowlist. The rule
-fires ONLY when a module DEFINES a public module-level ``def`` / ``async def`` /
-``class``: ``__all__`` is the mechanism for saying "this is the public API", so a
-module with a public definition and no ``__all__`` has genuinely opted out. A
-module with nothing to export — a docstring-only ``__init__.py``, a module of
-only ``_private`` definitions (handled by the underscore rule), a module that is
-only imports and constants with no public ``def``/``class`` — has no contract to
-declare and is NEVER flagged. That carve-out is structural: it cannot drift and
-needs no allowlist to maintain. A public name is one that does not start with
-``_``; a dunder (``__version__``) is protocol, not exported API, and never counts.
-The declaration is recognised in either form — ``__all__ = [...]`` and the
-annotated ``__all__: list[str] = [...]`` — so annotating your ``__all__`` never
-trips the rule.
-
-CONTRACT
---------
-Prints one ``path: [rule] symbol — message`` finding per violation to stdout and
-**exits 1 when there is any finding**, so wiring it straight into prek/pre-commit
-surfaces the findings and fails the commit — no baseline artifact required.
-
-Keys are rule + enclosing symbol + the imported name, and NEVER a line number, so
-an unrelated edit does not churn a baseline. ``not-in-all`` can legitimately fire
-many times inside one symbol (a function touching ``c.a`` then ``c.b`` then
-``c.a`` again), so its keys carry a per-symbol ordinal — a second occurrence is a
-distinct finding rather than a duplicate key that collapses in a set-based
-baseline and lets a regression through.
-
-The checker owns NO state: it writes no baseline, no JSON, no cache file. If you
-want the regression-only ratchet, compose it with
-``regression-gates/baseline_gate.py`` and pass ``--exit-zero`` — that harness
-reads a non-zero exit as "the checker crashed" and fails closed, so the flag is
-required there and nowhere else.
-
-USAGE
------
-    # direct gate — prints findings, exits 1 (this is the prek/pre-commit wiring)
-    python checkers/all_contract.py src/
-    python checkers/all_contract.py --select private-in-all src/
-    python checkers/all_contract.py --package myapp src/ tests/
-
-    # regression-only ratchet — the baseline lives in baseline_gate.py, not here
-    baseline_gate.py --baseline all_baseline.txt -- \\
-        python checkers/all_contract.py --exit-zero src/
-
-The first-party packages are auto-detected from the roots (a ``src/`` layout, a
-package dir passed directly, or a file inside one). ``--package`` narrows that
-set when a repo ships several. Only first-party modules are resolved — a
-third-party import has no in-repo file, so it is never checked.
-
-PARSER NOTE — pin this hook's interpreter
------------------------------------------
-This checker parses with the ``ast`` of the interpreter it RUNS ON, so an
-interpreter older than the project's silently fails to parse new syntax (PEP 695
-``type X = int``, ``async def run[**P, T]``). Any
-Python-AST-based gate shares this: unpinned, bandit's env resolved to 3.11 and
-logged "syntax error while parsing AST" for 25 files, SKIPPED them, and **still
-exited success** — a security gate silently not scanning. Vulture's resolved to
-3.11 and dropped 35 files from dead-code analysis the same way.
-
-So this checker does NOT fail open. An unparsable file exits **2** (a tool error,
-distinct from 1 = findings) even under ``--exit-zero``, because a file it could
-not read is a file it did not check. That covers the *imported* module too: if
-its ``__all__`` cannot be parsed, every import from it would silently pass.
-
-Pin ``language_version`` on THIS hook — a repo-level ``default_language_version``
-does NOT reach a hook's isolated env. Gates with their own non-Python parser
-(ruff, jscpd, tree-sitter-based tools) are immune and need no pin.
-"""
+Rules: references/enforcement.md."""
 
 # NOTE: on the skill's 3.12 baseline (no PEP 649 lazy annotations — that is
 # 3.14-only), `from __future__ import annotations` is the recommended way to keep
@@ -172,37 +46,17 @@ NON_PACKAGE_DIRS = frozenset(
 
 
 class Finding(str):
-    """A finding key. Subclasses ``str`` so callers can just print it."""
+    """A finding key."""
 
     __slots__ = ()
 
 
 def is_dunder(name: str) -> bool:
-    """Return whether *name* is a dunder (``__version__``, ``__init__``, …).
-
-    Dunders are protocol, not exports: they are never required to appear in
-    ``__all__`` and are never rejected from it.
-
-    Args:
-        name: The identifier to classify.
-
-    Returns:
-        True when *name* both starts and ends with a double underscore.
-    """
+    """Return whether *name* is a dunder (``__version__``, ``__init__``, …)."""
     return name.startswith("__") and name.endswith("__")
 
 
 def attribute_chain(node: ast.expr) -> str | None:
-    """Extract the full dotted name from nested ``Attribute``/``Name`` nodes.
-
-    Args:
-        node: An AST expression node, typically an ``ast.Attribute``.
-
-    Returns:
-        The dotted string (``"myapp.core.public_fn"``), or ``None`` when the
-        chain bottoms out in something other than a bare name (a call, a
-        subscript, a literal) and therefore names no module path.
-    """
     parts: list[str] = []
     cur: ast.expr = node
     while isinstance(cur, ast.Attribute):
@@ -215,15 +69,7 @@ def attribute_chain(node: ast.expr) -> str | None:
 
 
 def _package_root_of(directory: Path) -> Path | None:
-    """Walk up from *directory* to the TOPMOST directory that is still a package.
-
-    Args:
-        directory: A directory that may sit inside a package tree.
-
-    Returns:
-        The outermost directory in the unbroken chain of ``__init__.py``-bearing
-        parents, or ``None`` when *directory* is not itself a package.
-    """
+    """Walk up from *directory* to the TOPMOST directory that is still a package."""
     if not (directory / "__init__.py").exists():
         return None
     top = directory
@@ -233,15 +79,7 @@ def _package_root_of(directory: Path) -> Path | None:
 
 
 def _child_packages(directory: Path) -> dict[str, Path]:
-    """Map each immediate child package of *directory* to *directory*.
-
-    Args:
-        directory: The directory to scan for package subdirectories.
-
-    Returns:
-        ``{package_name: containing_dir}`` for every child dir holding an
-        ``__init__.py``; empty when *directory* is unreadable or holds none.
-    """
+    """Map each immediate child package of *directory* to *directory*."""
     found: dict[str, Path] = {}
     if not directory.is_dir():
         return found
@@ -258,22 +96,6 @@ def _child_packages(directory: Path) -> dict[str, Path]:
 
 
 def discover_packages(roots: list[Path], package: str | None = None) -> dict[str, Path]:
-    """Derive the first-party top-level packages from the scan *roots*.
-
-    Handles the three shapes a root takes: a package dir passed directly
-    (``src/myapp``), a file inside one (``src/myapp/core.py``), and a container
-    of packages (``src/``, or a repo root with a ``src/`` layout).
-
-    Args:
-        roots: The files or directories the caller asked to scan.
-        package: Optional top-level package name to narrow the detected set to,
-            for a repo shipping several. ``None`` keeps all of them.
-
-    Returns:
-        ``{top_level_package_name: import_root}``, where ``import_root`` is the
-        directory a fully-qualified module name resolves against (the ``src/``
-        of a ``src/`` layout).
-    """
     packages: dict[str, Path] = {}
     for root in roots:
         resolved = root.resolve()
@@ -289,18 +111,6 @@ def discover_packages(roots: list[Path], package: str | None = None) -> dict[str
 
 
 def module_to_path(module_name: str, packages: dict[str, Path]) -> Path | None:
-    """Resolve an absolute module name to its first-party source file.
-
-    Args:
-        module_name: Fully-qualified dotted module name (``myapp.core.aws``).
-        packages: The ``{package_name: import_root}`` map from
-            :func:`discover_packages`.
-
-    Returns:
-        The module's ``.py`` path (its ``__init__.py`` when it is a package), or
-        ``None`` when it belongs to no first-party package or is absent on disk
-        (a third-party import, or a C extension).
-    """
     if not module_name:
         return None
     import_root = packages.get(module_name.split(".")[0])
@@ -315,17 +125,6 @@ def module_to_path(module_name: str, packages: dict[str, Path]) -> Path | None:
 
 
 def resolve_relative(relative_module: str, level: int, current_file: Path) -> Path | None:
-    """Resolve a relative import (``from ..core import x``) to a source file.
-
-    Args:
-        relative_module: The dotted suffix after the leading dots — empty for
-            ``from . import name``.
-        level: The number of leading dots (1 = current package, 2 = parent, …).
-        current_file: Absolute path of the file containing the import.
-
-    Returns:
-        The target module's ``.py`` path, or ``None`` when it is absent on disk.
-    """
     current_pkg = current_file.parent
     for _ in range(level - 1):
         current_pkg = current_pkg.parent
@@ -340,18 +139,6 @@ def resolve_relative(relative_module: str, level: int, current_file: Path) -> Pa
 def resolve_import_module(
     node: ast.ImportFrom, current_file: Path, packages: dict[str, Path]
 ) -> Path | None:
-    """Resolve an ``ImportFrom`` node to the first-party file it imports from.
-
-    Args:
-        node: The ``from X import Y`` node.
-        current_file: Absolute path of the file containing the import, needed to
-            anchor a relative import.
-        packages: The ``{package_name: import_root}`` map.
-
-    Returns:
-        The imported module's path, or ``None`` when it is third-party, absent,
-        or (for a relative import) outside every first-party package tree.
-    """
     if node.level:
         target = resolve_relative(node.module or "", node.level, current_file)
         if target is None:
@@ -362,26 +149,6 @@ def resolve_import_module(
 
 
 def extract_all(path: Path, cache: dict[Path, frozenset[str] | None]) -> frozenset[str] | None:
-    """Return the statically-declared ``__all__`` of the module at *path*.
-
-    Args:
-        path: The module file to read.
-        cache: Cross-file memo of already-parsed modules, mutated in place — one
-            module is typically imported by many files.
-
-    Returns:
-        The exported names, or ``None`` when the module declares no ``__all__``
-        or declares one that is not a literal list/tuple of strings (a computed
-        ``__all__`` is not statically knowable, so it is treated as absent).
-
-    Raises:
-        SyntaxError: When the RUNNING interpreter cannot parse *path*. NOT
-            swallowed — see the PARSER NOTE in the module docstring: an
-            unreadable ``__all__`` would silently green-light every import from
-            this module.
-        ValueError: On a null byte or similar unreadable source.
-        UnicodeDecodeError: When the file is not valid UTF-8.
-    """
     if path in cache:
         return cache[path]
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
@@ -402,23 +169,7 @@ def extract_all(path: Path, cache: dict[Path, frozenset[str] | None]) -> frozens
 
 
 def declares_all(tree: ast.Module) -> bool:
-    """Return whether *tree* declares ``__all__`` at module scope, in either form.
-
-    This is deliberately BROADER than :func:`extract_all`, and the two answer
-    different questions. ``extract_all`` asks "which names can I STATICALLY
-    resolve?" and returns ``None`` for anything it cannot read — including the
-    annotated ``__all__: list[str] = [...]`` form. This asks only "did the author
-    DECLARE a public API?"; an author who annotated their ``__all__`` plainly did,
-    and the ``missing-all`` rule must not punish correct code for adding a type
-    annotation. Only ``tree.body`` is inspected — ``__all__`` is a module-scope
-    protocol, so an assignment buried inside a function is not the declaration.
-
-    Args:
-        tree: The parsed module.
-
-    Returns:
-        True when a module-scope ``__all__`` assignment exists, plain or annotated.
-    """
+    """Return whether *tree* declares ``__all__`` at module scope, in either form."""
     for stmt in tree.body:
         if (
             isinstance(stmt, ast.AnnAssign)
@@ -434,22 +185,6 @@ def declares_all(tree: ast.Module) -> bool:
 
 
 def public_module_level_names(tree: ast.Module) -> list[str]:
-    """Return the names of every PUBLIC ``def``/``async def``/``class`` at module scope.
-
-    Only definitions count, not plain assignments: a module whose module-level
-    names are a ``router = make_router()`` or a table of constants has no *defined*
-    public API to declare via ``__all__``, and the export contract governs the
-    names a consumer would ``import``. Only ``tree.body`` is walked — a method
-    inside a class is that class's API, not the module's, and the class itself is
-    already counted here. A dunder (``__version__``) is protocol, not exported API,
-    and the leading-underscore test drops it along with every ``_private`` name.
-
-    Args:
-        tree: The parsed module.
-
-    Returns:
-        The public top-level definition names, in source order.
-    """
     return [
         stmt.name
         for stmt in tree.body
@@ -483,13 +218,6 @@ class _Visitor(ast.NodeVisitor):
         self._prefixes: dict[str, str] = {}
 
     def _add(self, rule: str, symbol: str, message: str) -> None:
-        """Record a finding under a stable, line-independent key.
-
-        Args:
-            rule: The rule name; ignored when not in ``--select``.
-            symbol: The enclosing qualname plus the offending imported name.
-            message: The human-facing explanation.
-        """
         if rule not in self.select:
             return
         if rule in REPEATABLE:
@@ -500,23 +228,11 @@ class _Visitor(ast.NodeVisitor):
         self.findings.append(Finding(f"{self.path}: [{rule}] {symbol} — {message}"))
 
     def _qual(self) -> str:
-        """Return the dotted name of the enclosing def/class stack.
-
-        Returns:
-            The dotted qualname, or ``"<module>"`` at module scope.
-        """
+        """Return the dotted name of the enclosing def/class stack."""
         return ".".join(self._stack) or "<module>"
 
     def collect_imports(self, tree: ast.AST) -> None:
-        """Pre-scan *tree* for first-party ``import x`` / ``import x as y`` prefixes.
-
-        This runs BEFORE the visit pass because an import is not guaranteed to
-        precede its uses in the AST walk — a module-scope ``import`` sits after a
-        function that already dots into it.
-
-        Args:
-            tree: The parsed module.
-        """
+        """Pre-scan *tree* for first-party ``import x`` / ``import x as y`` prefixes."""
         for node in ast.walk(tree):
             if not isinstance(node, ast.Import):
                 continue
@@ -526,27 +242,10 @@ class _Visitor(ast.NodeVisitor):
                 self._prefixes[alias.asname or alias.name] = alias.name
 
     def _exports_of(self, module_name: str) -> frozenset[str] | None:
-        """Return the ``__all__`` of a first-party module named at import time.
-
-        Args:
-            module_name: The fully-qualified dotted module name.
-
-        Returns:
-            Its exported names, or ``None`` when the module is not first-party,
-            not on disk, or declares no static ``__all__``.
-        """
         target = module_to_path(module_name, self.packages)
         return extract_all(target, self.cache) if target else None
 
     def _check_name(self, name: str, exports: frozenset[str], symbol: str, source: str) -> None:
-        """Flag *name* when the module it came from does not export it.
-
-        Args:
-            name: The imported/accessed name.
-            exports: The owning module's ``__all__``.
-            symbol: The finding key's symbol component.
-            source: Human-facing description of the offending expression.
-        """
         if is_dunder(name) or name in exports:
             return
         self._add(
@@ -558,17 +257,6 @@ class _Visitor(ast.NodeVisitor):
         )
 
     def visit_Module(self, node: ast.Module) -> None:
-        """Flag a module that defines public names but declares no ``__all__``, then descend.
-
-        This is the ``missing-all`` rule. It runs once, at module scope — a module
-        has at most one ``__all__`` contract, so the finding is keyed on the module
-        alone (``<module>``) with no ordinal. ``generic_visit`` is then called so
-        the per-node rules (``not-in-all``, ``private-in-all``) still fire on the
-        children; skipping it would silence every other rule in the file.
-
-        Args:
-            node: The module node being visited.
-        """
         if not declares_all(node) and public_module_level_names(node):
             self._add(
                 "missing-all",
@@ -583,37 +271,17 @@ class _Visitor(ast.NodeVisitor):
         self.generic_visit(node)
 
     def _push_pop(self, node: ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef) -> None:
-        """Visit a def/class body with its name pushed on the qualname stack.
-
-        Args:
-            node: The class, function, or coroutine definition.
-        """
         self._stack.append(node.name)
         self.generic_visit(node)
         self._stack.pop()
 
     def visit_ClassDef(self, node: ast.ClassDef) -> None:
-        """Track the enclosing class for finding keys.
-
-        Args:
-            node: The class definition.
-        """
         self._push_pop(node)
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
-        """Track the enclosing function for finding keys.
-
-        Args:
-            node: The function definition.
-        """
         self._push_pop(node)
 
     def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
-        """Track the enclosing coroutine for finding keys.
-
-        Args:
-            node: The coroutine definition.
-        """
         self._push_pop(node)
 
     def visit_Assign(self, node: ast.Assign) -> None:
@@ -642,14 +310,6 @@ class _Visitor(ast.NodeVisitor):
             )
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
-        """Check ``from X import Y`` against ``X``'s ``__all__``.
-
-        Star imports are skipped (a separate rule bans them), as are imports from
-        modules that are third-party or declare no ``__all__``.
-
-        Args:
-            node: The ``from X import Y`` node.
-        """
         names = [alias.name for alias in node.names if alias.name != "*"]
         if not names:
             return
@@ -669,17 +329,6 @@ class _Visitor(ast.NodeVisitor):
             )
 
     def visit_Attribute(self, node: ast.Attribute) -> None:
-        """Check ``c.y`` / ``myapp.core.y`` against the imported module's ``__all__``.
-
-        Dotting into a module reaches past its export contract exactly the way a
-        ``from``-import does, so both are the same rule. The chain must be the
-        module prefix plus EXACTLY one component: a deeper chain is either a
-        submodule (checked by its own node on the way down) or an attribute of an
-        attribute, which the owning module's ``__all__`` does not govern.
-
-        Args:
-            node: The attribute access expression.
-        """
         chain = attribute_chain(node)
         if chain is not None and "." in chain:
             prefix, _, name = chain.rpartition(".")
@@ -698,19 +347,6 @@ def check_tree(
     packages: dict[str, Path],
     cache: dict[Path, frozenset[str] | None],
 ) -> list[Finding]:
-    """Collect every violation in an already-parsed module.
-
-    Args:
-        tree: The parsed module.
-        path: Path string used to key findings.
-        file: Absolute path of the module, used to anchor relative imports.
-        select: The rule names to report.
-        packages: The ``{package_name: import_root}`` map.
-        cache: Cross-file memo of module ``__all__`` sets.
-
-    Returns:
-        One finding per violation, in source order.
-    """
     visitor = _Visitor(path, file, select, packages, cache)
     visitor.collect_imports(tree)
     visitor.visit(tree)
@@ -723,38 +359,12 @@ def find_violations(
     packages: dict[str, Path],
     cache: dict[Path, frozenset[str] | None],
 ) -> list[Finding]:
-    """Parse *path* and return its findings.
-
-    Args:
-        path: The Python file to scan.
-        select: The rule names to report.
-        packages: The ``{package_name: import_root}`` map.
-        cache: Cross-file memo of module ``__all__`` sets.
-
-    Returns:
-        One finding per violation, in source order.
-
-    Raises:
-        SyntaxError: When the RUNNING interpreter cannot parse *path* or a module
-            it imports from. This is deliberately NOT swallowed — see the PARSER
-            NOTE in the module docstring. A file the checker could not read is a
-            file it did not check; returning ``[]`` would report it clean.
-        ValueError: On a null byte or similar unreadable source.
-        UnicodeDecodeError: When the file is not valid UTF-8.
-    """
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     return check_tree(tree, path.as_posix(), path.resolve(), select, packages, cache)
 
 
 def iter_py_files(roots: list[Path]) -> list[Path]:
-    """Yield every ``*.py`` under *roots* (files or dirs).
-
-    Args:
-        roots: Files or directories to scan.
-
-    Returns:
-        The matching files, directory contents in sorted order.
-    """
+    """Yield every ``*.py`` under *roots* (files or dirs)."""
     files: list[Path] = []
     for root in roots:
         if root.is_file() and root.suffix == ".py":
@@ -765,15 +375,6 @@ def iter_py_files(roots: list[Path]) -> list[Path]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """CLI entry point.
-
-    Args:
-        argv: Optional argument vector (defaults to ``sys.argv``).
-
-    Returns:
-        0 when clean, 1 when there are findings (unless ``--exit-zero``), 2 when
-        a file could not be parsed.
-    """
     parser = argparse.ArgumentParser(
         description="Enforce the __all__ export contract.",
         formatter_class=argparse.RawDescriptionHelpFormatter,

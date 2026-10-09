@@ -1,22 +1,9 @@
 #!/usr/bin/env python3
-"""PreToolUse hook — block direct edits to package-manager lockfiles.
-
-Fires on `Edit`/`Write`/`MultiEdit`. A lockfile (`uv.lock`, `package-lock.json`,
-`poetry.lock`, `Cargo.lock`, `Gemfile.lock`, `yarn.lock`, `pnpm-lock.yaml`,
-`composer.lock`, `Pipfile.lock`) is a generated, hash-pinned artifact — a hand
-edit desyncs it from the manifest it's supposed to mirror, and the next install
-either silently overwrites your edit or fails a hash check. The edit is
-**BLOCKED** (exit 2) so Claude runs the package manager's own lock command
-instead (`uv lock`, `npm install`, `poetry lock`, `cargo generate-lockfile`, …).
-
-## Override
-
-- set `CLAUDE_ALL_ALLOW_LOCKFILE_EDITS=1` (no `# guard:allow` content escape —
-  the gate is on the file's identity, not its content, so a comment inside a
-  lockfile has nothing to attach to).
-
-Exit codes: 0 = allow · 2 = block (stderr shown to Claude, edit skipped). Any
-malformed input / missing key / non-lockfile path -> 0.
+"""PreToolUse hook — block direct edits to package-manager lockfiles. Fires on
+`Edit`/`Write`/`MultiEdit`. A lockfile (`uv.lock`, `package-lock.json`, `poetry.lock`,
+`Cargo.lock`, `Gemfile.lock`, `yarn.lock`, `pnpm-lock.yaml`, `composer.lock`, `Pipfile.lock`)
+is a generated, hash-pinned artifact — a hand edit desyncs it from the manifest it's supposed
+to mirror, and the next install either silently overwrites your edit or fails a hash check.
 """
 
 from __future__ import annotations
@@ -51,14 +38,7 @@ _MESSAGE = (
 
 
 def _block(reason: str) -> int:
-    """Print the block reason to stderr (shown to Claude) and return exit code 2.
-
-    Args:
-        reason: Human-readable explanation of why the edit was blocked.
-
-    Returns:
-        2 — the PreToolUse block exit code (the edit does NOT run).
-    """
+    """Print the block reason to stderr (shown to Claude) and return exit code 2."""
     print(f"[lockfile-protection] BLOCKED — {reason}", file=sys.stderr)
     return 2
 

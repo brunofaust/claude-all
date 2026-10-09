@@ -1,51 +1,6 @@
 #!/usr/bin/env python3
 """Checker: enforce per-symbol docstring and comment SIZE budgets.
-
-WHY
----
-Docstrings and comments rot faster than code: a paragraph explaining a
-three-line function is read once and then drifts. This gate caps their size
-relative to the code they describe. Documentation stays OPTIONAL — a missing
-docstring or comment is never a finding; only an oversized one is.
-
-LIMITS
-------
-Per symbol kind (``module``, ``class``, ``method``, ``function``)::
-
-    docstring limit = min(docstring_max_chars, floor(docstring_code_ratio * code_chars))
-                      (no ratio key -> just docstring_max_chars)
-    comment limit   = max(comments_max_chars, floor(comments_code_ratio * code_chars))
-
-Counts are raw source characters, whitespace included. Each comment belongs to
-its innermost enclosing symbol (span includes decorators and trailing,
-deeper-indented comments). ``code_chars`` is the symbol span minus all docs:
-nested code counts toward the parent, nested docs do not.
-
-CONFIG
-------
-``[tool.docstring-budget]`` in ``--config`` (default ``./pyproject.toml``)::
-
-    [tool.docstring-budget]
-    function.docstring_max_chars = 150
-    function.docstring_code_ratio = 1.0
-    function.comments_max_chars = 150
-    function.comments_code_ratio = 0.5
-    module.docstring_max_chars = 500
-
-Keys given override the built-in defaults key by key; a missing table or file
-means all defaults. Unknown keys or wrong types are an error.
-
-CONTRACT
---------
-Exit 0 clean, 1 findings, 2 errors. Zero selected files, an invalid config or
-an unparsable file is an ERROR (exit 2), never a pass. The last line always
-carries ``scanned=N`` so a green run shows its denominator.
-
-USAGE
------
-    python checkers/docstring_budget.py src/myapp tests
-    python checkers/docstring_budget.py --config pyproject.toml --limit 0 src/myapp/core.py
-"""
+Rules: references/enforcement.md."""
 
 from __future__ import annotations
 

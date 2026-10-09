@@ -1,28 +1,9 @@
 #!/usr/bin/env python3
-"""SessionStart reminder — warn when the repo has accumulated too many git worktrees.
-
-Fires once per session, right as a new agent worktree is typically added, which is
-exactly how the pile grows. It is a nudge, never a gate: SessionStart cannot block a
-tool call in Claude Code, and this hook always exits 0 even when `git` itself fails,
-so a broken checkout can never break a session start.
-
-Distinct from `worktree-isolation-guard.py`: that hook pauses an EDIT when you're
-about to write on the primary checkout's default branch. This hook nudges at
-SESSION START when the total worktree COUNT has grown past a housekeeping
-threshold, regardless of which branch you're on — a separate concern (pile-up vs.
-default-branch protection), so both can be active together without overlap.
-
-Threshold is configurable via CLAUDE_WORKTREE_COUNT_THRESHOLD (default 10) — not
-hardcoded, per project convention.
-
-Utility archetype: any unexpected condition -> exit 0. A session-init hook must
-never break the turn.
-
-# guard:allow — standalone Claude Code hook script, runs outside the Settings
-# system this repo's own `python-settings-env-guard.py` protects (like every
-# sibling in this directory that reads env vars, e.g. `worktree-isolation-guard.py`):
-# these are one-shot stdin scripts, not part of the `src/claude_all` package the
-# Settings singleton would govern.
+"""SessionStart reminder — warn when the repo has accumulated too many git worktrees. Fires once
+per session, right as a new agent worktree is typically added, which is exactly how the pile
+grows. It is a nudge, never a gate: SessionStart cannot block a tool call in Claude Code, and
+this hook always exits 0 even when `git` itself fails, so a broken checkout can never break a
+session start.
 """
 
 from __future__ import annotations
@@ -39,12 +20,7 @@ FLAG_TEMPLATE = "claude-all-worktree-count-nudge-{session_id}.flag"
 
 
 def get_threshold() -> int:
-    """Read the worktree-count warning threshold from the environment.
-
-    Returns:
-        The configured threshold, or DEFAULT_WORKTREE_COUNT_THRESHOLD when the env
-        var is unset or not a valid integer.
-    """
+    """Read the worktree-count warning threshold from the environment."""
     raw = os.environ.get("CLAUDE_WORKTREE_COUNT_THRESHOLD", "")
     if not raw:
         return DEFAULT_WORKTREE_COUNT_THRESHOLD
@@ -55,15 +31,6 @@ def get_threshold() -> int:
 
 
 def count_worktrees(cwd: str) -> int | None:
-    """Count git worktrees via `git worktree list` (includes the primary checkout).
-
-    Args:
-        cwd: Directory to run the command in — the session's reported cwd.
-
-    Returns:
-        The worktree count, or None if `git` could not be run or failed — the
-        caller must treat None as "skip silently", never as zero or an error.
-    """
     try:
         result = subprocess.run(
             ["git", "worktree", "list"],
@@ -81,16 +48,7 @@ def count_worktrees(cwd: str) -> int | None:
 
 
 def build_warning(count: int, threshold: int) -> str:
-    """Build the actionable reminder text shown when the count exceeds the threshold.
-
-    Args:
-        count: The current git worktree count (primary checkout included).
-        threshold: The configured warning threshold.
-
-    Returns:
-        A one-paragraph, actionable reminder naming the count, the threshold, and
-        the fix.
-    """
+    """Build the actionable reminder text shown when the count exceeds the threshold."""
     return (
         f"Worktree housekeeping: {count} git worktrees found (threshold {threshold}). "
         "Consider running a worktree/branch cleanup pass before starting new work "

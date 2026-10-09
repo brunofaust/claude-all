@@ -1,27 +1,10 @@
 #!/usr/bin/env python3
-"""PreToolUse hook — keep agent Bash commands on the project's locked uv environment.
-
-Fires on the `Bash` tool and BLOCKS (exit 2, with the fix on stderr):
-
-- In a uv project (a `uv.lock` in the working directory or a parent), a
-  project tool invoked outside `uv run` while the project's `.venv` provides
-  it: bare `pytest`, `.venv/bin/pytest`, `uvx ruff`, `python -m mypy`. Those
-  resolve a global or unlocked version, so results drift from CI and the lock.
-  A tool the `.venv` does not provide (e.g. a globally installed `prek` the
-  project never declared) stays allowed.
-- Anywhere: `pgrep -f`, which matches the polling shell's own command line and
-  reports a process that is not running. Use `pgrep -x <process-name>`.
-
-Commands are split on `;`, `|`, `&&`, `||`, `&` and parentheses; env
-assignments and wrappers (`nohup`, `nice`, `time`, `env`, `command`, `exec`,
-`rtk`, `rtk proxy`) are skipped, and `bash -c` / `sh -c` / `zsh -c` / `eval`
-payloads are inspected too. A command the hook cannot parse is allowed.
-
-## Override
-
-Prefix the command with `GUARD_OK=1 ` or append a `# guard:allow` comment.
-
-Exit codes: 0 = allow · 2 = block (stderr shown to Claude, command skipped).
+"""PreToolUse hook — keep agent Bash commands on the project's locked uv environment. Fires on
+the `Bash` tool and BLOCKS (exit 2, with the fix on stderr): - In a uv project (a `uv.lock` in
+the working directory or a parent), a project tool invoked outside `uv run` while the
+project's `.venv` provides it: bare `pytest`, `.venv/bin/pytest`, `uvx ruff`, `python -m
+mypy`. Those resolve a global or unlocked version, so results drift from CI and the lock. A
+tool the `.venv` does not provide (e.g.
 """
 
 from __future__ import annotations
@@ -57,13 +40,8 @@ OVERRIDE = re.compile(r"^\s*(?:\w+=\S*\s+)*GUARD_OK=1\b|(?:^|\s)#\s?guard:allow\
 
 
 def find_venv_bin(start: Path) -> Path | None:
-    """Return the ``.venv/bin`` of the nearest uv project at or above *start*.
-
-    Args:
-        start: Directory the command runs in.
-
-    Returns:
-        The virtualenv's ``bin`` directory, or None outside a uv project.
+    """Return the ``.venv/bin`` of the nearest uv project at or above *start*. Args: start:
+    Directory the command runs in.
     """
     for directory in (start, *start.parents):
         if (directory / "uv.lock").is_file():
@@ -72,13 +50,8 @@ def find_venv_bin(start: Path) -> Path | None:
 
 
 def split_words(command: str) -> list[str] | None:
-    """Split a command into shell words with separators as their own tokens.
-
-    Args:
-        command: Raw command text.
-
-    Returns:
-        The words, or None when the text is not parseable shell.
+    """Split a command into shell words with separators as their own tokens. Args: command: Raw
+    command text.
     """
     lexer = shlex.shlex(command, posix=True, punctuation_chars=";|&(){}")
     try:
@@ -88,13 +61,8 @@ def split_words(command: str) -> list[str] | None:
 
 
 def segments(words: Sequence[str]) -> list[list[str]]:
-    """Group words into the simple commands between control operators.
-
-    Args:
-        words: Output of :func:`split_words`.
-
-    Returns:
-        One word list per simple command.
+    """Group words into the simple commands between control operators. Args: words: Output of
+    :func:`split_words`.
     """
     groups: list[list[str]] = [[]]
     for word in words:
@@ -106,15 +74,6 @@ def segments(words: Sequence[str]) -> list[list[str]]:
 
 
 def segment_reasons(words: Sequence[str], venv_bin: Path | None) -> list[str]:
-    """Return why one simple command is refused.
-
-    Args:
-        words: One simple command's words.
-        venv_bin: Project ``.venv/bin``, or None outside a uv project.
-
-    Returns:
-        Block reasons (empty when allowed).
-    """
     index = 0
     while index < len(words) and (ASSIGNMENT.match(words[index]) or words[index] in WRAPPERS):
         index += 1
@@ -153,15 +112,6 @@ def segment_reasons(words: Sequence[str], venv_bin: Path | None) -> list[str]:
 
 
 def command_reasons(command: str, venv_bin: Path | None) -> list[str]:
-    """Inspect every simple command in *command*.
-
-    Args:
-        command: Raw command text.
-        venv_bin: Project ``.venv/bin``, or None outside a uv project.
-
-    Returns:
-        Block reasons (empty when allowed or unparsable).
-    """
     words = split_words(command)
     if words is None:
         return []

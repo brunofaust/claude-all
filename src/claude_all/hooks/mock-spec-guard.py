@@ -1,29 +1,8 @@
 #!/usr/bin/env python3
-"""PreToolUse hook — steer test mocks toward `spec`/`autospec` (kill mock drift).
-
-Fires on `Edit`/`Write`/`MultiEdit` of a **Python test file** and scans the
-content being written for **bare** `MagicMock()` / `AsyncMock()` — mocks created
-without `spec=` / `spec_set=` / `autospec=` / `wraps=`.
-
-Mock drift is the #1 silent-failure class: a bare mock accepts ANY attribute and
-ANY call signature, so when the real function's signature, return shape, or module
-path changes, the test keeps passing against a mock that no longer resembles
-reality. `spec=RealClass` / `autospec=True` (or `create_autospec`) makes the mock
-track the real object, so the same refactor fails the test loudly instead.
-
-This is a **non-blocking reminder** (exit 0 + `additionalContext`), addressed to
-Claude — it never blocks the edit and never fatigues the user with prompts. It
-stays silent unless the anti-pattern is actually present in the new content, and
-only on test files. Bare mocks are not *always* wrong (an identity-only stand-in
-is fine) — the reminder asks Claude to confirm each is intentional.
-
-`create_autospec(...)` is the good pattern and is never flagged.
-
-## Configuration
-
-- `CLAUDE_ALL_MOCK_SPEC_OK=1` — opt out; the hook returns 0 always.
-
-Exit codes: 0 always (non-blocking). Any malformed input / unexpected error → 0.
+"""PreToolUse hook — steer test mocks toward `spec`/`autospec` (kill mock drift). Fires on
+`Edit`/`Write`/`MultiEdit` of a **Python test file** and scans the content being written for
+**bare** `MagicMock()` / `AsyncMock()` — mocks created without `spec=` / `spec_set=` /
+`autospec=` / `wraps=`.
 """
 
 from __future__ import annotations
@@ -93,19 +72,6 @@ def _new_text(tool_name: str, tool_input: dict[str, object]) -> str:
 
 
 def _call_args(text: str, open_paren_idx: int) -> str:
-    """Return the argument substring of a call starting at ``open_paren_idx``.
-
-    Walks from the opening paren tracking depth, skipping quoted strings so
-    parens inside string literals don't confuse the balance. Bounded by
-    ``_ARG_SCAN_LIMIT`` characters.
-
-    Args:
-        text: The full source text.
-        open_paren_idx: Index of the "(" that opens the call.
-
-    Returns:
-        The text between the parens (best-effort, possibly truncated).
-    """
     depth = 0
     quote: str | None = None
     out: list[str] = []

@@ -1,18 +1,9 @@
 #!/usr/bin/env python3
-"""Nudge hook for the ship-pr skill.
-
-Fires PreToolUse on Bash. If the command is a ``git commit`` or ``git push``,
-emit a one-time, non-blocking reminder per Claude Code session to route the
-change through the ``/ship-pr`` workflow (gates -> review -> docs -> PR)
-instead of an ad-hoc commit + PR.
-
-A hook cannot invoke a skill, so this only reminds Claude; Claude decides
-whether to run ``/ship-pr``. Deduped once per session so it does NOT fire again
-on ``/ship-pr``'s own commit/push (which it performs via ``git-committer``).
-
-Session detection: Claude Code passes ``session_id`` in the hook input JSON.
-We flag ``/tmp/claude-all-ship-pr-nudge-<session_id>`` after the first emit;
-later git commit/push calls in the same session see the flag and exit silently.
+"""Nudge hook for the ship-pr skill. Fires PreToolUse on Bash. If the command is a ``git commit``
+or ``git push``, emit a one-time, non-blocking reminder per Claude Code session to route the
+change through the ``/ship-pr`` workflow (gates -> review -> docs -> PR) instead of an ad-hoc
+commit + PR. A hook cannot invoke a skill, so this only reminds Claude; Claude decides whether
+to run ``/ship-pr``.
 """
 
 from __future__ import annotations

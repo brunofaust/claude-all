@@ -1,19 +1,9 @@
 #!/usr/bin/env python3
-"""Nudge hook for the merge-main skill.
-
-Fires PreToolUse on Bash. If the command merges or pulls ``origin/main`` (a bare
-``git merge origin/main`` / ``git pull origin main`` and friends), emit a
-one-time, non-blocking reminder per Claude Code session to route the merge
-through the ``/merge-main`` workflow (no-commit merge -> semantic conflict pass
--> gates -> finalize) instead of a bare merge that trusts a clean textual result.
-
-A hook cannot invoke a skill, so this only reminds Claude; Claude decides
-whether to run ``/merge-main``. Deduped once per session so it does NOT fire
-again on ``/merge-main``'s own merge command.
-
-Session detection: Claude Code passes ``session_id`` in the hook input JSON.
-We flag ``/tmp/claude-all-merge-main-nudge-<session_id>`` after the first emit;
-later matching calls in the same session see the flag and exit silently.
+"""Nudge hook for the merge-main skill. Fires PreToolUse on Bash. If the command merges or pulls
+``origin/main`` (a bare ``git merge origin/main`` / ``git pull origin main`` and friends),
+emit a one-time, non-blocking reminder per Claude Code session to route the merge through the
+``/merge-main`` workflow (no-commit merge -> semantic conflict pass -> gates -> finalize)
+instead of a bare merge that trusts a clean textual result.
 """
 
 from __future__ import annotations

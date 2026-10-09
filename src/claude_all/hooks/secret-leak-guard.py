@@ -1,31 +1,10 @@
 #!/usr/bin/env python3
-"""PreToolUse hook — block a git commit/push that would leak credentials.
-
-Fires on the `Bash` tool and inspects `git add` / `git commit` / `git push`
-commands. It closes two gaps that a pattern-based scanner like `gitleaks` leaves
-open, catching the leak at the moment it would enter (commit) or leave (push) the
-branch:
-
-1. **Credential FILE staged.** A private key, a real `.env`, `.aws/credentials`,
-   `.netrc`, `.pgpass`, etc. added to the tree (`.env.example` / `.pub` are fine).
-2. **Live env-var VALUE in the diff.** If the *value* of a sensitive environment
-   variable (name matching SECRET / TOKEN / PASSWORD / *_KEY / CREDENTIAL … and a
-   value long enough to be a real secret) appears verbatim in the outgoing diff —
-   even reformatted enough to slip a regex — the commit is blocked. Only the
-   variable NAME is ever reported; the value is never read into output.
-
-On a hit it **hard-blocks** (exit 2 — the command does NOT run) and explains what
-matched. It **fails open**: if the repo can't be resolved or git can't run, it
-returns 0 rather than blocking legitimate work (a project's own `gitleaks` /
-pre-commit stays the backstop).
-
-## Override (intentional — you've reviewed it)
-
-Re-run with an explicit, auditable marker: prefix `GUARD_OK=1 ` or append a
-`# guard:allow` comment. The override is visible in the transcript on purpose.
-
-Exit codes: 0 = allow (no git-write command, or nothing suspicious, or fail-open)
-· 2 = block (stderr shown to Claude, command skipped).
+"""PreToolUse hook — block a git commit/push that would leak credentials. Fires on the `Bash`
+tool and inspects `git add` / `git commit` / `git push` commands. It closes two gaps that a
+pattern-based scanner like `gitleaks` leaves open, catching the leak at the moment it would
+enter (commit) or leave (push) the branch: 1. **Credential FILE staged.** A private key, a
+real `.env`, `.aws/credentials`, `.netrc`, `.pgpass`, etc. added to the tree (`.env.example` /
+`.pub` are fine). 2.
 """
 
 from __future__ import annotations
@@ -72,14 +51,7 @@ _PLACEHOLDER_BITS: tuple[str, ...] = (
 
 
 def _credential_file_reason(path: str) -> str | None:
-    """Return a reason string if ``path`` looks like a credential file, else None.
-
-    Args:
-        path: A repo-relative or absolute path being staged/added.
-
-    Returns:
-        Human reason (naming the file only) or None.
-    """
+    """Return a reason string if ``path`` looks like a credential file, else None."""
     norm = path.replace("\\", "/").strip().strip("'\"")
     base = norm.rsplit("/", 1)[-1]
     low = base.lower()
@@ -146,11 +118,6 @@ def _git(cwd: str, *args: str) -> str | None:
 
 
 def _repo_dir(command: str, payload: dict[str, object]) -> str | None:
-    """Resolve the directory to run git in for this command.
-
-    Prefers an explicit `git -C <dir>` / `--git-dir=`, then the hook payload's
-    `cwd`, then the process cwd. Returns None if none is a usable directory.
-    """
     m = GIT_DIR_C_RE.search(command)
     candidates: list[str] = []
     if m:

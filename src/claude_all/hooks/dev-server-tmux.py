@@ -1,20 +1,7 @@
 #!/usr/bin/env python3
-"""PreToolUse hook — block long-running dev server commands outside tmux.
-
-Fires on Bash. If the command starts a dev server or long-running process
-and the session is NOT inside tmux, block with a reminder to use tmux.
-
-Without tmux, a dev server run by Claude will:
-  - Block the Claude session (no further tool calls until Ctrl+C)
-  - Produce logs that are invisible to Claude after the first screen
-  - Be unkillable without user intervention
-
-TMUX detection: TMUX env var is set inside any tmux session.
-Backgrounded commands (`run_in_background: true`) are exempt — they don't block
-the session, which is this hook's whole rationale.
-Bypass: prefix the command with `CC_ALLOW_DEV_SERVER=1 ` (inline marker in the
-command string — the primary escape hatch). Setting CC_ALLOW_DEV_SERVER in the
-hook's own environment also works.
+"""PreToolUse hook — block long-running dev server commands outside tmux. Fires on Bash. If the
+command starts a dev server or long-running process and the session is NOT inside tmux, block
+with a reminder to use tmux.
 """
 
 from __future__ import annotations
@@ -43,11 +30,6 @@ DEV_SERVER_PATTERNS: list[re.Pattern[str]] = [
 
 
 def strip_heredoc(command: str) -> str:
-    """Remove heredoc body (<<'EOF' ... EOF) to avoid matching content inside strings.
-
-    Args:
-        command: The shell command string to strip heredoc content from.
-    """
     return re.sub(r"<<['\"]?\w+['\"]?.*", "", command, flags=re.DOTALL)
 
 

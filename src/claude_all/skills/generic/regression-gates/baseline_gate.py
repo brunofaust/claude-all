@@ -1,5 +1,17 @@
 #!/usr/bin/env python3
-"""Regression-only baseline harness — introduce ANY new gate without a big-bang cleanup.
+"""Baseline harness: new findings fail, baselined pass, stale baseline entries fail."""
+
+from __future__ import annotations
+
+import argparse
+import shlex
+import subprocess
+import sys
+from pathlib import Path
+
+__all__ = ["compare", "load_baseline", "load_seed_command", "main", "run_checker"]
+
+HELP_TEXT = """Regression-only baseline harness — introduce ANY new gate without a big-bang cleanup.
 
 This is the reusable meta-pattern: a checker emits findings, this wrapper compares
 them against a grandfathered `<gate>_baseline.txt` so that
@@ -54,16 +66,6 @@ USAGE
 Copy this file per gate (or call it N times with different --baseline files).
 """
 
-from __future__ import annotations
-
-import argparse
-import shlex
-import subprocess
-import sys
-from pathlib import Path
-
-__all__ = ["compare", "load_baseline", "load_seed_command", "main", "run_checker"]
-
 #: Header line prefix recording the checker command a baseline was seeded with.
 #: It is a ``#`` comment, so :func:`load_baseline` ignores it as an annotation;
 #: only :func:`load_seed_command` reads it back for the scope-safety guard.
@@ -71,16 +73,6 @@ _SEED_MARKER = "# baseline_gate:seed-command: "
 
 
 def load_baseline(path: Path) -> set[str]:
-    """Read a baseline file into a set of finding keys.
-
-    Blank lines and ``#`` comments are ignored, so a baseline can be annotated
-    (e.g. ``# TICK-1: remove after the auth refactor``). A missing file is an
-    empty baseline — a brand-new gate with zero findings then passes, and any
-    finding shows up as NEW.
-
-    Args:
-        path: Path to the baseline file.
-    """
     if not path.exists():
         return set()
     findings: set[str] = set()
@@ -92,17 +84,6 @@ def load_baseline(path: Path) -> set[str]:
 
 
 def load_seed_command(path: Path) -> list[str] | None:
-    """Read the checker command a baseline was seeded with, if recorded.
-
-    ``--update`` writes the seed command into a ``_SEED_MARKER`` header line so
-    enforce can detect a scope divergence (seeding a wider path than the gate
-    checks — see the SCOPE SAFETY note in the module docstring). Returns the
-    parsed argv, or ``None`` for a missing file or a legacy baseline with no
-    recorded command (in which case the guard is skipped).
-
-    Args:
-        path: Path to the baseline file.
-    """
     if not path.exists():
         return None
     for raw in path.read_text(encoding="utf-8").splitlines():
@@ -112,11 +93,7 @@ def load_seed_command(path: Path) -> list[str] | None:
 
 
 def run_checker(command: list[str]) -> set[str]:
-    """Run the checker command and collect its stdout findings.
-
-    Fails closed: a missing executable or a non-zero exit (internal checker
-    error) raises, so the gate errors out rather than reporting a false clean.
-    """
+    """Run the checker command and collect its stdout findings."""
     try:
         proc = subprocess.run(command, capture_output=True, text=True, check=False)
     except FileNotFoundError as exc:
@@ -130,18 +107,12 @@ def run_checker(command: list[str]) -> set[str]:
 
 
 def compare(seen: set[str], baseline: set[str]) -> tuple[set[str], set[str]]:
-    """Return ``(new, stale)`` findings relative to the baseline.
-
-    Args:
-        seen: Finding keys reported by the checker on this run.
-        baseline: Finding keys already accepted in the baseline file.
-    """
     return seen - baseline, baseline - seen
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+        description=HELP_TEXT, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     parser.add_argument(
         "--baseline", required=True, type=Path, help="path to the <gate>_baseline.txt file"

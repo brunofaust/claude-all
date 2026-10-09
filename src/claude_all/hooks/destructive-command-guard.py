@@ -1,59 +1,5 @@
 #!/usr/bin/env python3
-"""PreToolUse hook — block catastrophic / irreversible shell commands.
-
-Fires on the `Bash` tool. Inspects the command and:
-
-- **BLOCKS** (exit 2 — the command does NOT run) clearly catastrophic or
-  irreversible operations: `rm -rf /` and friends, disk wipes, fork bombs,
-  destructive DB statements (`DROP`/`TRUNCATE`), history-rewriting force pushes,
-  `git reset --hard` / `git clean -fdx`, `git stash` / `push` / `save` / `drop` /
-  `clear` (pulls changes out of — or destroys stashed work in — a working tree
-  that may be shared by other sessions; `pop`/`apply`/`list`/`show`/`branch` stay
-  allowed since they only ever RESTORE or read an already-existing stash, never
-  create or destroy one), `docker`/`kubectl`/volume destruction, and
-  cloud-resource deletion (`terraform destroy`, `aws ... delete-*`,
-  `aws s3 rm --recursive` / `rb`).
-- **WARNS** (exit 0 + `additionalContext`) on risky-but-sometimes-legitimate
-  commands (broad `rm -rf`, `chmod -R 777`, `curl | sh`). Claude sees the warning
-  as a system reminder and must justify proceeding. Exit 0 + JSON keeps this from
-  being rendered as a "hook error"; the command still runs (non-blocking).
-
-`rm -rf` of well-known build/cache dirs (`node_modules`, `dist`, `.venv`, …) is
-allowed — those are routine cleanup, not data loss.
-
-## Override (intentional destructive op)
-
-The hook is mechanical; it can't run an interactive prompt. When a destructive
-command is genuinely intended AND the user has confirmed, re-run it with an
-explicit, auditable override marker — either:
-
-- prefix the command with `GUARD_OK=1 `, or
-- append a `# guard:allow` comment.
-
-The override is deliberately visible so it shows up in the transcript as a
-conscious decision, never a silent bypass.
-
-## Wiring (this hook is a source script — activate it yourself)
-
-Add to `.claude/settings.json` (project) or `~/.claude/settings.json` (user):
-
-```json
-{
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [{"type": "command",
-                   "command": "python3 /abs/path/to/destructive-command-guard.py"}]
-      }
-    ]
-  }
-}
-```
-
-Exit codes: 0 = allow (optionally with a non-blocking `additionalContext`
-warning) · 2 = block (stderr shown to Claude, command skipped).
-"""
+"""PreToolUse hook — block catastrophic / irreversible shell commands. Fires on the `Bash` tool."""
 
 from __future__ import annotations
 
@@ -193,14 +139,6 @@ WARN_PATTERNS: list[tuple[re.Pattern[str], str]] = [
 
 
 def rm_rf_targets_are_safe(command: str) -> bool:
-    """True if every `rm -rf` target is a known build/cache dir (routine cleanup).
-
-    Args:
-        command: Shell command string to analyze for rm -rf targets.
-
-    Returns:
-        True if all rm -rf targets are in SAFE_RM_DIRS.
-    """
     found_safe = False
     for m in re.finditer(r"\brm\s+(?:-[a-zA-Z]+\s+)*(.+?)(?:&&|;|\||$)", command):
         targets = m.group(1).split()

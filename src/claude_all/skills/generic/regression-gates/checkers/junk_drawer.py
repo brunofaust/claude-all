@@ -1,20 +1,10 @@
 #!/usr/bin/env python3
-"""Checker: ban junk-drawer module names (helpers / utils / common / misc / shared).
-
-WHY
----
-A file called ``utils`` has no owner and no contract — it is an attractor that
-collects unrelated functions until it becomes a hidden god-module that everything
-imports and nothing can be split. Name a module for what it OWNS. Extract the
-behaviour into a named, single-purpose module instead.
-
-This check is language-agnostic (it is purely filename-based); extend
+"""Checker: ban junk-drawer module names (helpers / utils / common / misc / shared). WHY --- A
+file called ``utils`` has no owner and no contract — it is an attractor that collects
+unrelated functions until it becomes a hidden god-module that everything imports and nothing
+can be split. Name a module for what it OWNS. Extract the behaviour into a named, single-
+purpose module instead. This check is language-agnostic (it is purely filename-based); extend
 ``CODE_SUFFIXES`` for your stack.
-
-CONTRACT
---------
-Prints one ``path: message`` finding per offending file to stdout; exits 0 on
-success so it composes with ``baseline_gate.py``.
 """
 
 from __future__ import annotations

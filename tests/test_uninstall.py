@@ -1,13 +1,8 @@
 """Tests for `claude-all --uninstall`.
 
-This command deletes a user's entire setup, so the tests that matter are the ones
-proving it removes what it claims AND — more importantly — that it refuses to
-touch anything else: a path outside the install scope, a real file recorded where
-a symlink was expected, a companion sub-record selected on its own, or a
-tool/plugin whose real binary must survive.
-
-Every destructive case is paired with the no-false-positive case, and the
-confirmation path is tested both ways: declining must remove nothing at all.
+The command deletes a user's setup, so tests prove it removes what it claims and
+refuses everything else: paths outside the install scope, real files where a symlink
+was recorded, lone companion records, real tool binaries. Declining removes nothing.
 """
 
 from __future__ import annotations
@@ -25,15 +20,6 @@ from claude_all import cli
 
 @pytest.fixture
 def home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Redirect every install root and the state file into a temp HOME.
-
-    The module reads `Path.home()` once at import, so the constants — not the
-    env var — are what must be redirected.
-
-    Args:
-        tmp_path: pytest's per-test temporary directory.
-        monkeypatch: fixture used to repoint the module constants.
-    """
     claude = tmp_path / ".claude"
     (claude / "skills").mkdir(parents=True)
     (claude / "hooks").mkdir(parents=True)
@@ -59,16 +45,6 @@ def claude_md(home_dir: Path, body: str) -> Path:
 
 
 def install_record(home_dir: Path, *, kind: str = "skills", name: str = "demo") -> Path:
-    """Create a realistic install: a symlink, a CLAUDE.md block, a state record.
-
-    Args:
-        home_dir: The temp home.
-        kind: Resource kind to record.
-        name: Resource name to record.
-
-    Returns:
-        The resource symlink path.
-    """
     source = home_dir / "pkg" / name
     source.mkdir(parents=True, exist_ok=True)
     link = home_dir / ".claude" / "skills" / name
@@ -119,12 +95,6 @@ def test_removes_symlink_and_claude_md_block(home: Path) -> None:
 def test_removes_recorded_codex_agents_md_block(
     home: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Uninstall strips only the managed AGENTS.md block recorded for a Codex item.
-
-    Args:
-        home: Isolated project directory.
-        monkeypatch: Changes the project root to the isolated directory.
-    """
     monkeypatch.chdir(home)
     agents_md = home / "AGENTS.md"
     start = "<!-- claude-all:agents/demo:start -->"
@@ -142,12 +112,6 @@ def test_removes_recorded_codex_agents_md_block(
 
 
 def test_declining_removes_nothing(home: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Answering no leaves every artifact and the state record intact.
-
-    Args:
-        home: The temp home fixture.
-        monkeypatch: used to force the confirmation to False.
-    """
     link = install_record(home)
     monkeypatch.setattr(cli, "confirm", lambda prompt: False)
 
@@ -169,14 +133,6 @@ def test_confirm_is_false_when_not_a_tty(monkeypatch: pytest.MonkeyPatch) -> Non
 
 
 def test_path_outside_install_scope_is_untouched(home: Path) -> None:
-    """A record pointing outside the install roots is never followed.
-
-    This is the guard that stopped a real incident: a copied state.json whose
-    absolute paths pointed into a DIFFERENT home.
-
-    Args:
-        home: The temp home fixture.
-    """
     outsider = home / "elsewhere" / "precious"
     outsider.parent.mkdir(parents=True)
     outsider.symlink_to(home / "pkg")
@@ -213,12 +169,6 @@ def test_companion_record_is_not_selected_alone(home: Path) -> None:
 def test_tool_records_are_forgotten_not_uninstalled(
     home: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """A tools/plugins record is dropped, but its real binary is left alone.
-
-    Args:
-        home: The temp home fixture.
-        capsys: Captures stdout.
-    """
     cli.record_install("tools", "some-binary", None)
 
     assert cli.cmd_uninstall(filters=[], scope="user", assume_yes=True) == 0
@@ -247,12 +197,6 @@ def test_project_uninstall_preserves_user_state(
     home: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Project uninstall does not erase the same resource at user scope.
-
-    Args:
-        home: Isolated home-directory fixture.
-        monkeypatch: Pytest fixture for current-directory isolation.
-    """
     monkeypatch.chdir(home)
     user_link = home / ".claude" / "skills" / "demo"
     user_source = home / "user-source"
@@ -330,15 +274,6 @@ def test_state_scope_classifies_project_nested_under_home(
     target_parts: tuple[str, ...],
     expected: str,
 ) -> None:
-    """A repo under $HOME records project installs as project, not user.
-
-    Args:
-        tmp_path: pytest's per-test temporary directory.
-        monkeypatch: fixture used to repoint HOME and the working directory.
-        cwd_parts: Working directory relative to ``tmp_path``.
-        target_parts: Recorded target relative to ``tmp_path``.
-        expected: Scope the target must be attributed to.
-    """
     home_dir = tmp_path / "home"
     cwd = tmp_path.joinpath(*cwd_parts)
     cwd.mkdir(parents=True, exist_ok=True)

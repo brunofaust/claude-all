@@ -1,14 +1,8 @@
 #!/usr/bin/env python3
-"""Reminder hook for the alembic-migration skill. One reminder per session.
-
-Fires PreToolUse on Edit|Write. If the target looks like an Alembic migration,
-emit a one-time, non-blocking reminder of the migration safety rules and to load
-the skill. Addressed to Claude (stdout additionalContext), never the user.
-
-Matching avoids firing Alembic-specific advice on non-Alembic stacks: a
-`versions/` or `alembic/` path segment is Alembic-specific and fires on its own,
-but a bare `migrations/` (also used by Django, etc.) fires ONLY when the edited
-content carries an Alembic signal (`down_revision`, `op.`, `import alembic`).
+"""Reminder hook for the alembic-migration skill. One reminder per session. Fires PreToolUse on
+Edit|Write. If the target looks like an Alembic migration, emit a one-time, non-blocking
+reminder of the migration safety rules and to load the skill. Addressed to Claude (stdout
+additionalContext), never the user.
 """
 
 from __future__ import annotations

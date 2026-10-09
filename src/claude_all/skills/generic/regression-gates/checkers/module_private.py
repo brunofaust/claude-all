@@ -1,31 +1,9 @@
 #!/usr/bin/env python3
-"""Checker: ban module-level private names (`_foo` defined at module scope) in Python.
-
-WHY
----
-A leading-underscore name at module scope reads as "private", so dead-code
-detectors (vulture) and "unused export" tooling skip it — a `_helper` that
-nothing calls is invisible to them and rots forever. Worse, the underscore is a
-*convention*, not an export mechanism: other modules can still import `_helper`.
-Use the language's real export control instead — keep module-level names public
-and list the public surface in ``__all__`` (which IS the export contract). Make
-truly-local helpers nested functions, or move them behind a class.
-
-Dunders (``__all__``, ``__version__``, …) are allowed — they are the export
-mechanism, not private leakage.
-
-CONTRACT
---------
-Prints one ``path: message`` finding per offending top-level def/class/assign to
-stdout — keyed by the kind + name, NOT by line number, so it composes with
-``baseline_gate.py``'s stable-key contract. Exits 0 on success.
-
-PARSER NOTE
------------
-Uses the running interpreter's ``ast``. New syntax only parses on a new enough
-interpreter (e.g. PEP 695 ``type X = int`` needs 3.12+); on older interpreters
-such a file fails to parse and is skipped (fail-open) rather than crashing the
-gate — pin the hook interpreter if you need those files checked.
+"""Checker: ban module-level private names (`_foo` defined at module scope) in Python. WHY --- A
+leading-underscore name at module scope reads as "private", so dead-code detectors (vulture)
+and "unused export" tooling skip it — a `_helper` that nothing calls is invisible to them and
+rots forever. Worse, the underscore is a *convention*, not an export mechanism: other modules
+can still import `_helper`.
 """
 
 from __future__ import annotations

@@ -1,19 +1,8 @@
 #!/usr/bin/env python3
-"""Gate: relative markdown links resolve, and every resource is linked from the README.
+"""Gate: relative markdown links resolve and every resource is linked from the README.
 
-Two failures this repo has actually shipped, now mechanical:
-
-1. **Broken relative links.** Four cross-skill links went out one `../` short —
-   one of them in an already-merged PR — because nothing checked them. A link is
-   only as good as the last rename.
-2. **A resource with no README row.** CLAUDE.md says "a PR without a README update
-   is incomplete", but prose does not enforce itself. The README tables link to
-   each resource's source file, so "is it linked?" is a proxy for "is it documented?"
-   that a checker can actually answer.
-
-Vendored files are exempt from check 1: they are kept byte-identical to upstream,
-so their upstream-relative links legitimately do not resolve in this tree. Files
-listed under a vendored entry's `local_only` are OURS and stay checked.
+Vendored files are exempt from the link check (kept byte-identical to upstream);
+their `local_only` sidecars stay checked. README links are the proxy for "documented".
 """
 
 import json
@@ -34,14 +23,6 @@ CODE_SPAN = re.compile(r"`[^`]*`")
 
 
 def is_vendored(path: Path, registry: list[dict]) -> bool:
-    """Upstream-owned files are exempt: kept byte-identical, so their own relative
-    links point at an upstream tree we deliberately did not copy. `local_only`
-    files live in the same directory but are OURS — they stay checked.
-
-    Args:
-        path: The markdown file being considered.
-        registry: The `vendored` entries from `vendored.json`.
-    """
     for entry in registry:
         base = ROOT / entry["path"]
         if base not in path.parents:
@@ -55,12 +36,6 @@ def is_vendored(path: Path, registry: list[dict]) -> bool:
 
 
 def strip_code_blocks(text: str) -> list[tuple[int, str]]:
-    """Numbered lines with fenced code removed — a regex or an llms.txt sample
-    inside a fenced block only looks like a link.
-
-    Args:
-        text: Full markdown source of one file.
-    """
     lines, inside = [], False
     for line_no, line in enumerate(text.splitlines(), 1):
         if FENCE.match(line):

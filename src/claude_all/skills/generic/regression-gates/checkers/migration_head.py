@@ -1,40 +1,9 @@
 #!/usr/bin/env python3
-"""Checker: single migration head + revision-id sanity for linked-revision frameworks.
-
-WHY
----
-Frameworks like Alembic link migrations by ``revision`` / ``down_revision``. When
-two branches each add a migration, the chain forks into TWO heads; the next
-``upgrade head`` is ambiguous and a fresh database may apply only one branch.
-A single-head invariant catches this at commit time. It also flags over-length
-revision ids (some backends truncate the ``alembic_version.version_num`` column —
-classically 32 chars), duplicate revision ids, and dangling ``down_revision``
-pointers.
-
-This is a PURE STATIC PARSE — it never imports the migration modules (importing
-runs top-level code and may need the app/DB). It reads ``revision`` /
-``down_revision`` assignments via ``ast``. Files it cannot parse are skipped
-(fail-open) — a sibling migration-integrity gate owns those.
-
-BOTH ASSIGNMENT FORMS — do not narrow this back to ``ast.Assign``
-------------------------------------------------------------------
-Migrations bind ``revision`` either plainly (``revision = "0001"``) or with an
-annotation (``revision: str = "0001"``) — recent Alembic ``script.py.mako``
-templates emit the ANNOTATED form. Parsing only ``ast.Assign`` makes every
-migration in such a project look like "not a migration file", so the checker
-reports zero findings on a genuinely forked graph and exits 0. That is a
-VACUOUS PASS, not a clean bill of health: the gate runs, says nothing, and the
-fork ships. Both forms are handled below, and the regression test pins it.
-
-Each root argument is treated as ONE INDEPENDENT migration tree and analysed on
-its own graph — pass one directory per Alembic environment (e.g. ``migrations/``
-per service). Do NOT split a single tree's files across multiple root arguments:
-per-root analysis would then report false dangling ``down_revision`` pointers.
-
-CONTRACT
---------
-Prints one ``key: message`` finding per problem to stdout; exits 0 on success so
-it composes with ``baseline_gate.py``.
+"""Checker: single migration head + revision-id sanity for linked-revision frameworks. WHY ---
+Frameworks like Alembic link migrations by ``revision`` / ``down_revision``. When two branches
+each add a migration, the chain forks into TWO heads; the next ``upgrade head`` is ambiguous
+and a fresh database may apply only one branch. A single-head invariant catches this at commit
+time.
 """
 
 from __future__ import annotations
@@ -60,11 +29,6 @@ class Revision:
 
 
 def literal(node: ast.expr) -> tuple[str | None, ...]:
-    """Flatten a down_revision RHS (str | None | tuple/list of those) to a tuple.
-
-    Args:
-        node: The AST expression assigned to ``down_revision``.
-    """
     if isinstance(node, ast.Constant):
         return (node.value if isinstance(node.value, str) else None,)
     if isinstance(node, ast.Tuple | ast.List):
@@ -77,15 +41,6 @@ def literal(node: ast.expr) -> tuple[str | None, ...]:
 
 
 def module_assignments(tree: ast.Module) -> Iterator[tuple[str, ast.expr]]:
-    """Yield ``(target_name, value)`` for each module-level assignment.
-
-    Handles BOTH ``revision = "x"`` and the annotated ``revision: str = "x"``
-    that recent Alembic templates emit — see the module docstring on why
-    missing the annotated form is a vacuous pass rather than a missed edge case.
-
-    Args:
-        tree: The parsed migration module.
-    """
     for node in tree.body:
         if isinstance(node, ast.Assign):
             for tgt in node.targets:
@@ -122,11 +77,6 @@ def parse_file(path: Path) -> Revision | None:
 
 
 def analyse(revisions: list[Revision], label: str = "migrations") -> list[str]:
-    """Return findings: multiple heads, dangling down-revisions, over-length/duplicate ids.
-
-    ``label`` names the migration tree in the multiple-heads finding so findings
-    from different roots stay distinct baseline keys.
-    """
     findings: list[str] = []
     ids = {r.revision for r in revisions if r.revision}
     referenced: set[str] = set()

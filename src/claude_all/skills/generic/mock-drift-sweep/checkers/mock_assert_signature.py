@@ -1,81 +1,9 @@
 #!/usr/bin/env python3
-"""Checker: a call-assertion's arguments must fit the patched target's real signature.
-
-WHY
----
-``mock.assert_called_with(a, b, c)`` / ``assert_awaited_with`` /
-``assert_called_once_with`` / ``assert_any_call`` compare the recorded call
-against whatever arguments you assert — they do NOT check those arguments
-against the REAL function's signature, because by the time the assertion
-runs the real function has already been replaced by the mock. So when a
-signature changes (a parameter renamed, removed, or a positional arg
-dropped) and nobody updates the assertion, the test keeps passing: it is only
-checking that the code under test called the mock with args X, never that X
-is a call the real function could have accepted.
-
-WHAT IT FLAGS
--------------
-A ``mock.assert_called_with(...)``-family call whose mock variable is bound
-(in the SAME function, via one of exactly two forms — see BINDING below) to a
-``patch``/``patch.object`` target that resolves to a real function/method
-definition in the scanned source tree, where the asserted call:
-
-- passes MORE positional arguments than the signature accepts, or
-- passes a keyword argument that is not one of the signature's parameter
-  names.
-
-BINDING — narrow on purpose
-----------------------------
-Only two forms tie a mock variable to a specific resolved target:
-
-    with patch("dotted.target") as m: ...      m.assert_called_with(...)
-    m = patch("dotted.target").start(); ...    m.assert_called_with(...)
-
-The ``@patch("dotted.target")`` DECORATOR form is deliberately NOT handled —
-bottom-up decorator-to-parameter ordering plus pytest fixture argument offsets
-make binding the right decorator to the right assertion error-prone, and a
-wrong binding here would produce a false positive. If a bound variable is
-reassigned anywhere else in the function, or bound more than once, tracking
-for that variable is DROPPED (silent) rather than risk a stale binding.
-
-RESOLUTION IS CONSERVATIVE — SILENCE OVER A FALSE POSITIVE
-------------------------------------------------------------
-Stays silent when:
-
-- the mock variable cannot be tied to exactly one resolved patch target
-  (decorator form, ``with patch(...):`` with no ``as``, reassignment,
-  multiple bindings of the same name);
-- the target does not resolve to a ``def``/``async def`` in the tree (same
-  ``Module.name`` / ``Module.Class.method`` resolution as the sibling
-  checkers — nothing deeper, nothing inherited: a class with any base other
-  than bare ``object`` is skipped because the method could be inherited);
-- the target's signature carries ``*args`` or ``**kwargs`` — any positional
-  or keyword count is potentially valid;
-- the target carries any decorator other than ``staticmethod``,
-  ``classmethod``, or ``overload`` — an unknown decorator (e.g. a custom
-  ``@retry`` wrapper) can change the accepted call shape;
-- the asserted call itself contains a starred positional (``*args_var``) or a
-  double-starred keyword (``**kwargs_var``) spread — the real arg count/names
-  aren't visible in the AST.
-
-A false negative (a missed arity/keyword drift) is acceptable; a false
-positive is not.
-
-Because resolution needs the *source*, pass BOTH source and tests:
-
-    python checkers/mock_assert_signature.py tests src/myapp
-
-CONTRACT
---------
-Prints one ``path:line: [assert-signature] target — message`` finding per
-violation. This rule is REGRESSION-ONLY (see the module-level baseline
-support below) — it is expected to find real drift on a codebase with a large
-mocked-call surface, so it ships with a baseline file and only fails on NEW
-findings (a stale baseline entry — one that no longer reproduces — also
-fails, so the count only ratchets down):
-
-    python checkers/mock_assert_signature.py tests src/myapp --baseline
-    python checkers/mock_assert_signature.py tests src/myapp --check
+"""Checker: a call-assertion's arguments must fit the patched target's real signature. WHY ---
+``mock.assert_called_with(a, b, c)`` / ``assert_awaited_with`` / ``assert_called_once_with`` /
+``assert_any_call`` compare the recorded call against whatever arguments you assert — they do
+NOT check those arguments against the REAL function's signature, because by the time the
+assertion runs the real function has already been replaced by the mock.
 """
 
 import ast
@@ -115,7 +43,7 @@ TRANSPARENT_DECORATORS = frozenset({"staticmethod", "classmethod", "overload"})
 
 
 class Finding(str):
-    """A finding line. Subclasses ``str`` so callers can just print it."""
+    """A finding line."""
 
     __slots__ = ()
 
@@ -123,18 +51,6 @@ class Finding(str):
 def resolve_def_node(
     dotted: str, index: dict[str, ast.Module]
 ) -> tuple[ast.FunctionDef | ast.AsyncFunctionDef, bool] | None:
-    """Resolve a dotted patch target to its real ``def``/``async def`` node.
-
-    Args:
-        dotted: The patch target, e.g. ``"pkg.mod.func"`` or ``"pkg.mod.Cls.method"``.
-        index: Dotted-suffix -> module, from :func:`mock_drift_common.build_module_index`.
-
-    Returns:
-        ``(def_node, is_method)`` when confidently resolved to a plain
-        function/method definition (a class with only trivial bases), else
-        ``None`` — unresolvable, a class-with-inheritance, or deeper than
-        ``Module.Class.method``.
-    """
     parts = dotted.split(".")
     for split in range(len(parts) - 1, 0, -1):
         module = index.get(".".join(parts[:split]))
@@ -165,18 +81,6 @@ def resolve_def_node(
 def signature_shape(
     func_def: ast.FunctionDef | ast.AsyncFunctionDef, *, is_method: bool
 ) -> tuple[int, set[str]] | None:
-    """Return ``(max_positional, valid_keyword_names)``, or ``None`` to skip this target.
-
-    Args:
-        func_def: The resolved def/async-def node.
-        is_method: Whether *func_def* is a method (drop the leading
-            ``self``/``cls`` from the positional count unless it is a
-            ``@staticmethod``).
-
-    Returns:
-        ``None`` when the signature has ``*args``/``**kwargs`` or an
-        untrusted decorator — the caller must skip (silent).
-    """
     args = func_def.args
     if args.vararg is not None or args.kwarg is not None:
         return None
@@ -195,15 +99,7 @@ def signature_shape(
 
 
 def call_shape(call: ast.Call) -> tuple[int, list[str]] | None:
-    """Return ``(positional_count, keyword_names)`` for an assertion call, or ``None`` to skip.
-
-    Args:
-        call: The ``assert_*_with``/``assert_any_call`` call.
-
-    Returns:
-        ``None`` when the call spreads a starred positional or a
-        double-starred keyword — the real shape isn't visible in the AST.
-    """
+    """Return ``(positional_count, keyword_names)`` for an assertion call, or ``None`` to skip."""
     if any(isinstance(a, ast.Starred) for a in call.args):
         return None
     if any(kw.arg is None for kw in call.keywords):
@@ -212,13 +108,6 @@ def call_shape(call: ast.Call) -> tuple[int, list[str]] | None:
 
 
 def check_assertion(call: ast.Call, target: str, index: dict[str, ast.Module]) -> str | None:
-    """Return a finding message when *call*'s args don't fit *target*'s real signature.
-
-    Args:
-        call: The ``assert_*_with``/``assert_any_call`` call.
-        target: The dotted patch target the mock variable is bound to.
-        index: Module index for target resolution.
-    """
     resolved = resolve_def_node(target, index)
     if resolved is None:
         return None
@@ -245,22 +134,11 @@ def check_assertion(call: ast.Call, target: str, index: dict[str, ast.Module]) -
 
 
 def bound_target(call: ast.Call, imports: dict[str, str]) -> str | None:
-    """Return the dotted target when *call* is a resolvable ``patch``/``patch.object`` call.
-
-    Args:
-        call: A ``patch``/``patch.object`` call.
-        imports: The test file's ``from X import Y`` map for ``patch.object`` objects.
-    """
     return resolve_call_target(call, imports)
 
 
 class BindingTracker:
-    """Tracks ``mock variable name -> resolved patch target`` for one function body.
-
-    A name bound more than once, or reassigned to anything else, DROPS
-    tracking for that name rather than risk a stale binding (conservative —
-    see the module docstring's BINDING section).
-    """
+    """Tracks ``mock variable name -> resolved patch target`` for one function body."""
 
     __slots__ = ("bindings", "dropped")
 
@@ -270,22 +148,10 @@ class BindingTracker:
         self.dropped: set[str] = set()
 
     def drop(self, name: str) -> None:
-        """Stop trusting *name* — a reassignment or a second binding occurred.
-
-        Args:
-            name: The mock variable name to stop tracking.
-        """
         self.dropped.add(name)
         self.bindings.pop(name, None)
 
     def bind(self, name: str, target: str | None) -> None:
-        """Bind *name* to *target*, or drop it if already bound/dropped.
-
-        Args:
-            name: The mock variable name.
-            target: The resolved dotted patch target, or ``None`` when the
-                patch call itself didn't resolve (nothing to bind).
-        """
         if name in self.bindings or name in self.dropped:
             self.drop(name)
             return
@@ -296,13 +162,6 @@ class BindingTracker:
 def handle_with_node(
     node: ast.With | ast.AsyncWith, tracker: BindingTracker, imports: dict[str, str]
 ) -> None:
-    """Bind ``with patch(...) as m:`` targets from one ``with``/``async with`` node.
-
-    Args:
-        node: The ``With``/``AsyncWith`` AST node.
-        tracker: The enclosing function's binding tracker.
-        imports: The test file's ``from X import Y`` map.
-    """
     for item in node.items:
         call = item.context_expr
         if (
@@ -314,11 +173,7 @@ def handle_with_node(
 
 
 def start_call_target(value: ast.expr) -> ast.Call | None:
-    """Return the inner ``patch``/``patch.object`` call when *value* is ``patch(...).start()``.
-
-    Args:
-        value: The RHS expression of an assignment.
-    """
+    """Return the inner ``patch``/``patch.object`` call when *value* is ``patch(...).start()``."""
     if (
         isinstance(value, ast.Call)
         and isinstance(value.func, ast.Attribute)
@@ -331,13 +186,6 @@ def start_call_target(value: ast.expr) -> ast.Call | None:
 
 
 def handle_assign_node(node: ast.Assign, tracker: BindingTracker, imports: dict[str, str]) -> None:
-    """Bind ``m = patch(...).start()``, or drop tracking on any other reassignment.
-
-    Args:
-        node: The ``Assign`` AST node.
-        tracker: The enclosing function's binding tracker.
-        imports: The test file's ``from X import Y`` map.
-    """
     if len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
         start_target = start_call_target(node.value)
         if start_target is not None:
@@ -351,14 +199,6 @@ def handle_assign_node(node: ast.Assign, tracker: BindingTracker, imports: dict[
 def handle_assertion_node(
     node: ast.Call, tracker: BindingTracker, path: str, index: dict[str, ast.Module]
 ) -> Finding | None:
-    """Return a finding when *node* is a bound assertion call whose args don't fit.
-
-    Args:
-        node: A ``Call`` AST node, checked for the assertion-method shape.
-        tracker: The enclosing function's binding tracker.
-        path: The enclosing file's display path.
-        index: Module index for target resolution.
-    """
     if not (
         isinstance(node.func, ast.Attribute)
         and node.func.attr in ASSERT_METHODS
@@ -378,18 +218,6 @@ def analyze_function(
     index: dict[str, ast.Module],
     imports: dict[str, str],
 ) -> list[Finding]:
-    """Return findings for one function/method body.
-
-    Tracks ``with patch(...) as m:`` and ``m = patch(...).start()`` bindings
-    in SOURCE ORDER; any reassignment or a second binding of the same name
-    drops tracking for that name (conservative — see module docstring).
-
-    Args:
-        func: The function/method AST node to scan.
-        path: Its enclosing file's display path.
-        index: Module index for target resolution.
-        imports: The enclosing test file's ``from X import Y`` map.
-    """
     tracker = BindingTracker()
     findings: list[Finding] = []
 
@@ -407,13 +235,6 @@ def analyze_function(
 
 
 def check_tree(tree: ast.Module, path: str, index: dict[str, ast.Module]) -> list[Finding]:
-    """Return findings for every function/method in one parsed test module.
-
-    Args:
-        tree: The parsed module.
-        path: Its display path.
-        index: Module index for target resolution.
-    """
     imports = import_map(tree)
     findings: list[Finding] = []
     for node in ast.walk(tree):
@@ -423,12 +244,6 @@ def check_tree(tree: ast.Module, path: str, index: dict[str, ast.Module]) -> lis
 
 
 def find_violations(trees: dict[Path, ast.Module], index: dict[str, ast.Module]) -> list[Finding]:
-    """Return every finding across the parsed test modules.
-
-    Args:
-        trees: Parsed modules keyed by path (source + tests).
-        index: Module index built from the same trees.
-    """
     findings: list[Finding] = []
     for path, tree in trees.items():
         if is_test_file(path):
@@ -437,14 +252,8 @@ def find_violations(trees: dict[Path, ast.Module], index: dict[str, ast.Module])
 
 
 def main(argv: list[str] | None = None) -> int:
-    """CLI entry point — delegates to the shared regression-gate harness.
-
-    Args:
-        argv: Optional argument vector (defaults to ``sys.argv``).
-
-    Returns:
-        0 ran clean · 1 gate failure (new/stale findings under ``--check``,
-        or any finding without ``--check``/``--baseline``) · 2 an unparsable file.
+    """CLI entry point — delegates to the shared regression-gate harness. Args: argv: Optional
+    argument vector (defaults to ``sys.argv``).
     """
     return run_regression_gate_cli(
         argv,
