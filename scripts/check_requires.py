@@ -1,18 +1,9 @@
 #!/usr/bin/env python3
-"""Gate: every `claude-all.json` `requires` entry resolves to a real resource,
-and every resource an instruction snippet names is in its `requires`.
+"""Gate: every `claude-all.json` `requires` entry resolves to a real resource.
 
-A per-resource dependency manifest (`claude-all.json`, key `requires`) is only
-safe if its targets exist — a `requires` pointing at a renamed/deleted resource
-would make the installer silently skip a dependency (treat it as "external") and
-ship a broken closure. This is the drift guard: it fails when a `requires` entry
-names no resource the installer can discover, and when a manifest is malformed.
-
-It resolves targets by importing the installer's own `discover()` /`state_key`,
-so "what counts as a resource" is defined in exactly one place (the installer),
-never re-derived here.
-
-Exit codes: 0 = every entry resolves · 1 = a dangling/malformed entry.
+Also checks that resources named by an instruction snippet are in its `requires`.
+Targets are resolved via the installer's own `discover()`, never re-derived here.
+Exit 0 = all resolve, 1 = dangling/malformed entry.
 """
 
 from __future__ import annotations
@@ -29,12 +20,7 @@ CODE_SPAN = re.compile(r"`([^`\s]+)`")
 
 
 def load_resource_keys() -> set[str]:
-    """Return every installable resource key (``kind/name``) via the installer.
-
-    Returns:
-        The set the installer's ``discover([])`` would yield, keyed exactly as a
-        ``requires`` entry must be written.
-    """
+    """Return every installable resource key (``kind/name``) via the installer."""
     sys.path.insert(0, str(SRC))
     from claude_all.cli import discover, state_key
 
@@ -42,14 +28,6 @@ def load_resource_keys() -> set[str]:
 
 
 def find_violations(known: set[str]) -> list[str]:
-    """Return one finding per dangling/malformed ``requires`` entry.
-
-    Args:
-        known: Every resolvable resource key.
-
-    Returns:
-        Stable ``path: message`` findings (empty when the graph is clean).
-    """
     findings: list[str] = []
     for manifest in sorted((SRC / "claude_all").rglob("claude-all.json")) + sorted(
         (SRC / "claude_all").rglob("*.claude-all.json")
@@ -78,20 +56,6 @@ def find_violations(known: set[str]) -> list[str]:
 def find_undeclared_instruction_refs(
     known: set[str], instructions_dir: Path = INSTRUCTIONS_DIR
 ) -> list[str]:
-    """Return one finding per resource an instruction names without requiring it.
-
-    A standalone instruction has no agent or skill of its own to carry a
-    dependency, so a resource it names in a code span must be in its
-    ``claude-all.json`` ``requires`` — otherwise installing the instruction
-    alone ships a rule that points at nothing.
-
-    Args:
-        known: Every resolvable resource key.
-        instructions_dir: Root holding ``<name>/claude_md.md`` snippets.
-
-    Returns:
-        Stable ``path: message`` findings (empty when every reference is declared).
-    """
     keys_by_name: dict[str, set[str]] = {}
     for key in known:
         keys_by_name.setdefault(key.split("/", 1)[1], set()).add(key)

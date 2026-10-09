@@ -112,12 +112,6 @@ INVALID_HOOK_DOCUMENTS = [
 
 
 def agent_source(tmp_path: Path, model: str) -> Path:
-    """Create a minimal Claude agent source with the requested model alias.
-
-    Args:
-        tmp_path: Isolated filesystem fixture.
-        model: Claude model alias to write into front matter.
-    """
     tmp_path.mkdir(parents=True, exist_ok=True)
     source = tmp_path / "agent.md"
     source.write_text(
@@ -144,12 +138,6 @@ def agent_source(tmp_path: Path, model: str) -> Path:
     ],
 )
 def test_render_codex_agent_omits_model_configuration(tmp_path: Path, claude_model: str) -> None:
-    """Claude model aliases do not constrain the generated Codex TOML.
-
-    Args:
-        tmp_path: Isolated filesystem fixture.
-        claude_model: Authored Claude model alias.
-    """
     source = agent_source(tmp_path, claude_model)
     original = source.read_text(encoding="utf-8")
 
@@ -183,12 +171,6 @@ def test_render_codex_agent_emits_toml_safe_non_bmp_unicode(tmp_path: Path) -> N
 
 
 def test_inject_codex_agents_md_preserves_handwritten_content(tmp_path: Path, monkeypatch) -> None:
-    """Uninstalling an owned Codex block does not disturb surrounding AGENTS.md text.
-
-    Args:
-        tmp_path: Isolated filesystem fixture.
-        monkeypatch: Pytest fixture for current-directory isolation.
-    """
     monkeypatch.chdir(tmp_path)
     agents = tmp_path / "AGENTS.md"
     agents.write_text("# Local rules\n\nKeep this.\n", encoding="utf-8")
@@ -223,12 +205,6 @@ def shipped_instruction_snippets() -> list[tuple[cli.Item, Path]]:
 def test_shipped_instruction_catalog_stays_within_root_context_budget(
     tmp_path: Path, shipped_instruction_snippets: list[tuple[cli.Item, Path]]
 ) -> None:
-    """Bound rendered instructions including ownership markers, not just body text.
-
-    Args:
-        tmp_path: Isolated instruction destination.
-        shipped_instruction_snippets: Nonempty real resource companions.
-    """
     target = tmp_path / "CLAUDE.md"
     for item, snippet in shipped_instruction_snippets:
         cli.inject_tagged_block(target, item, snippet)
@@ -241,12 +217,6 @@ def test_shipped_instruction_catalog_stays_within_root_context_budget(
 def test_both_hosts_share_symlinked_instructions_without_growth_or_content_loss(
     tmp_path: Path, shipped_instruction_snippets: list[tuple[cli.Item, Path]]
 ) -> None:
-    """Reinstalling both hosts preserves shared-file ownership and unmanaged text.
-
-    Args:
-        tmp_path: Isolated user home and installer state.
-        shipped_instruction_snippets: Nonempty real resource companions.
-    """
     claude = tmp_path / ".claude" / "CLAUDE.md"
     agents = tmp_path / ".codex" / "AGENTS.md"
     claude.parent.mkdir()
@@ -351,12 +321,6 @@ def test_hook_metadata_uses_host_native_timeout_seconds() -> None:
 def test_install_codex_hook_preserves_malformed_config_before_linking(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Codex hook installation aborts before mutation when hooks.json is malformed.
-
-    Args:
-        tmp_path: Isolated filesystem fixture.
-        monkeypatch: Pytest fixture for path isolation.
-    """
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(cli, "STATE_DIR", tmp_path / "state")
     monkeypatch.setattr(cli, "STATE_FILE", tmp_path / "state" / "state.json")
@@ -377,13 +341,6 @@ def test_install_codex_hook_preserves_malformed_config_before_linking(
 def test_codex_skips_claude_approval_hooks(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, hook_name: str
 ) -> None:
-    """Claude approval hooks are not installed where Codex cannot honor ``ask``.
-
-    Args:
-        tmp_path: Isolated filesystem fixture.
-        monkeypatch: Pytest fixture for path isolation.
-        hook_name: Standalone approval hook under test.
-    """
     monkeypatch.chdir(tmp_path)
     item = next(item for item in cli.discover([hook_name]) if item.kind == "hooks")
 
@@ -397,12 +354,6 @@ def test_codex_skips_claude_approval_hooks(
 def test_codex_skip_removes_previously_installed_approval_hook(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """An upgrade removes old fail-open Codex wiring while preserving foreign hooks.
-
-    Args:
-        tmp_path: Isolated filesystem fixture.
-        monkeypatch: Pytest fixture for path and state isolation.
-    """
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(cli, "STATE_DIR", tmp_path / "state")
     monkeypatch.setattr(cli, "STATE_FILE", tmp_path / "state" / "state.json")
@@ -466,12 +417,6 @@ def test_codex_skip_removes_previously_installed_approval_hook(
 def test_codex_skip_preserves_repointed_hook_while_removing_managed_wiring(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Cleanup forgets stale wiring without deleting a repointed hook link.
-
-    Args:
-        tmp_path: Isolated filesystem fixture.
-        monkeypatch: Pytest fixture for path and state isolation.
-    """
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(cli, "STATE_DIR", tmp_path / "state")
     monkeypatch.setattr(cli, "STATE_FILE", tmp_path / "state" / "state.json")
@@ -534,12 +479,6 @@ def test_codex_skip_preserves_repointed_hook_while_removing_managed_wiring(
 def test_agent_cleanup_preserves_repointed_generated_file_symlink(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Agent cleanup forgets stale state without deleting a repointed link.
-
-    Args:
-        tmp_path: Isolated filesystem fixture.
-        monkeypatch: Pytest fixture for path and state isolation.
-    """
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(cli, "STATE_DIR", tmp_path / "state")
     monkeypatch.setattr(cli, "STATE_FILE", tmp_path / "state" / "state.json")
@@ -572,12 +511,6 @@ def test_agent_cleanup_preserves_repointed_generated_file_symlink(
 def test_agent_cleanup_removes_unchanged_installer_managed_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Agent cleanup removes its unchanged direct TOML file.
-
-    Args:
-        tmp_path: Isolated filesystem fixture.
-        monkeypatch: Pytest fixture for path and state isolation.
-    """
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(cli, "STATE_DIR", tmp_path / "state")
     monkeypatch.setattr(cli, "STATE_FILE", tmp_path / "state" / "state.json")
@@ -598,12 +531,6 @@ def test_agent_cleanup_removes_unchanged_installer_managed_file(
 def test_agent_cleanup_preserves_a_user_modified_installer_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Uninstall retains a generated TOML after the user changes its content.
-
-    Args:
-        tmp_path: Isolated filesystem fixture.
-        monkeypatch: Pytest fixture for path and state isolation.
-    """
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(cli, "STATE_DIR", tmp_path / "state")
     monkeypatch.setattr(cli, "STATE_FILE", tmp_path / "state" / "state.json")
@@ -622,13 +549,6 @@ def test_agent_cleanup_preserves_a_user_modified_installer_file(
 def test_install_codex_hook_rejects_invalid_nested_shapes_before_linking(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, document: object
 ) -> None:
-    """Structurally invalid Codex hook configs remain untouched.
-
-    Args:
-        tmp_path: Isolated filesystem fixture.
-        monkeypatch: Pytest fixture for path and state isolation.
-        document: Invalid but syntactically valid hook configuration.
-    """
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(cli, "STATE_DIR", tmp_path / "state")
     monkeypatch.setattr(cli, "STATE_FILE", tmp_path / "state" / "state.json")
@@ -648,12 +568,6 @@ def test_install_codex_hook_rejects_invalid_nested_shapes_before_linking(
 def test_inject_hook_preserves_malformed_claude_settings_before_linking(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Companion-hook installation leaves malformed Claude settings untouched.
-
-    Args:
-        tmp_path: Isolated filesystem fixture.
-        monkeypatch: Pytest fixture for path isolation.
-    """
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(cli, "STATE_DIR", tmp_path / "state")
     monkeypatch.setattr(cli, "STATE_FILE", tmp_path / "state" / "state.json")
@@ -681,12 +595,6 @@ def test_inject_hook_preserves_malformed_claude_settings_before_linking(
 def test_install_standalone_hook_preserves_malformed_claude_settings_before_linking(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Standalone-hook installation leaves malformed Claude settings untouched.
-
-    Args:
-        tmp_path: Isolated filesystem fixture.
-        monkeypatch: Pytest fixture for path isolation.
-    """
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(cli, "STATE_DIR", tmp_path / "state")
     monkeypatch.setattr(cli, "STATE_FILE", tmp_path / "state" / "state.json")
@@ -707,13 +615,6 @@ def test_install_standalone_hook_preserves_malformed_claude_settings_before_link
 def test_inject_hook_rejects_invalid_nested_shapes_before_linking(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, document: object
 ) -> None:
-    """Companion hooks reject invalid nested Claude settings before mutation.
-
-    Args:
-        tmp_path: Isolated filesystem fixture.
-        monkeypatch: Pytest fixture for path and state isolation.
-        document: Invalid but syntactically valid hook configuration.
-    """
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(cli, "STATE_DIR", tmp_path / "state")
     monkeypatch.setattr(cli, "STATE_FILE", tmp_path / "state" / "state.json")
@@ -742,13 +643,6 @@ def test_inject_hook_rejects_invalid_nested_shapes_before_linking(
 def test_install_standalone_hook_rejects_invalid_nested_shapes_before_linking(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, document: object
 ) -> None:
-    """Standalone hooks reject invalid nested Claude settings before mutation.
-
-    Args:
-        tmp_path: Isolated filesystem fixture.
-        monkeypatch: Pytest fixture for path and state isolation.
-        document: Invalid but syntactically valid hook configuration.
-    """
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(cli, "STATE_DIR", tmp_path / "state")
     monkeypatch.setattr(cli, "STATE_FILE", tmp_path / "state" / "state.json")
@@ -768,22 +662,10 @@ def test_install_standalone_hook_rejects_invalid_nested_shapes_before_linking(
 def test_install_codex_postgres_mcp_resolves_keychain_at_launch(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """Codex registers Postgres with a runtime Keychain launcher and setup guidance.
-
-    Args:
-        monkeypatch: Pytest fixture for subprocess and state isolation.
-        capsys: Pytest fixture for installer output inspection.
-    """
     item = next(item for item in cli.discover(["postgres"]) if item.kind == "mcps")
     commands: list[list[str]] = []
 
     def run(command: list[str], *, check: bool) -> None:
-        """Capture the MCP registration command without launching Codex.
-
-        Args:
-            command: Registration command that would be executed.
-            check: Whether subprocess failures would raise.
-        """
         assert check
         commands.append(command)
 
@@ -824,12 +706,6 @@ def test_install_codex_postgres_mcp_resolves_keychain_at_launch(
 def test_discover_selects_vendored_skills_by_claude_frontmatter_name(
     canonical_name: str, legacy_directory: str
 ) -> None:
-    """Claude frontmatter names drive identity while legacy filters remain accepted.
-
-    Args:
-        canonical_name: Claude-authored skill name.
-        legacy_directory: Historical resource directory and filter alias.
-    """
     canonical = [item for item in cli.discover([canonical_name]) if item.kind == "skills"]
     legacy = [item for item in cli.discover([legacy_directory]) if item.kind == "skills"]
 
@@ -842,12 +718,6 @@ def test_discover_selects_vendored_skills_by_claude_frontmatter_name(
 def test_discover_rejects_invalid_skill_frontmatter_name(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Claude frontmatter cannot create an unsafe installer identity.
-
-    Args:
-        tmp_path: Isolated resource tree.
-        monkeypatch: Pytest fixture for replacing the resource root.
-    """
     source = tmp_path / "skills" / "test" / "demo" / "SKILL.md"
     source.parent.mkdir(parents=True)
     source.write_text("---\nname: ../../victim\n---\n# Demo\n", encoding="utf-8")
@@ -875,14 +745,6 @@ def test_skill_install_rejects_unsafe_name_before_both_host_mutations(
     host: str,
     bad_name: str | None,
 ) -> None:
-    """Both installers fail closed before using an unsafe name as a path.
-
-    Args:
-        tmp_path: Isolated host roots.
-        monkeypatch: Pytest fixture for path and state isolation.
-        host: Installer host under test.
-        bad_name: Unsafe canonical identity, or None for an absolute path.
-    """
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(cli, "STATE_DIR", tmp_path / "state")
     monkeypatch.setattr(cli, "STATE_FILE", tmp_path / "state" / "state.json")
@@ -919,14 +781,6 @@ def test_skill_install_rejects_reserved_name_before_host_mutation(
     host: str,
     reserved_name: str,
 ) -> None:
-    """Both installers reject Claude-reserved canonical-name substrings.
-
-    Args:
-        tmp_path: Isolated host roots.
-        monkeypatch: Pytest fixture for path and state isolation.
-        host: Installer host under test.
-        reserved_name: Canonical identity containing a reserved substring.
-    """
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(cli, "STATE_DIR", tmp_path / "state")
     monkeypatch.setattr(cli, "STATE_FILE", tmp_path / "state" / "state.json")
@@ -951,13 +805,6 @@ def test_skill_install_rejects_reserved_name_before_host_mutation(
 def test_install_claude_skill_preserves_unowned_canonical_destination(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, occupant: str
 ) -> None:
-    """Claude installation never replaces an unowned canonical destination.
-
-    Args:
-        tmp_path: Isolated host root.
-        monkeypatch: Pytest fixture for path and state isolation.
-        occupant: Existing user-owned destination shape.
-    """
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(cli, "STATE_DIR", tmp_path / "state")
     monkeypatch.setattr(cli, "STATE_FILE", tmp_path / "state" / "state.json")
@@ -995,12 +842,6 @@ def test_install_claude_skill_preserves_unowned_canonical_destination(
 def test_canonical_skill_install_migrates_legacy_host_records_and_destinations(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Reinstalling a renamed skill replaces both hosts' legacy footprints safely.
-
-    Args:
-        tmp_path: Isolated filesystem fixture.
-        monkeypatch: Pytest fixture for path, executable, and state isolation.
-    """
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(cli, "STATE_DIR", tmp_path / "state")
     monkeypatch.setattr(cli, "STATE_FILE", tmp_path / "state" / "state.json")
@@ -1035,12 +876,6 @@ def test_canonical_skill_install_migrates_legacy_host_records_and_destinations(
 def test_legacy_skill_migration_preserves_repointed_link_while_removing_state(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Legacy cleanup forgets stale state without deleting a repointed link.
-
-    Args:
-        tmp_path: Isolated filesystem fixture.
-        monkeypatch: Pytest fixture for path and state isolation.
-    """
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(cli, "STATE_DIR", tmp_path / "state")
     monkeypatch.setattr(cli, "STATE_FILE", tmp_path / "state" / "state.json")
@@ -1073,12 +908,6 @@ def test_legacy_skill_migration_preserves_repointed_link_while_removing_state(
 def test_full_claude_skill_install_preserves_legacy_footprint_on_invalid_settings(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A failed hook preflight leaves the complete legacy Claude install unchanged.
-
-    Args:
-        tmp_path: Isolated filesystem fixture.
-        monkeypatch: Pytest fixture for path and state isolation.
-    """
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(cli, "STATE_DIR", tmp_path / "state")
     monkeypatch.setattr(cli, "STATE_FILE", tmp_path / "state" / "state.json")
@@ -1138,12 +967,6 @@ def test_full_claude_skill_install_preserves_legacy_footprint_on_invalid_setting
 def test_full_codex_skill_install_preserves_legacy_footprint_on_invalid_hooks(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A failed hook preflight leaves the complete legacy Codex install unchanged.
-
-    Args:
-        tmp_path: Isolated filesystem fixture.
-        monkeypatch: Pytest fixture for path and state isolation.
-    """
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(cli, "STATE_DIR", tmp_path / "state")
     monkeypatch.setattr(cli, "STATE_FILE", tmp_path / "state" / "state.json")
@@ -1201,12 +1024,6 @@ def test_full_codex_skill_install_preserves_legacy_footprint_on_invalid_hooks(
 
 
 def test_install_item_creates_claude_and_codex_agent_artifacts(tmp_path: Path, monkeypatch) -> None:
-    """One ordinary install produces host-native artifacts for both detected CLIs.
-
-    Args:
-        tmp_path: Isolated filesystem fixture.
-        monkeypatch: Pytest fixture for global-path isolation.
-    """
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(cli, "USER_CLAUDE_DIR", tmp_path / "home" / ".claude")
     monkeypatch.setattr(cli, "STATE_DIR", tmp_path / "home" / ".claude-all")
@@ -1235,12 +1052,6 @@ def test_install_item_creates_claude_and_codex_agent_artifacts(tmp_path: Path, m
 def test_rebuild_codex_agents_renders_only_installed_agents_directly(
     tmp_path: Path, monkeypatch
 ) -> None:
-    """A rebuild writes only already-installed agents into Codex's directory.
-
-    Args:
-        tmp_path: Isolated filesystem fixture.
-        monkeypatch: Pytest fixture for global-path isolation.
-    """
     monkeypatch.setattr(cli.Path, "home", lambda: tmp_path / "home")
     monkeypatch.setattr(cli, "STATE_DIR", tmp_path / "home" / ".claude-all")
     monkeypatch.setattr(
@@ -1284,12 +1095,6 @@ def test_rebuild_codex_agents_renders_only_installed_agents_directly(
 
 
 def test_codex_skill_links_directly_to_its_compatible_source(tmp_path: Path, monkeypatch) -> None:
-    """A SKILL.md directory needs no generated cache artifact.
-
-    Args:
-        tmp_path: Isolated filesystem fixture.
-        monkeypatch: Pytest fixture for current-directory isolation.
-    """
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(cli, "STATE_DIR", tmp_path / "home" / ".claude-all")
     monkeypatch.setattr(cli, "STATE_FILE", tmp_path / "home" / ".claude-all" / "state.json")
@@ -1308,12 +1113,6 @@ def test_codex_skill_links_directly_to_its_compatible_source(tmp_path: Path, mon
 def test_rebuild_preserves_legacy_cache_for_an_unmigrated_agent_symlink(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A rebuild never strands an agent source that is no longer shipped.
-
-    Args:
-        tmp_path: Isolated filesystem fixture.
-        monkeypatch: Pytest fixture for path and state isolation.
-    """
     monkeypatch.setattr(cli.Path, "home", lambda: tmp_path / "home")
     monkeypatch.setattr(cli, "STATE_DIR", tmp_path / "home" / ".claude-all")
     monkeypatch.setattr(
@@ -1337,12 +1136,6 @@ def test_rebuild_preserves_legacy_cache_for_an_unmigrated_agent_symlink(
 
 
 def test_rebuild_flag_generates_global_codex_agents(tmp_path: Path, monkeypatch) -> None:
-    """The explicit rebuild command writes visible global Codex artifacts.
-
-    Args:
-        tmp_path: Isolated filesystem fixture.
-        monkeypatch: Pytest fixture for collaborators.
-    """
     item = cli.Item(
         "agents",
         "test",
@@ -1394,12 +1187,6 @@ def test_version_flag_reports_installed_distribution_version(
 def test_install_migrates_a_legacy_cache_symlink_to_a_direct_file(
     tmp_path: Path, monkeypatch
 ) -> None:
-    """Installing the selected agent upgrades the previous generated layout safely.
-
-    Args:
-        tmp_path: Isolated filesystem fixture.
-        monkeypatch: Pytest fixture for global-path isolation.
-    """
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(cli, "STATE_DIR", tmp_path / "home" / ".claude-all")
     monkeypatch.setattr(

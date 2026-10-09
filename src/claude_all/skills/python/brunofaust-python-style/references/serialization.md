@@ -190,9 +190,10 @@ real drift.
 ## Rule 6 — `model_construct()` bypasses validation
 
 `model_construct()` skips validators, coercion, alias resolution, and defaults
-logic. It is for data from a **genuinely trusted** source — a value your own
-process validated microseconds ago, a fixture, a hot loop over already-validated
-rows.
+logic. Treat it like a suppression comment. It is allowed only in a hot loop where a
+**profiler** shows validation matters, over rows one model validated moments earlier, with a
+comment naming the measurement. "It came from our own code" is not trust. In AI-written code,
+our own code is where the bad value most likely came from.
 
 ```python
 # BAD: "validation is slow at the boundary" — this is exactly where you need it
@@ -200,7 +201,7 @@ event = RollupEvent.model_construct(**raw_lambda_event)
 
 # GOOD: validate at the boundary; construct only downstream of it
 event = RollupEvent.model_validate(raw_lambda_event)
-rows = [Row.model_construct(**r) for r in already_validated_rows]  # hot loop, trusted
+rows = [Row.model_construct(**r) for r in already_validated_rows]  # profiled: 40% of p99, see PR-123
 ```
 
 Validation costs ~1-5μs per simple model. That is never the reason a boundary is
@@ -245,6 +246,42 @@ def test_from_wire_parses_in_flight_legacy_payload() -> None:
 Both directions matter: **parse** the old payload (in-flight executions) and
 **emit** the old payload (downstream consumers). One without the other is a
 half-proof.
+
+## Rule 7 — compose structured text from typed sections, never by editing the rendered string
+
+When an artifact is built from parts (an LLM prompt, an email, a report), model the parts as a
+Pydantic model with a `render()` method. A change is a field assignment, never a
+`replace()`/regex/heading search on the joined text:
+
+```python
+class UserPromptSections(BaseModel):
+    model_config = PYDANTIC_CONFIG | ConfigDict(frozen=True, str_strip_whitespace=False)
+
+    task: RequiredText
+    context_chunks: tuple[str, ...] = ()
+    repo_instructions: str | None = None
+
+    def render(self) -> str: ...
+
+
+# BAD — breaks the day someone renames the heading or reorders sections
+prompt = prompt.split("## Retrieved context")[0]
+
+# GOOD — the structure is data
+lean = UserPromptSections.model_validate({**dict(sections), "context_chunks": ()})
+```
+
+If `render()` has an invariant, such as a tag that must be at index 0, assert it inside
+`render()` so a section reorder cannot silently move it.
+
+**Rebuilding a stored artifact:** persist the sections beside the rendered text as a versioned
+sidecar (`version: Literal[1]`, **required, no default**). An unknown future format then fails
+closed onto a legacy path instead of being misread. Before you edit, re-render the stored
+sections and **require the result to equal the stored text byte for byte**. Only then drop
+fields and re-render. Write the sidecar only from the run that produced the original artifact; a
+derived run's sections describe a different artifact. When you strip one duplicated block, audit
+for its siblings. In the incident, a second block of the same class (90%+ of the prompt) was
+duplicated on every resume and missed in the first fix.
 
 ## Checklist before shipping a dict→model change at a boundary
 

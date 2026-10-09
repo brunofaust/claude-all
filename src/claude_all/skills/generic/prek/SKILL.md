@@ -320,6 +320,13 @@ a custom gate honest:
 - **Run it in CI too**, not just pre-commit — `--no-verify` / `SKIP=` bypass pre-commit, and a gate
   that only lives client-side gets bypassed under pressure.
 
+**Before writing one, check the shipped set.** claude-all is itself a hook repo: `claude-all
+--install-hooks` wires the checkers of your installed skills as pinned hooks (Pydantic contracts,
+mock drift, process globals, migration SQL, Lambda/ECS Terraform, …). Three gate-health hooks are
+opt-in (`--hook <id>`): `gate-denominator` (every checker prints `scanned=N`), `hook-registration`
+(every `scripts/check_*.py` is referenced by a hook) and `hooks-installed` (every
+`default_install_hook_types` stage has a shim; local only, since CI has none).
+
 ### If your repo has embedded SQL: suggest an SQL-against-schema gate
 
 For a Python+SQL codebase, a very high-value `local` hook validates embedded SQL strings against the schema folded from your migrations — no database. Full recipe (sqlglot wiring + the gotchas that break a naive build) →

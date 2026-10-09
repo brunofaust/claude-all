@@ -8,43 +8,44 @@ user-invocable: true
 
 # Python Coding Style Guide (condensed)
 
-Production-grade async Python. Async-first, strict types, immutable parameter types, docstrings everywhere (100% gate), real-infra tests (LocalStack).
+Production-grade async Python. Async-first, strict types, immutable parameter types, Pydantic validation everywhere, optional size-bounded docstrings, real-infra tests (LocalStack).
 
 **This is the condensed entry point.** Depth and full examples live under `references/`. Read the relevant reference file before deep work in that area.
 
 ## Core principles
 
-1. **Python 3.12+** — pipe unions (`str | None`), `match` statements, `asyncio.TaskGroup`, `exception.add_note()`, `ExceptionGroup` / `except*`, **PEP 695** generics + type aliases (`type EntityId = str`, `def first[T](...)`, `class Stack[T]`), PEP 701 f-strings. Multiple exceptions use the parenthesised tuple `except (ValueError, TypeError):` (PEP 758's paren-less form is 3.14-only). Annotations are evaluated eagerly (PEP 649 is 3.14-only), so `from __future__ import annotations` is allowed for forward references and TYPE_CHECKING-only imports. The baseline makes the prek `language_version` pin **mandatory, not advisory** — PEP 695 syntax an older hook interpreter can't parse makes hooks (bandit, vulture, interrogate, local AST checkers) skip the file silently and still exit 0. → [`prek` skill](../../generic/prek/SKILL.md)
+1. **Python 3.12+** — pipe unions (`str | None`), `match` statements, `asyncio.TaskGroup`, `exception.add_note()`, `ExceptionGroup` / `except*`, **PEP 695** generics + type aliases (`type EntityId = str`, `def first[T](...)`, `class Stack[T]`), PEP 701 f-strings. Multiple exceptions use the parenthesised tuple `except (ValueError, TypeError):` (PEP 758's paren-less form is 3.14-only). Annotations are evaluated eagerly (PEP 649 is 3.14-only), so `from __future__ import annotations` is allowed for forward references and TYPE_CHECKING-only imports. The baseline makes the prek `language_version` pin **mandatory, not advisory** — PEP 695 syntax an older hook interpreter can't parse makes hooks (bandit, vulture, local AST checkers) skip the file silently and still exit 0. → [`prek` skill](../../generic/prek/SKILL.md)
 1. **Async everything** — custom functions are `async def`. Exceptions: `__init__`, `__iter__`, `__enter__`, other stdlib sync dunder methods.
 1. **Immutable parameter types** — `Mapping`/`Sequence` from `collections.abc`, not `dict`/`list`, for every non-mutated parameter (not just cached function inputs/outputs). Reserve mutable concrete types for params you actually mutate.
 1. **Type safety first** — full type hints, `Literal`, `@overload`, Pydantic models at boundaries. **No `TypedDict`** (static-only — validates nothing at runtime) and **no `typing.cast`** (asserts a type instead of proving one — use `Model.model_validate(...)`). Enforced via mypy (strict) + Ruff.
-1. **Docstring coverage 100%** (`interrogate` gate, `fail-under = 100`) — Google-style with Args / Returns / Raises / Examples. 100 is the floor, not an aspiration: a percentage floor below 100 leaves the gate unable to say which missing docstring is acceptable, so it drifts. Carve out the genuinely-noise cases explicitly instead (`ignore-init-module`, `ignore-magic`, `ignore-setters`, `ignore-overloaded-functions`) → [`references/pyproject-toml.md`](references/pyproject-toml.md).
+1. **Docstrings and comments are optional and size-bounded.** Models read them more than people do, so write intent and non-obvious constraints, not `Args:`/`Returns:` restating the signature. There is no coverage floor and no Google format. When present, a docstring is ≤ min(150 chars, code size) and comments ≤ max(150, ½ code size), enforced by `checkers/docstring_budget.py` → [`references/docstrings.md`](references/docstrings.md).
 1. **Test everything** — `MonkeyPatch.context()` for mocks. Unit + integration (LocalStack) + class structural tests. Data tests cover the full data lifecycle.
 
 ## Wiring the gates — shipped ≠ enforced (check this ON EVERY INVOCATION)
 
-Installing this skill copies the checkers under `checkers/` (`pydantic_contract.py`,
-`model_contract.py`, `lambda_event_validation.py`, `flat_test_mirror.py`,
-`all_contract.py`) and `regression-gates/baseline_gate.py` into place **as files**.
-It does **NOT** wire them into any project's `prek.toml` / `.pre-commit-config.yaml`
-— gate wiring is *per-project* (each repo has its own hook config, paths, allowlists,
-and `language_version`). A shipped-but-unwired checker enforces **nothing**: it is the
-exact failure this whole skill is about — *a rule in prose gets violated; a rule in a
-checker holds*. An un-run checker is prose.
+Installing this skill ships its checkers under `checkers/`, but it does **NOT** wire them
+into any project. A shipped-but-unwired checker enforces **nothing**: *a rule in prose gets
+violated; a rule in a checker holds*. An un-run checker is prose.
 
-**So, whenever this skill is invoked on a Python project, first verify the gates are
-actually wired — do not assume they are:**
+**Wire them with `claude-all --install-hooks`** (run in the project root). claude-all is a
+prek/pre-commit hook repo: the command writes one managed block into `prek.toml` /
+`.pre-commit-config.yaml` with a pinned `rev` and the hook args filled from the project
+layout. Never copy checker scripts into the project. Copies drift from upstream and CI
+can't see `~/.claude`.
 
-1. **Enumerate what ships.** List the checker files this skill installs (glob the
-   skill's `checkers/*.py` + `baseline_gate.py`).
-2. **Check each is wired.** Grep the project's `prek.toml` **and**
-   `.pre-commit-config.yaml` for each checker's `entry`. A checker with no hook entry
-   is unenforced — report it, and offer to wire it (recipe → `references/enforcement.md`).
-3. **Confirm it actually runs, not just that it's present.** A hook can be listed and
-   still be a vacuous pass — see the `prek` skill's *vacuous PASS*: `prek run
-   --all-files` only sees git-tracked files and only the pre-commit stage, and an
-   AST hook on an older `language_version` skips files while exiting 0. "Wired" means
-   the entry exists AND `language_version` is pinned AND both stages are green.
+**Whenever this skill is invoked on a Python project, verify the gates are wired:**
+
+1. **Check the block exists.** Look for the `claude-all hooks` markers in `prek.toml` /
+   `.pre-commit-config.yaml`. Missing, or missing a hook this skill ships: run
+   `claude-all --install-hooks --dry-run` and offer to apply it.
+2. **Check the `rev` is current.** If it's older than the installed claude-all, re-run
+   `--install-hooks` to bump it (new checkers arrive with new releases).
+3. **Confirm it actually runs, not just that it's present.** See the `prek` skill's
+   *vacuous PASS*: `prek run --all-files` only sees git-tracked files and only the
+   pre-commit stage. "Wired" means the block exists AND both stages are green.
+4. **Existing debt:** never disable a hook to get green. Seed a baseline
+   (`claude-all-check <id> --baseline <id>_baseline.txt --update src`) and add
+   `--baseline <file>` to that hook's args, so the debt ratchets down.
 
 **Auto-improvement — a code change can mint a new gate.** New rules ship over time (this
 skill went from 0 checkers to 5 in one cycle), and a project may add its own. So the
@@ -61,7 +62,7 @@ Read the matching file BEFORE deep work in that area. Each is a focused referenc
 | If you are…                                                                                                                                                                                    | Read                                                                                                    |
 | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
 | Understanding WHY a rule exists — the real production failures behind it (silent billing, blind gates, fixtures that lie, the barrel cost, aliases, verbatim strip, strict-config seams)         | [`references/incidents.md`](references/incidents.md)                                                    |
-| Writing docstrings, public APIs, package docs                                                                                                                                                  | [`references/docstrings.md`](references/docstrings.md)                                                  |
+| Writing docstrings/comments (optional, size-bounded), public APIs, package docs                                                                                                                                                  | [`references/docstrings.md`](references/docstrings.md)                                                  |
 | Adding generics, Protocols, type aliases, TYPE_CHECKING decisions                                                                                                                              | [`references/type-hints.md`](references/type-hints.md)                                                  |
 | Touching `try/except`, designing exception hierarchies, using `suppress()`, handling AWS / boto errors                                                                                         | [`references/error-handling.md`](references/error-handling.md)                                          |
 | Designing classes — inheritance for service wrappers, DI, class attributes                                                                                                                     | [`references/class-design.md`](references/class-design.md)                                              |
@@ -76,7 +77,7 @@ Read the matching file BEFORE deep work in that area. Each is a focused referenc
 | Configuration management — Pydantic Settings, env var coercion, nested configs, secrets from files                                                                                             | [`references/config.md`](references/config.md)                                                          |
 | Writing tests — pytest, fixtures, parametrize, mocks, LocalStack, time freezing, snapshot, **factory pattern (polyfactory/factory_boy), DI over module-global mocks, mirrored src/ structure** | [`references/testing.md`](references/testing.md)                                                        |
 | E2E / integration on shared infra (multi-tenant) — isolate data vs accept shared infra, one `create_tenant` factory, sequence randomization, concurrency-capable mocks, drain-to-own queues, fail-closed channels, settings-cache timing, separate serial pass for un-scopeable global tests, flaky-fix method | [`references/e2e-testing.md`](references/e2e-testing.md)                                                |
-| Choosing Pydantic (the default — even internally) vs an allowlisted `@dataclass` — trust boundaries, **why TypedDict + `cast` are banned**, required-vs-optional, shared `PYDANTIC_CONFIG` + `extra="forbid"`, verbatim-content `str_strip_whitespace`, opaque fields, **Lambda event + ECS env validation**                                                  | [`references/data-modeling.md`](references/data-modeling.md)                                            |
+| Pydantic everywhere (no `@dataclass`, live objects via `arbitrary_types_allowed`, validated copies) — trust boundaries, **why TypedDict + `cast` are banned**, required-vs-optional, shared `PYDANTIC_CONFIG` + `extra="forbid"`, verbatim-content `str_strip_whitespace`, opaque fields, **Lambda event + ECS env validation**                                                  | [`references/data-modeling.md`](references/data-modeling.md)                                            |
 | Serialization across a boundary — `model_dump(mode="json")`, orjson, aliases, `exclude_none`, round-trip proof                                                                                 | [`references/serialization.md`](references/serialization.md)                                            |
 | Scoped global processes — run-for-one(/group) parameter on all-tenant jobs, DynamoDB idempotency that includes the scope, global-run-supersedes-customer-run rule                              | [`references/scoped-processes.md`](references/scoped-processes.md)                                      |
 | Multi-tenant isolation (five planes) — boundary contracts (typed `TenantScope`, token-only org, IDOR); Postgres RLS second wall (raising `app_current_org_id()`, ENABLE+FORCE, `0` sentinel, `query_system`+coverage guard); warm-start singleton/cache leak class + taxonomy; `/tmp/{org}/{exec}/` layout + cold-start sweep; AWS ABAC/STS session tags (spike-per-service, fail-closed, billing-as-IAM)                                                                                                                       | [`references/tenant-isolation.md`](references/tenant-isolation.md)                                      |
@@ -158,9 +159,16 @@ Multiple exceptions in one except: use the parenthesised tuple `except (ValueErr
 | Event loop           | **uvloop**      | default asyncio loop          |
 | Hashing (non-crypto) | **xxhash**      | hashlib                       |
 | AWS SDK              | **aiobotocore** | sync `boto3` in async code    |
-| Caching              | **cachebox**    | `functools.lru_cache`         |
+| Caching              | **cachebox**    | `functools.lru_cache`, `cachetools` (see `references/caching.md` for tenant scope) |
 | Logging              | **structlog**   | stdlib logging with f-strings |
 | Dependencies         | **uv**          | pip                           |
+| Async file I/O       | **`anyio.Path`** | sync `pathlib.Path` I/O inside `async def` |
+| Blocking calls       | **one owned thread pool** (`run_in_thread()`, size from settings) | ad-hoc `asyncio.to_thread()` (unbounded default pool) |
+| JWT verification     | **PyJWT[crypto]** + `PyJWKClient` | `python-jose` (sparse maintenance; 2024 CVEs for algorithm confusion and a JWE decompression bomb) |
+
+Construct models with **keyword arguments** only. Pydantic models are keyword-only, so
+`Model(a, b)` raises `TypeError`. Raw-SQL modules still on `text()` with asyncpg: never write
+`IN :param` with a tuple; write `= ANY(:param)` and pass a **list**.
 
 ## Lambda handlers
 
@@ -220,7 +228,7 @@ Section headers for long files:
 ## Architectural rules (one-liners — depth in references)
 
 1. **Minimalism / YAGNI — the default.** Simplest thing that satisfies the CURRENT requirement; structure is a cost, not a virtue. Name a concrete *present* reason for every function, class, file, and abstraction — "might need it later", "more flexible", "cleaner", "best practice", "separation of concerns" are not reasons. Target shapes: one table = one class + its Pydantic model (`get_x(id)` returns the model, nothing else); called once → inline it; one implementation → no interface/`Protocol`; one method → no class. Banned by default: pass-through functions, a "repository" wrapping SQLAlchemy, factories/strategies/registries/managers/single-subclass bases, config for one-value options, defensive handling of type-guaranteed inputs. Abstract at the **third** real case (Rule of Three), a real second impl *today*, or a genuine test seam — never on speculation. (Rule of Three governs *uncertain* similarity; **structurally-certain** sameness — a second call site on the same store surface, or a second copy of the same control-flow skeleton — extracts at the **second** copy, → `references/architecture.md` "Rule of Three vs the two-copy trigger".) Run a **deletion pass** before finishing: for each unit, name the present need or inline/remove; bias toward deleting; fewer, longer, obvious functions beat many tiny indirections. Exception: foundations that are expensive to reverse (boundary models, schema/DB, security/tenant boundaries, module layout) warrant foresight now — YAGNI governs features, not foundations. The heavier patterns in `architecture.md` are tools for a justified need, not defaults. → `references/yagni.md`
-1. **Data modeling.** Default to a **Pydantic model everywhere a contract exists** — at trust boundaries AND internally; a `@dataclass` is the rare allowlisted exception (only for a proven structural reason: holds a live non-serializable object, is a DI container, carries a `TYPE_CHECKING`-only type, or is a `dataclasses.replace()` target — never "it's already validated"). For a hot loop over trusted data use `model_construct()` on a real model, not a dataclass. Models start from one shared `PYDANTIC_CONFIG`; verbatim-content fields opt out of `str_strip_whitespace`. **`TypedDict` is banned outright** (static-only — it validates nothing at runtime, including in test fixtures) and **`typing.cast` is banned** (`cast(row_dtype, dict(row))` proves nothing — use `Model.model_validate(...)`). **`extra="forbid"` on every model, no exceptions** (consumer-before-producer is a deployment-order problem to solve in the deploy process, never a reason to weaken the contract). No default on a required field; no `Any`/bare `dict` as a model field; never pass `dict[str, Any]` between modules. **Every entry point validates its payload** — Lambda events (SQS/SNS/EventBridge/Step Functions/direct invoke) and ECS env vars (`pydantic-settings`) are parsed into a Pydantic model at the boundary, before any logic. → `references/data-modeling.md`
+1. **Data modeling.** Default to a **Pydantic model everywhere a contract exists** — at trust boundaries AND internally; **`@dataclass` is banned, no allowlist** — data is validated where it is created, everywhere, so a bad value fails at its origin instead of three calls deep. Live objects (clients, Protocol impls) go in a model with `arbitrary_types_allowed=True` (an `isinstance` check); a changed copy is `type(m).model_validate({**dict(m), **changes})`, never `model_copy(update=...)` (it skips validation). Models start from one shared `PYDANTIC_CONFIG`; verbatim-content fields opt out of `str_strip_whitespace`. **`TypedDict` is banned outright** (static-only — it validates nothing at runtime, including in test fixtures) and **`typing.cast` is banned** (`cast(row_dtype, dict(row))` proves nothing — use `Model.model_validate(...)`). **`extra="forbid"` on every model, no exceptions** (consumer-before-producer is a deployment-order problem to solve in the deploy process, never a reason to weaken the contract). No default on a required field; no `Any`/bare `dict` as a model field; never pass `dict[str, Any]` between modules. **Every entry point validates its payload** — Lambda events (SQS/SNS/EventBridge/Step Functions/direct invoke) and ECS env vars (`pydantic-settings`) are parsed into a Pydantic model at the boundary, before any logic. → `references/data-modeling.md`
 1. **External system ownership — including query surfaces.** One owner class per external system (Jira, S3, OpenAI, …); all SDK / HTTP calls flow through it; ruff `banned-api` blocks raw imports outside owner folders. A **query surface** (a DB table, search index, vector namespace, cache keyspace) is an external system too — exactly ONE module owns its reads/writes; callers never assemble store access inline and build only inputs/outputs. **The trigger is the SECOND call site**, not the third (structurally-certain sameness, not Rule-of-Three doubt). **Structural duplication is invisible to clone detectors** (`jscpd` sees copy-paste, not same-responsibility-different-text — one real case hid ~1,700 LOC across three hand-assembled call sites): review by responsibility ("who else talks to this store/API?"), especially when a PR adds a new call site touching an existing store. → `references/external-system-ownership.md`
 1. **Error handling discipline.** No silent except. No `log.debug` inside `except`. Catch narrowest class, log at `warning`/`error` with structured context, `raise ... from e` when converting. **`contextlib.suppress(Exception)` is strictly prohibited** — it silences all exceptions including bugs and OOM; `suppress(SpecificError)` requires explicit justification. → `references/error-handling.md`
 1. **Test patterns.** Use factories (polyfactory / factory_boy). Never `mod._client = mock` (race-prone under xdist) — inject the dependency. Tests mirror `src/` 1:1. **Test data is isolated**: dynamic DB ids (never hard-coded), each test owns its own rows (nothing shared), FKs never cross tenants, suite runs under `pytest-xdist` (concurrency *is* the isolation check). **No `@pytest.mark.xdist_group`** to prop up co-dependent tests — make each test self-contained; the marker is a rare, user-approved, documented exception only. → `references/testing.md`
@@ -256,7 +264,7 @@ Section headers for long files:
 - ❌ **A duplication-gate allowlist kept as a graveyard** — every entry is classified (`MERGE`/`EXTRACT-CORE`/`JUSTIFIED:<reason>`), entries naming deleted code are swept, and the list length only shrinks. → `references/enforcement.md`
 - ❌ **Hardcoded config at module or class level** — any value that could differ between environments or change over time must live in `Settings`, env var, or be passed as a parameter. Covers: LLM model names, Jira/workflow statuses, S3/SQS/SNS resource names, API endpoints, timeouts, batch sizes, feature flags. Function/method *parameter defaults* are the one allowed exception. → `references/config.md`
 - ❌ `os.getenv()` scattered across modules — all env var access must go through the `Settings` singleton.
-- ❌ Internal types in public APIs — use Pydantic models / frozen-dataclass DTOs.
+- ❌ Internal types in public APIs — use frozen Pydantic models.
 - ❌ **`TypedDict` — banned outright.** Static-only; it validates nothing at runtime. Test fixtures are where it lies most (a fixture that matches neither the DB nor the annotation keeps mypy green). Use a Pydantic `BaseModel`. → `references/data-modeling.md`
 - ❌ **`typing.cast` — banned.** It asserts a type instead of proving one; `cast(row_dtype, dict(row))` is a no-op that only pretends to type. Use `Model.model_validate(...)`.
 - ❌ **`extra="ignore"` / `extra="allow"` — always `extra="forbid"`.** A schema change must be followed by a code change. The consumer-before-producer deployment order this forces is a deploy-process problem, not a reason to weaken the contract.
@@ -281,7 +289,7 @@ Section headers for long files:
 Before finalising code:
 
 - [ ] All functions: type hints (params + return)
-- [ ] All functions: Google-style docstrings
+- [ ] Docstrings/comments (if any) state intent, within the size budget
 - [ ] No scattered timeout / retry logic
 - [ ] No mixed I/O + business logic
 - [ ] No bare `except Exception: pass`

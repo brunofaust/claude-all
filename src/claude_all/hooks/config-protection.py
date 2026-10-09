@@ -1,24 +1,8 @@
 #!/usr/bin/env python3
-"""PreToolUse hook — require user confirmation before editing linter/formatter configs.
-
-Fires on Edit|Write|MultiEdit. Pauses on prek.toml / .pre-commit-config.yaml /
-.ruff.toml / ruff.toml — these are lint configs and should only be changed when
-the user explicitly asks, not as a side-effect of a coding task.
-
-On a confirm-required match (lint configs, Claude Code hooks/settings): exits 0
-and emits `hookSpecificOutput.permissionDecision: "ask"` — the harness PAUSES the
-tool call and asks the user for approval, with the explanation shown as the
-`permissionDecisionReason`. The edit only proceeds if the user explicitly
-approves it.
-
-On a warn-only match (mixed-purpose files like pyproject.toml): exits 0 and emits
-`hookSpecificOutput.additionalContext` (a system reminder injected into Claude's
-context). Using exit 0 + JSON (rather than exit 1 + stderr) keeps the reminder
-from being rendered as a "hook error" — it is guidance, not a failure, and the
-edit still proceeds.
-
-The goal: lint configs change only when the user consciously decides to change
-them, not when Claude is trying to silence a failing check.
+"""PreToolUse hook — require user confirmation before editing linter/formatter configs. Fires on
+Edit|Write|MultiEdit. Pauses on prek.toml / .pre-commit-config.yaml / .ruff.toml / ruff.toml —
+these are lint configs and should only be changed when the user explicitly asks, not as a
+side-effect of a coding task.
 """
 
 from __future__ import annotations
@@ -30,17 +14,6 @@ __all__ = ["main"]
 
 
 def remind(message: str) -> int:
-    """Emit a non-error reminder into Claude's context, then allow the tool.
-
-    Prints PreToolUse JSON to stdout (exit 0) so the message appears as a system
-    reminder rather than a "hook error". Non-blocking: the edit still proceeds.
-
-    Args:
-        message: The guidance text injected into Claude's context.
-
-    Returns:
-        0 — always (the hook never blocks; it only nudges).
-    """
     json.dump(
         {
             "hookSpecificOutput": {
@@ -54,18 +27,6 @@ def remind(message: str) -> int:
 
 
 def ask(reason: str) -> int:
-    """Pause the tool call and ask the user for explicit approval.
-
-    Prints PreToolUse JSON with `permissionDecision: "ask"` to stdout (exit 0) so
-    the harness halts the edit and shows `reason` to the user as the approval
-    prompt. Unlike `remind`, the edit does NOT proceed unless the user approves.
-
-    Args:
-        reason: Explanation shown to the user in the approval prompt.
-
-    Returns:
-        0 — always (the decision itself is carried in the JSON payload).
-    """
     json.dump(
         {
             "hookSpecificOutput": {

@@ -228,7 +228,7 @@ id = "text-unicode-replacement-char"
 name = "🐍 python · No U+FFFD replacement char"
 
 
-# ⚠️ language_version MUST be pinned per-hook on bandit / vulture / interrogate.
+# ⚠️ language_version MUST be pinned per-hook on bandit / vulture.
 # They parse with the interpreter's own `ast`, so on an older interpreter they
 # silently SKIP files they cannot parse and still exit 0 — a vacuous pass. A
 # repo-level `default_language_version` does NOT reach a hook's isolated env.
@@ -255,18 +255,6 @@ rev = "v2.14"
 [[repos.hooks]]
 id = "vulture"
 name = "🐍 python · Dead code"
-language_version = "python3.12"
-
-
-[[repos]]
-repo = "https://github.com/econchick/interrogate"
-rev = "1.7.0"
-
-# Docstring COVERAGE only — it cannot tell a real docstring from a restatement of
-# the function name. Pair with review; don't read 100% as "documented".
-[[repos.hooks]]
-id = "interrogate"
-name = "🐍 python · Docstring coverage"
 language_version = "python3.12"
 
 
@@ -360,156 +348,36 @@ stages = ["pre-push"]
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# 4. THIS SKILL'S OWN CHECKERS
+# 4. THIS SKILL'S OWN CHECKERS — from the claude-all hook repo
 #
-# Copy them out of `checkers/` into your repo (e.g. `scripts/`) — copy the whole
-# directory rather than picking files, since some checkers share a helper module
-# that has no hook entry of its own (see the mock-drift note below). Each encodes
-# a rule from references/enforcement.md that no off-the-shelf tool enforces. All
-# are pure AST parses — they never import your code and never touch a database.
+# Don't copy checker scripts into the repo. Generate this block in the project root:
+#     claude-all --install-hooks          # (--dry-run first to see the diff)
+# It offers only the hooks of your installed skills, fills args from the layout, pins
+# `rev` to your claude-all release, and rewrites only the block between the markers.
+# Each checker is a pure AST/text parse; it exits 1 on findings and 2 when it can't
+# parse or scans zero files, so a bad setup fails loudly instead of passing.
 #
-# ⚠️ Pin `language_version` on EVERY one, for the reason given above. These
-# checkers exit 2 (a tool error, distinct from 1 = findings) on a file they
-# cannot parse, precisely so that surfaces instead of passing silently.
+# Existing debt? Seed a baseline and ratchet instead of disabling a hook:
+#     claude-all-check migration-head --baseline migration_head_baseline.txt --update alembic/versions
+#     { id = "migration-head", args = ["--baseline", "migration_head_baseline.txt", "alembic/versions"] }
 # ═════════════════════════════════════════════════════════════════════════════
 
+# >>> claude-all hooks (managed by `claude-all --install-hooks`; don't edit) >>>
 [[repos]]
-repo = "local"
-
-[[repos.hooks]]
-id = "model-contract"
-name = "🧩 models · Pydantic config, no dataclass/alias/barrel-init (AST)"
-entry = "uv run python scripts/model_contract.py src --check"
-language = "system"
-types_or = ["python"]
-pass_filenames = false
-always_run = true
-language_version = "python3.12"
-
-[[repos.hooks]]
-id = "pydantic-contract"
-name = "🧩 models · No opaque annotations, masking defaults, TypedDict or cast (AST)"
-entry = "uv run python scripts/pydantic_contract.py src --check"
-language = "system"
-types_or = ["python"]
-pass_filenames = false
-always_run = true
-language_version = "python3.12"
-
-[[repos.hooks]]
-id = "all-contract"
-name = "📤 exports · from x import y requires y in x.__all__ (AST)"
-entry = "uv run python scripts/all_contract.py src --check"
-language = "system"
-types_or = ["python"]
-pass_filenames = false
-always_run = true
-language_version = "python3.12"
-
-[[repos.hooks]]
-id = "flat-test-mirror"
-name = "🧪 test · Unit tier is ONE flat mirror of src (AST)"
-entry = "uv run python scripts/flat_test_mirror.py tests/unit src"
-language = "system"
-pass_filenames = false
-always_run = true
-language_version = "python3.12"
-
-[[repos.hooks]]
-id = "lambda-event-validation"
-name = "☁️ lambda · Handler validates its event payload (AST)"
-entry = "uv run python scripts/lambda_event_validation.py src --check"
-language = "system"
-types_or = ["python"]
-pass_filenames = false
-always_run = true
-language_version = "python3.12"
-
-
-# ── Mock-drift family — from the `mock-drift-sweep` skill's checkers/ ─────────
-# Mock drift is the #1 silent-failure class: an agent satisfies the fixture you
-# gave it, not the production system. Pass BOTH source and tests so dotted patch
-# targets resolve — passing only tests/ leaves every target unresolvable, and
-# therefore silent.
-#
-# ⚠️ COPY THIS FAMILY AS A UNIT, NOT FILE-BY-FILE.
-# All four scripts below do `from mock_drift_common import ...` — they share one
-# resolution helper. Copy `mock_drift_common.py` into the SAME directory
-# (`scripts/`) alongside them, or every hook here dies on the first commit with
-# `ModuleNotFoundError: No module named 'mock_drift_common'`. It has no hook
-# entry of its own because it is a library, not a checker.
-
-[[repos]]
-repo = "local"
-
-[[repos.hooks]]
-id = "async-mock-target"
-name = "🧪 test · async def needs an async-aware double"
-entry = "uv run python scripts/async_mock_target.py tests src"
-language = "system"
-types_or = ["python"]
-pass_filenames = false
-always_run = true
-language_version = "python3.12"
-
-[[repos.hooks]]
-id = "patch-target-exists"
-name = "🧪 test · patch() target must exist (no silent attribute creation)"
-entry = "uv run python scripts/patch_target_exists.py tests src"
-language = "system"
-types_or = ["python"]
-pass_filenames = false
-always_run = true
-language_version = "python3.12"
-
-# Regression-only — expect real findings on an existing codebase. Seed once with
-# --baseline, then enforce with --check.
-[[repos.hooks]]
-id = "mock-assert-signature"
-name = "🧪 test · assert_called_with() must fit the real signature"
-entry = "uv run python scripts/mock_assert_signature.py tests src --check"
-language = "system"
-types_or = ["python"]
-pass_filenames = false
-always_run = true
-language_version = "python3.12"
-
-# Regression-only — the noisiest rule of the family by design.
-[[repos.hooks]]
-id = "unspecced-model-mock"
-name = "🧪 test · No unspecced mock for a patched model class"
-entry = "uv run python scripts/unspecced_model_mock.py tests src --check"
-language = "system"
-types_or = ["python"]
-pass_filenames = false
-always_run = true
-language_version = "python3.12"
-
-
-# ── Migration graph — from the `regression-gates` skill's checkers/ ───────────
-# Only if the project uses Alembic. Pairs with the `alembic-migration` skill.
-# Pass ONE directory per Alembic environment; never split one tree across roots.
-#
-# ⚠️ WRAPPED IN baseline_gate.py ON PURPOSE — DO NOT "SIMPLIFY" THIS.
-# Unlike the checkers above, `migration_head.py` follows the regression-gates
-# contract: it prints findings to stdout and ALWAYS EXITS 0, so that
-# `baseline_gate.py` can own the pass/fail decision. Invoking it directly as a
-# hook entry means a real two-head fork PRINTS its finding and the hook still
-# reports PASS — a vacuous pass, the exact bug class this checker exists to
-# catch. The wrapper is what makes it bite.
-#
-# Seed once, then enforce with the SAME command in the hook and in CI:
-#   python scripts/baseline_gate.py --baseline migration_head_baseline.txt --update -- \
-#       python scripts/migration_head.py migrations/versions
-
-[[repos]]
-repo = "local"
-
-[[repos.hooks]]
-id = "migration-head"
-name = "🗄️ migrations · Single head, no duplicate/over-length/dangling ids"
-entry = "uv run python scripts/baseline_gate.py --baseline migration_head_baseline.txt -- python scripts/migration_head.py migrations/versions"
-language = "system"
-pass_filenames = false
-always_run = true
-language_version = "python3.12"
+repo = "https://github.com/brunofaust/claude-all"
+rev = "v0.17.0"
+hooks = [
+  { id = "model-contract", args = ["src"] },
+  { id = "pydantic-contract", args = ["src"] },
+  { id = "all-contract", args = ["--package", "myapp", "src"] },
+  { id = "flat-test-mirror", args = ["--root", "tests/unit"] },
+  { id = "docstring-budget" },
+  { id = "async-mock-target", args = ["src", "tests"] },
+  { id = "patch-target-exists", args = ["src", "tests"] },
+  { id = "mock-assert-signature", args = ["--check", "src", "tests"] },
+  { id = "unspecced-model-mock", args = ["--check", "src", "tests"] },
+  { id = "junk-drawer", args = ["src"] },
+  { id = "module-private", args = ["src"] },
+  { id = "migration-head", args = ["alembic/versions"] },
+]
+# <<< claude-all hooks <<<

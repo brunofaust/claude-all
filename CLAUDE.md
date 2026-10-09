@@ -10,6 +10,8 @@ It detects the locally available host CLIs; it never installs either CLI.
 claude-all --all --user <name>     # ~/.claude, ~/.codex, and ~/.agents/skills
 claude-all --all --project <name>  # ./.claude, ./.codex, and ./.agents/skills
 claude-all --rebuild               # regenerate installed Codex agent TOMLs
+claude-all --install-hooks         # wire installed skills' checkers into ./prek.toml (pinned rev)
+claude-all-check <hook-id> [args]  # run one shipped checker (what the hook entry calls)
 
 # Remove installs
 claude-all --prune                 # only what the repo no longer ships
@@ -28,6 +30,16 @@ prek run --all-files
 # `uv sync --locked`, copies .worktreeinclude files, `uv run prek install` (all 3 stages)
 wt switch --create <branch>
 ```
+
+### Shipped checkers are prek/pre-commit hooks
+
+A skill that ships a checker declares it in its `claude-all.json` under `prek_hooks`
+(`id`, `script`, `args` with `{src}`/`{package}`/`{tests}`/`{unit_tests}`/`{e2e_tests}`/
+`{migrations}`/`{infra}` placeholders, `exit_zero_flag` or `stdout_findings` for baseline
+support). The root `.pre-commit-hooks.yaml` is GENERATED from those specs — regenerate it with
+`uv run python -m claude_all.prek_hooks --manifest > .pre-commit-hooks.yaml`;
+`tests/test_prek_hooks.py` fails when it drifts. Checkers must stay stdlib-only, exit 1 on
+findings (or set `stdout_findings`), and fail closed (exit 2) on zero input.
 
 ### `--rebuild`
 

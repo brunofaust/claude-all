@@ -1,106 +1,6 @@
 #!/usr/bin/env python3
 """Checker: enforce the Pydantic data-contract rules — no untyped dict carries a contract.
-
-WHY
----
-A ``dict`` carrying a contract lets a missing, blank, or renamed key slip through
-silently. ``TypedDict`` does NOT fix this: it is a *static* annotation that
-validates nothing at runtime, so ``cast(plan_row_dtype, dict(row))`` is a no-op
-that only pretends to type — mypy stays green while the payload lies. Pydantic
-validates at construction, at the boundary, at the point of failure.
-
-The bug class is NOT the ``.get(k, default)`` spelling — that is a symptom. It is
-a **default on a field that is required**. Once a payload has a real model, the
-required-vs-optional decision is forced and the masking default becomes
-removable. So these rules push payloads into models, then pin the contract:
-
-  no-typeddict      TypedDict validates nothing at runtime — use a BaseModel.
-  no-cast           `cast()` asserts a type instead of proving one.
-  extra-forbid      Every model forbids unknown fields. No exceptions: a schema
-                    change must be followed by a code change, and a query names
-                    its columns (`SELECT a, b`), so no unmodelled key can arrive.
-  masking-default   Optional ⇒ `T | None = None`. Required ⇒ no default. Any
-                    other default (`""`, `0`, `[]`, `"task"`) is one more
-                    spelling of "absent" and hides a missing key.
-  opaque-annotation `Any`/`object` at ANY nesting depth — `Sequence[Any]`,
-                    `list[dict[str, Any]]` — is the untyped dict one level down.
-                    The *container* is fine when subscripted with concrete types:
-                    `Mapping[str, str]` and `dict[VectorKey, SearchResult]`
-                    (runtime keys, typed values) both stay legal.
-  dict-return       A function returning a raw dict — including a CONCRETE
-                    `dict[str, str]`, and including an unannotated
-                    `return {...}` — leaks a payload across a boundary. Stricter
-                    than `opaque-annotation`, and return-position only.
-  splat             `f(**model.model_dump())` unpacks the model back into an
-                    untyped dict and skips per-field checking at the one site
-                    that pins the contract. Logging is the only exemption
-                    (`log.bind(**ctx)` — arbitrary context by design).
-  select-star       `SELECT *` re-introduces an unmodelled shape the code never
-                    declared, which is exactly what `extra-forbid` assumes away.
-  secret-repr       A credential/PII field without `repr=False` leaks the value
-                    into any log line that reprs the model.
-
-MODEL RECOGNITION ROTS SILENTLY — register your own base
----------------------------------------------------------
-A class only gets the field-level rules (extra-forbid, masking-default,
-secret-repr, opaque-annotation on fields) when it subclasses a base this checker
-recognises — the ``MODEL_BASES`` set below. That set names SYMBOLS by string, so
-it rots silently: rename a base, or introduce your own project base
-(``class AppModel(BaseModel)`` and then have everything extend ``AppModel``), and
-every such model becomes INVISIBLE to the checker. Zero findings then reads as
-clean when it actually means "nothing was inspected" — the exact silent-rot this
-tool exists to prevent. Register each project base with a (repeatable)
-``--model-base NAME`` so its subclasses are checked:
-
-    python checkers/pydantic_contract.py --model-base AppModel src/
-
-The default set stays ``{BaseModel, BaseSettings, RootModel}``; ``--model-base``
-only ADDS to it.
-
-CONTRACT
---------
-Prints one ``path: [rule] symbol — message`` finding per violation to stdout and
-**exits 1 when there is any finding**, so wiring it straight into prek/pre-commit
-surfaces the findings and fails the commit — no baseline artifact required.
-
-Keys are rule + enclosing symbol + field name and NEVER a line number, so an
-unrelated edit does not churn a baseline; the repeatable rules carry a per-symbol
-ordinal so a second occurrence is a distinct finding rather than a duplicate key.
-
-The checker owns NO state: it writes no baseline, no JSON, no cache. If you want
-the regression-only ratchet, compose it with ``regression-gates/baseline_gate.py``
-and pass ``--exit-zero`` — that harness reads a non-zero exit as "the checker
-crashed" and fails closed, so the flag is required there and nowhere else.
-
-USAGE
------
-    # direct gate — prints findings, exits 1 (this is the prek/pre-commit wiring)
-    python checkers/pydantic_contract.py src/
-    python checkers/pydantic_contract.py --select no-cast,extra-forbid src/
-    python checkers/pydantic_contract.py --model-base AppModel src/  # register a base
-
-    # regression-only ratchet — the baseline lives in baseline_gate.py, not here
-    baseline_gate.py --baseline pydantic_baseline.txt -- \\
-        python checkers/pydantic_contract.py --exit-zero src/
-
-PARSER NOTE — pin this hook's interpreter
------------------------------------------
-This checker parses with the ``ast`` of the interpreter it RUNS ON, so an
-interpreter older than the project's silently fails to parse new syntax (PEP 695
-``type X = int``, ``async def run[**P, T]``). Any
-Python-AST-based gate shares this: unpinned, bandit's env resolved to 3.11 and
-logged "syntax error while parsing AST" for 25 files, SKIPPED them, and **still
-exited success** — a security gate silently not scanning. Vulture's resolved to
-3.11 and dropped 35 files from dead-code analysis the same way.
-
-So this checker does NOT fail open. An unparsable file exits **2** (a tool error,
-distinct from 1 = findings) even under ``--exit-zero``, because a file it could
-not read is a file it did not check.
-
-Pin ``language_version`` on THIS hook — a repo-level ``default_language_version``
-does NOT reach a hook's isolated env. Gates with their own non-Python parser
-(ruff, jscpd, tree-sitter-based tools) are immune and need no pin.
-"""
+Rules: references/enforcement.md."""
 
 # NOTE: on the skill's 3.12 baseline (no PEP 649 lazy annotations — that is
 # 3.14-only), `from __future__ import annotations` is the recommended way to keep
@@ -174,24 +74,12 @@ SELECT_STAR = re.compile(r"\bselect\s+\*", re.IGNORECASE)
 
 
 class Finding(str):
-    """A finding key. Subclasses ``str`` so callers can just print it."""
+    """A finding key."""
 
     __slots__ = ()
 
 
 def _name_of(node: ast.expr | None, *, root: bool = False) -> str:
-    """Resolve a bare name out of *node*.
-
-    Args:
-        node: The expression to name, or ``None``.
-        root: When True, walk to the LEFTMOST name of an attribute chain
-            (``log.bind`` -> ``log``) — used to identify a call's receiver.
-            When False (default), take the TRAILING name (``typing.Any`` ->
-            ``Any``) — used to identify an annotation or callee.
-
-    Returns:
-        The resolved name, or ``""`` when *node* carries none.
-    """
     if root:
         while isinstance(node, ast.Attribute):
             node = node.value
@@ -203,24 +91,7 @@ def _name_of(node: ast.expr | None, *, root: bool = False) -> str:
 
 
 def opaque_reason(node: ast.expr | None) -> str:
-    """Return why *node* is an opaque annotation, or ``""`` when it is concrete.
-
-    Opaque means the annotation carries no usable type: ``Any``/``object`` at ANY
-    nesting depth, or a BARE mapping container. Recursion through every subscript
-    argument is load-bearing — ``Sequence[Any]``, ``list[dict[str, Any]]`` and
-    ``Mapping[str, Any] | None`` are each the untyped dict one level down, and a
-    value-position-only check silently passes all three.
-
-    A container subscripted with concrete types is NOT opaque: ``Mapping[str, str]``
-    and ``dict[VectorKey, SearchResult]`` (runtime keys, typed values) stay legal.
-    The container was never the problem.
-
-    Args:
-        node: The annotation AST node, or ``None`` when unannotated.
-
-    Returns:
-        A short reason string, or ``""`` when the annotation is acceptable.
-    """
+    """Return why *node* is an opaque annotation, or ``""`` when it is concrete."""
     if node is None:
         return ""
     if isinstance(node, ast.Name | ast.Attribute):
@@ -239,16 +110,7 @@ def opaque_reason(node: ast.expr | None) -> str:
 
 
 def _is_dict_return(node: ast.expr | None) -> bool:
-    """Return whether *node* annotates a raw dict return.
-
-    A ``dict[...] | None`` union counts — the dict arm still leaks an unmodelled
-    payload. Unlike :func:`opaque_reason` this fires on a CONCRETE dict too
-    (``dict[str, str]``): a payload crossing a function boundary should be a
-    model, whatever its value type.
-
-    Args:
-        node: The return-annotation AST node, or ``None``.
-    """
+    """Return whether *node* annotates a raw dict return."""
     if node is None:
         return False
     if isinstance(node, ast.Name | ast.Attribute):
@@ -261,14 +123,7 @@ def _is_dict_return(node: ast.expr | None) -> bool:
 
 
 def _returns_dict_literal(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
-    """Return whether *fn* returns a dict literal with no return annotation.
-
-    An unannotated ``return {...}`` leaks exactly the same unmodelled payload as
-    an annotated one, while dodging every annotation-based check.
-
-    Args:
-        fn: The function or coroutine definition.
-    """
+    """Return whether *fn* returns a dict literal with no return annotation."""
     if fn.returns is not None:
         return False
     return any(isinstance(n, ast.Return) and isinstance(n.value, ast.Dict) for n in ast.walk(fn))
@@ -288,16 +143,6 @@ def _is_log_call(func: ast.expr) -> bool:
 
 
 def _field_call_default(node: ast.expr) -> tuple[bool, str]:
-    """Inspect a ``Field(...)`` call for a default.
-
-    Args:
-        node: The assigned value of a model field.
-
-    Returns:
-        ``(has_default, description)`` — ``has_default`` is False for a bare
-        ``Field(alias=...)`` (still a required field) and for
-        ``Field(default=None)`` (an explicitly optional field).
-    """
     for kw in node.keywords if isinstance(node, ast.Call) else []:
         if kw.arg == "default_factory":
             return True, "Field(default_factory=...)"
@@ -311,11 +156,6 @@ def _field_call_default(node: ast.expr) -> tuple[bool, str]:
 
 
 def _has_repr_false(node: ast.expr | None) -> bool:
-    """Return whether the assigned value is a ``Field(..., repr=False)`` call.
-
-    Args:
-        node: The assigned value of a model field, or ``None``.
-    """
     if not isinstance(node, ast.Call):
         return False
     return any(
@@ -325,14 +165,7 @@ def _has_repr_false(node: ast.expr | None) -> bool:
 
 
 def _config_forbids_extra(body: list[ast.stmt]) -> bool:
-    """Return whether the class body pins ``extra="forbid"``.
-
-    Recognises ``model_config = {...}``, ``model_config = ConfigDict(...)`` and
-    the legacy ``class Config: extra = "forbid"`` form.
-
-    Args:
-        body: The statements of a class body.
-    """
+    """Return whether the class body pins ``extra="forbid"``."""
     for stmt in body:
         if (
             isinstance(stmt, ast.ClassDef)
@@ -372,14 +205,6 @@ def _config_forbids_extra(body: list[ast.stmt]) -> bool:
 
 
 def _is_model(node: ast.ClassDef, model_bases: frozenset[str] = MODEL_BASES) -> bool:
-    """Return whether *node* subclasses a validated pydantic model base.
-
-    Args:
-        node: The class definition.
-        model_bases: Base-class names that mark a class as a validated model.
-            Defaults to :data:`MODEL_BASES`; a project registers its own base(s)
-            via ``--model-base`` so their subclasses are not silently unchecked.
-    """
     return any(_name_of(b) in model_bases for b in node.bases)
 
 
@@ -406,13 +231,6 @@ class _Visitor(ast.NodeVisitor):
         self._ordinals: dict[tuple[str, str], int] = {}
 
     def _add(self, rule: str, symbol: str, message: str) -> None:
-        """Record a finding under a stable, line-independent key.
-
-        Args:
-            rule: The rule name; ignored when not in ``--select``.
-            symbol: The enclosing qualname (plus field/param where relevant).
-            message: The human-facing explanation.
-        """
         if rule not in self.select:
             return
         if rule in REPEATABLE:
@@ -459,12 +277,6 @@ class _Visitor(ast.NodeVisitor):
         self._stack.pop()
 
     def _check_field(self, name: str, stmt: ast.AnnAssign) -> None:
-        """Check one model field for an opaque type, a masking default, or a bare secret.
-
-        Args:
-            name: The field name.
-            stmt: The annotated assignment declaring the field.
-        """
         if name == "model_config":
             return
         symbol = f"{self._qual()}.{name}"
@@ -507,11 +319,6 @@ class _Visitor(ast.NodeVisitor):
             )
 
     def _visit_fn(self, fn: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
-        """Check a function signature for opaque parameter and return annotations.
-
-        Args:
-            fn: The function or coroutine definition.
-        """
         self._stack.append(fn.name)
         args = fn.args
         for arg in [*args.posonlyargs, *args.args, *args.kwonlyargs]:
@@ -548,19 +355,9 @@ class _Visitor(ast.NodeVisitor):
         self._stack.pop()
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
-        """Check a ``def`` signature for opaque annotations.
-
-        Args:
-            node: The function definition.
-        """
         self._visit_fn(node)
 
     def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
-        """Check an ``async def`` signature for opaque annotations.
-
-        Args:
-            node: The coroutine definition.
-        """
         self._visit_fn(node)
 
     def visit_Call(self, node: ast.Call) -> None:
@@ -603,18 +400,6 @@ class _Visitor(ast.NodeVisitor):
 def check_tree(
     tree: ast.AST, path: str, select: frozenset[str], model_bases: frozenset[str] = MODEL_BASES
 ) -> list[Finding]:
-    """Collect every violation in an already-parsed module.
-
-    Args:
-        tree: The parsed module.
-        path: Path string used to key findings.
-        select: The rule names to report.
-        model_bases: Base-class names that mark a class as a validated model
-            (defaults to :data:`MODEL_BASES`; extend via ``--model-base``).
-
-    Returns:
-        One finding per violation, in source order.
-    """
     visitor = _Visitor(path, select, model_bases)
     visitor.visit(tree)
     return visitor.findings
@@ -623,25 +408,6 @@ def check_tree(
 def find_violations(
     path: Path, select: frozenset[str], model_bases: frozenset[str] = MODEL_BASES
 ) -> list[Finding]:
-    """Parse *path* and return its findings.
-
-    Args:
-        path: The Python file to scan.
-        select: The rule names to report.
-        model_bases: Base-class names that mark a class as a validated model
-            (defaults to :data:`MODEL_BASES`; extend via ``--model-base``).
-
-    Returns:
-        One finding per violation, in source order.
-
-    Raises:
-        SyntaxError: When the RUNNING interpreter cannot parse *path*. This is
-            deliberately NOT swallowed — see the PARSER NOTE in the module
-            docstring. A file the checker could not read is a file it did not
-            check; returning ``[]`` would report it clean.
-        ValueError: On a null byte or similar unreadable source.
-        UnicodeDecodeError: When the file is not valid UTF-8.
-    """
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     return check_tree(tree, path.as_posix(), select, model_bases)
 
@@ -662,14 +428,6 @@ def iter_py_files(roots: list[Path]) -> list[Path]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """CLI entry point.
-
-    Args:
-        argv: Optional argument vector (defaults to ``sys.argv``).
-
-    Returns:
-        0 when the check ran — findings go to stdout for ``baseline_gate.py``.
-    """
     parser = argparse.ArgumentParser(
         description="Enforce the Pydantic data-contract rules.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -704,11 +462,17 @@ def main(argv: list[str] | None = None) -> int:
     if unknown := select - set(RULES):
         parser.error(f"unknown rule(s): {', '.join(sorted(unknown))}")
 
+    files = iter_py_files(args.roots)
+    print(f"scanned={len(files)}", file=sys.stderr)
+    if not files:
+        print("ERROR: scanned 0 files — refusing a vacuous pass", file=sys.stderr)
+        return 2
+
     model_bases = MODEL_BASES | frozenset(args.model_base)
 
     count = 0
     unparsable: list[str] = []
-    for file in iter_py_files(args.roots):
+    for file in files:
         try:
             findings = find_violations(file, select, model_bases)
         except (SyntaxError, ValueError, UnicodeDecodeError) as exc:

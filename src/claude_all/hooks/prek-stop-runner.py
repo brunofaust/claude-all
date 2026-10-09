@@ -1,28 +1,8 @@
 #!/usr/bin/env python3
-"""Stop hook — run prek on files edited this response, then clear the list.
-
-Reads the accumulator file written by edited-files-accumulator.py, runs
-prek for BOTH the `pre-commit` AND `pre-push` hook stages against the
-edited files, then clears the accumulator so the next response starts fresh.
-
-Why both stages: hooks declared `stages = ["push"]` (or the modern
-`stages = ["pre-push"]`) — typically mypy, import-linter, frontend
-typecheck/lint/format — are skipped by the default `pre-commit` stage.
-Running both at end-of-turn catches type errors, layering violations, and
-frontend issues BEFORE you push, instead of letting them slip through until
-`git push` actually fires.
-
-Only runs if:
-  - The Stop payload does NOT have `stop_hook_active: true` (that flag means we
-    are already inside a stop-hook fix loop — bail immediately to avoid cycling)
-  - The accumulator file exists and has entries
-  - A prek.toml exists at the project root (skip non-prek projects)
-
-On prek failure: prints the last 30 lines of output to stderr (shown to Claude),
-exits 2 to surface the error. Claude must fix before moving on. If prek itself
-cannot run (missing `uv`, timeout), the hook prints ONE short notice and exits 1
-(non-blocking, visible to the user) — the gate being broken must be loud, but a
-Stop hook must never crash the turn with a traceback.
+"""Stop hook — run prek on files edited this response, then clear the list. Reads the accumulator
+file written by edited-files-accumulator.py, runs prek for BOTH the `pre-commit` AND `pre-
+push` hook stages against the edited files, then clears the accumulator so the next response
+starts fresh.
 """
 
 from __future__ import annotations
@@ -53,13 +33,8 @@ TOTAL_BUDGET_SECONDS = 50
 
 
 def find_project_root(file_path: str) -> Path | None:
-    """Walk up from file_path to find the directory containing prek.toml.
-
-    Args:
-        file_path: Path to start walking upward from.
-
-    Returns:
-        Path to the project root (containing prek.toml), or None if not found.
+    """Walk up from file_path to find the directory containing prek.toml. Args: file_path: Path
+    to start walking upward from.
     """
     p = Path(file_path).resolve()
     for parent in [p.parent, *p.parents]:
@@ -72,21 +47,7 @@ def find_project_root(file_path: str) -> Path | None:
 
 
 def is_linked_worktree(root: Path) -> bool:
-    """Return True if *root* is a linked git worktree (not the main checkout).
-
-    A linked worktree's ``.git`` is a FILE (a ``gitdir:`` pointer); the main
-    checkout's ``.git`` is a directory. Edits in a linked worktree are
-    work-in-progress on a feature branch whose authoritative prek gate runs at
-    its real commit/push (or /ship-pr), so the end-of-turn lint batch skips it.
-    Generalises the ``/.worktrees/`` path exclusion to worktrees created
-    anywhere on disk (e.g. a sibling ``../repo-feature`` dir).
-
-    Args:
-        root: Project root (directory containing prek.toml).
-
-    Returns:
-        True if *root* is a linked worktree and should be skipped.
-    """
+    """Return True if *root* is a linked git worktree (not the main checkout)."""
     return (root / ".git").is_file()
 
 
@@ -99,23 +60,6 @@ COMMIT_CEREMONY_HOOKS: tuple[str, ...] = ("no-commit-to-branch",)
 def run_prek_stage(
     root: Path, files: list[str], stage: str, timeout: float
 ) -> subprocess.CompletedProcess[str] | str:
-    """Run prek for a single hook stage and return the CompletedProcess.
-
-    Commit-ceremony hooks (see ``COMMIT_CEREMONY_HOOKS``) are skipped via the ``SKIP``
-    env var, merged with any ``SKIP`` the user already set.
-
-    Args:
-        root: Project root where prek.toml exists.
-        files: List of file paths to check.
-        stage: Hook stage name (e.g., 'pre-commit', 'pre-push').
-        timeout: Seconds left in the hook's total budget for this run.
-
-    Returns:
-        CompletedProcess with prek output captured, or a short error string if
-        prek could not run at all (missing `uv`, timeout) — a Stop hook must
-        never crash the turn with a traceback, but the broken gate must be
-        surfaced, so the caller reports the string to the user.
-    """
     env = dict(os.environ)
     skip = [s for s in env.get("SKIP", "").split(",") if s.strip()]
     skip.extend(h for h in COMMIT_CEREMONY_HOOKS if h not in skip)
@@ -147,19 +91,6 @@ def run_prek_stage(
 
 
 def is_real_failure(combined: str) -> bool:
-    """Return True if the prek output contains real failures.
-
-    Filters out the `check-added-large-files` exit 128 (prek 0.4.1 bug in
-    --files mode): lines mentioning that hook are ignored, every other
-    failure line counts. A non-zero exit with no recognizable failure line
-    is surfaced too — unknown output must not be silently swallowed.
-
-    Args:
-        combined: Stdout + stderr from prek run.
-
-    Returns:
-        True if a real failure (not just check-added-large-files noise).
-    """
     failed_lines = [ln for ln in combined.splitlines() if "Failed" in ln]
     if not failed_lines:
         return True  # non-zero exit with no recognizable hook output — surface it

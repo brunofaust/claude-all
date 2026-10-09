@@ -24,8 +24,8 @@ You are a Python refactoring specialist. Apply the brunofaust-python-style skill
 - Use `|` over `Union`, `T | None` over `Optional[T]`
 - Use `Self` from `typing` for fluent interfaces
 - Use `Literal` for discriminated unions
-- Use `TypedDict` or `dataclass` for structured dicts
-- Pydantic v2 for runtime validation; dataclasses for internal models
+- Pydantic v2 models for ALL structured data, internal included — `TypedDict` and `@dataclass` are banned (they validate nothing; errors must surface where the bad value is created)
+- Live objects (clients, Protocol impls) go in a model with `arbitrary_types_allowed=True`; changed copies via `type(m).model_validate({**dict(m), **changes})`, never `model_copy(update=...)`
 - `Final` for module-level constants
 
 ### Async patterns
@@ -58,14 +58,13 @@ You are a Python refactoring specialist. Apply the brunofaust-python-style skill
 - Small functions, single responsibility
 - Dependency injection via constructors, not module-level globals
 - Class methods only when state matters; prefer module-level functions
-- `@dataclass(frozen=True, slots=True)` for value objects
+- Frozen Pydantic models (`PYDANTIC_CONFIG | ConfigDict(frozen=True)`) for value objects
 - Avoid mutable default arguments
 
 ### Docstrings
 
-- Google-style or NumPy-style consistently
-- Short summary line + blank line + details
-- Args, Returns, Raises sections for non-trivial functions
+- Optional and size-bounded (≤ min(150 chars, code size)); read mostly by models
+- State intent and non-obvious constraints — never `Args:`/`Returns:` restating the signature
 - Type hints in signatures, NOT in docstrings (redundant)
 
 ## Workflow

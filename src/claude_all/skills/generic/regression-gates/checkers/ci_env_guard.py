@@ -1,29 +1,8 @@
 #!/usr/bin/env python3
-"""Checker: ban `os.environ.setdefault(...)` of CI-reserved env vars in test bootstrap.
-
-WHY
----
-`os.environ.setdefault("X", "...")` is a no-op when X is already set. CI runners
-pre-set a reserved namespace (``CI``, ``GITHUB_*``, ``RUNNER_*``, ``GITLAB_*``,
-``CIRCLE*``, ``BUILDKITE*``, …). So a test bootstrap that does
-
-    os.environ.setdefault("GITHUB_API_URL", "http://localhost:9999")  # "mock"
-
-silently LOSES to the runner's real value in CI: locally your tests hit the
-fake, in CI they hit the real service. The mock evaporates exactly where it
-matters most. Use an unconditional assignment (or a fixture/monkeypatch) instead
-of `setdefault` for anything a CI provider might own.
-
-The reserved-namespace principle generalises to ANY CI provider — extend
-``RESERVED_PREFIXES`` / ``RESERVED_NAMES`` for yours.
-
-CONTRACT
---------
-Prints one ``path: message`` finding per match to stdout — keyed by the var name
-plus the enclosing scope, NOT by line number, so it composes with
-``baseline_gate.py``'s stable-key contract. Exits 0 on success (even with
-findings). Fails open on a file it cannot parse (a sibling syntax/lint gate owns
-that). Defaults to scanning ``test``-named files under the given roots.
+"""Checker: ban `os.environ.setdefault(...)` of CI-reserved env vars in test bootstrap. WHY ---
+`os.environ.setdefault("X", "...")` is a no-op when X is already set. CI runners pre-set a
+reserved namespace (``CI``, ``GITHUB_*``, ``RUNNER_*``, ``GITLAB_*``, ``CIRCLE*``,
+``BUILDKITE*``, …).
 """
 
 from __future__ import annotations
@@ -75,11 +54,8 @@ def setdefault_key(call: ast.Call) -> str | None:
 
 
 def calls_with_scope(node: ast.AST, scope: str = "<module>") -> Iterator[tuple[ast.Call, str]]:
-    """Yield each ``ast.Call`` with the dotted name of its enclosing def/class scope.
-
-    Args:
-        node: The AST subtree to walk.
-        scope: The dotted name of ``node``'s enclosing def/class, for recursion.
+    """Yield each ``ast.Call`` with the dotted name of its enclosing def/class scope. Args: node:
+    The AST subtree to walk.
     """
     for child in ast.iter_child_nodes(node):
         child_scope = scope
@@ -91,12 +67,7 @@ def calls_with_scope(node: ast.AST, scope: str = "<module>") -> Iterator[tuple[a
 
 
 def find_violations(path: Path) -> list[str]:
-    """Return ``path: message`` findings for one file. Fails open on parse error.
-
-    The key carries the var name + enclosing scope (not the line number), so an
-    unrelated edit elsewhere in the file doesn't churn a ``baseline_gate.py``
-    baseline, while two hits in different functions stay distinct.
-    """
+    """Return ``path: message`` findings for one file. Fails open on parse error."""
     try:
         tree = ast.parse(path.read_text(encoding="utf-8"))
     except (SyntaxError, ValueError, UnicodeDecodeError):
@@ -135,7 +106,12 @@ def main(argv: list[str] | None = None) -> int:
         "roots", nargs="+", type=Path, help="files or dirs to scan (dirs → test*.py)"
     )
     args = parser.parse_args(argv)
-    for file in iter_test_files(args.roots):
+    files = iter_test_files(args.roots)
+    print(f"scanned={len(files)}", file=sys.stderr)
+    if not files:
+        print("ERROR: scanned 0 files — refusing a vacuous pass", file=sys.stderr)
+        return 2
+    for file in files:
         for finding in find_violations(file):
             print(finding)
     return 0

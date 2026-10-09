@@ -1,0 +1,60 @@
+{
+  "prek_hooks": [
+    {
+      "id": "junk-drawer",
+      "name": "🧹 claude-all · No junk-drawer modules",
+      "description": "Ban utils/helpers/common/misc module names.",
+      "script": "checkers/junk_drawer.py",
+      "args": [
+        "{src}"
+      ],
+      "stdout_findings": true
+    },
+    {
+      "id": "module-private",
+      "name": "🐍 claude-all · No module-level _names",
+      "description": "Module-level names use __all__, never a leading underscore.",
+      "script": "checkers/module_private.py",
+      "args": [
+        "{src}"
+      ],
+      "stdout_findings": true
+    },
+    {
+      "id": "ci-env-guard",
+      "name": "🧪 claude-all · No setdefault of CI-reserved env vars",
+      "description": "Tests must not setdefault CI-reserved environment variables.",
+      "script": "checkers/ci_env_guard.py",
+      "args": [
+        "{tests}"
+      ],
+      "stdout_findings": true
+    },
+    {
+      "id": "migration-head",
+      "name": "🗃️ claude-all · Single migration head",
+      "description": "One Alembic head and valid revision ids.",
+      "script": "checkers/migration_head.py",
+      "args": [
+        "{migrations}"
+      ],
+      "stdout_findings": true
+    },
+    {
+      "id": "gate-denominator",
+      "name": "🧮 claude-all · Gate scanned= denominator",
+      "description": "Flags checker scripts that never print a scanned=N denominator line, so a zero-input run cannot pass silently.",
+      "script": "checkers/gate_denominator.py",
+      "exit_zero_flag": "--exit-zero",
+      "default": false
+    },
+    {
+      "id": "hook-registration",
+      "name": "🔌 claude-all · Checker hook registration",
+      "description": "Flags checker scripts that no hook entry/args in prek.toml or .pre-commit-config.yaml references, so a landed gate never stays unarmed.",
+      "script": "checkers/hook_registration.py",
+      "exit_zero_flag": "--exit-zero",
+      "default": false
+    }
+  ]
+}

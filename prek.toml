@@ -291,11 +291,13 @@ hooks = [
   },
   # Dogfooding: claude-all SHIPS these checkers but never ran them on itself — which
   # is exactly how a module-level `_name` (banned by the visibility rule this repo
-  # publishes) slipped into cli.py. Run our own gates on our own source.
+  # publishes) slipped into cli.py. Run our own gates on our own source. Through the
+  # claude-all-check runner: these checkers print findings and exit 0 (baseline-native),
+  # so invoked bare they could never fail.
   {
     id = "self-module-private",
     name = "🐍 self · No module-level _names (own checker)",
-    entry = "python3 src/claude_all/skills/generic/regression-gates/checkers/module_private.py src/claude_all/cli.py scripts",
+    entry = "uv run python -m claude_all.prek_hooks --run module-private src/claude_all/cli.py src/claude_all/prek_hooks.py scripts",
     language = "system",
     pass_filenames = false,
     always_run = true
@@ -303,9 +305,19 @@ hooks = [
   {
     id = "self-junk-drawer",
     name = "🐍 self · No junk-drawer modules (own checker)",
-    entry = "python3 src/claude_all/skills/generic/regression-gates/checkers/junk_drawer.py src/claude_all",
+    entry = "uv run python -m claude_all.prek_hooks --run junk-drawer src/claude_all",
     language = "system",
     pass_filenames = false,
     always_run = true
+  },
+  # Docstrings/comments are optional but size-bounded (budgets: [tool.docstring-budget]
+  # defaults in the checker). Whole-tree, zero findings: the trim already landed.
+  {
+    id = "self-docstring-budget",
+    name = "📝 self · Docstring/comment size budget (own checker)",
+    entry = "python3 src/claude_all/skills/python/brunofaust-python-style/checkers/docstring_budget.py",
+    language = "system",
+    types = ["python"],
+    pass_filenames = true
   }
 ]

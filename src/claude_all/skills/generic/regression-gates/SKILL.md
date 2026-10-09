@@ -51,13 +51,14 @@ Four properties make it a ratchet, not a dumping ground — and a naive rebuild 
 
 ```bash
 # seed once (commit the baseline file)
-python baseline_gate.py --baseline private_names_baseline.txt --update -- \
-    python checkers/module_private.py src/
+claude-all-check module-private --baseline private_names_baseline.txt --update src/
 
-# enforce — identical command in pre-commit AND CI
-python baseline_gate.py --baseline private_names_baseline.txt -- \
-    python checkers/module_private.py src/
+# enforce — the same pinned hook in pre-commit AND CI (written by `claude-all --install-hooks`)
+#   { id = "module-private", args = ["--baseline", "private_names_baseline.txt", "src/"] }
 ```
+
+For a checker of your own (not shipped by claude-all), call the harness directly:
+`python baseline_gate.py --baseline <file> [--update] -- python my_checker.py src/`.
 
 **Checker contract** (so anything composes with the harness): print one finding per line as a stable
 `path: message` key on stdout; exit `0` when the checker RAN (regardless of how many findings it
@@ -97,7 +98,8 @@ pre-commit/`local`-hook wiring and `SKIP=` discipline.
 
 Generic, runnable, and used as worked examples with the harness. Each is Python, but the *principle*
 is stack-neutral — translate to your toolchain. All fail open on unparsable files (a sibling syntax
-gate owns those) and exit 0 so they compose with `baseline_gate.py`.
+gate owns those) and exit 0 so they compose with `baseline_gate.py`. Run as claude-all hooks
+(`claude-all --install-hooks`), they fail on any finding unless the hook has `--baseline`.
 
 | Checker | Lesson | What it catches |
 | --- | --- | --- |

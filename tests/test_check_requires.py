@@ -25,16 +25,6 @@ KNOWN = {"skills/foo-skill", "agents/bar-agent", "instructions/demo"}
 
 
 def snippet(root: Path, body: str, requires: list[str] | None = None) -> Path:
-    """Write one instruction snippet, optionally with a ``claude-all.json``.
-
-    Args:
-        root: Directory standing in for ``src/claude_all/instructions``.
-        body: Snippet text.
-        requires: Declared dependencies, or None to omit the manifest.
-
-    Returns:
-        The instructions root.
-    """
     folder = root / "demo"
     folder.mkdir(parents=True)
     (folder / "claude_md.md").write_text(body, encoding="utf-8")

@@ -23,6 +23,7 @@ urls.Homepage = "https://github.com/brunofaust/claude-all"
 urls.Issues = "https://github.com/brunofaust/claude-all/issues"
 urls.Repository = "https://github.com/brunofaust/claude-all"
 scripts.claude-all = "claude_all.cli:run"
+scripts.claude-all-check = "claude_all.prek_hooks:run_check"
 
 [dependency-groups]
 dev = [

@@ -1,23 +1,9 @@
 #!/usr/bin/env python3
-"""Warn when a test file hard-codes a tenant/scope id (test-data isolation).
-
-The recurring, high-severity mistake this catches: a test that reuses a
-hard-coded tenant/scope id (``org_id=1``, ``tenant_id="acme"``) instead of
-creating its own data. Shared or hard-coded ids make tests fight over the same
-rows (flaky under xdist) and let a foreign key cross a tenant boundary — the bug
-class that reaches production. The rule ("each test owns its own rows; dynamic
-ids from a factory; FKs never cross tenants") is already written in the style
-guide, but prose alone kept getting violated — so this is the checker.
-
-Archetype: **guard**, but it only *speaks* when it detects the smell (silent
-otherwise) and is **non-blocking** — it emits a Claude-facing reminder via
-``additionalContext`` and always exits 0. Deduped per (session, file) so editing
-one file repeatedly doesn't repeat the warning.
-
-Detection is deliberately narrow to keep false positives near zero: it flags a
-hard-coded LITERAL (number or quoted string) assigned to a known tenant/scope id
-field. A value that references a fixture/variable/factory call
-(``org_id=org.id``, ``org_id=make_org()``) is NOT a literal and never matches.
+"""Warn when a test file hard-codes a tenant/scope id (test-data isolation). The recurring, high-
+severity mistake this catches: a test that reuses a hard-coded tenant/scope id (``org_id=1``,
+``tenant_id="acme"``) instead of creating its own data. Shared or hard-coded ids make tests
+fight over the same rows (flaky under xdist) and let a foreign key cross a tenant boundary —
+the bug class that reaches production.
 """
 
 from __future__ import annotations

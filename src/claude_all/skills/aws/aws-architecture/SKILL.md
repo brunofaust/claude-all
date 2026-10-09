@@ -23,6 +23,18 @@ Deeper recipes live under `references/`. Read the matching file before deep work
 | Organizing boto3/aiobotocore code (`core/aws/` owner-per-service layout)     | [`references/client-wrappers.md`](references/client-wrappers.md)      |
 | Recording an architecture decision (ADR template + worked example)           | [`references/adr-template.md`](references/adr-template.md)            |
 
+**Gate it.** This skill ships stdlib Terraform checkers under `checkers/`, wired with
+`claude-all --install-hooks` (they scan `{infra}`: `infra/`, `terraform/` or `iac/`).
+`terraform validate` and `fmt` both passed a change that wired a reserved var into five
+Lambda modules, so these run before `plan`:
+
+- `lambda_reserved_env.py` — `aws_lambda_function` env vars AWS reserves (`AWS_REGION`,
+  `AWS_LAMBDA_*`, …), which Lambda rejects at apply time.
+- `lambda_env_size.py` — Lambda env JSON over 4096 bytes (literals counted exactly, computed
+  values estimated with `--unknown-value-bytes`).
+- `ecs_task_def_ownership.py` — `ignore_changes = [container_definitions]` (or `all`) on an
+  ECS task definition, which silently freezes its env block.
+
 ______________________________________________________________________
 
 ## 1. Lambda

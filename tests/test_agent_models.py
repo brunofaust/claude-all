@@ -17,11 +17,7 @@ MODEL_LINE = re.compile(r"^model:\s*(\S+)\s*$", re.MULTILINE)
 
 
 def agent_files() -> list[Path]:
-    """Return every agent definition file shipped by the installer.
-
-    Returns:
-        Flat ``<name>.md`` agents and folder ``agent.md`` agents, excluding companions.
-    """
+    """Return every agent definition file shipped by the installer."""
     return sorted(
         path
         for path in AGENTS_DIR.rglob("*.md")

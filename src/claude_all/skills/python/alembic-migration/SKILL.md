@@ -189,6 +189,17 @@ codebase that already has findings. Pin `language_version` on the hook — it
 parses with the interpreter's own `ast`, and an older interpreter silently
 fails to parse newer syntax.
 
+### Gate it: assertive SQL (`checkers/`)
+
+Two more checkers ship in this skill's `checkers/` (wired with `claude-all --install-hooks`):
+
+- **`assertive_sql.py`** — tolerant SQL (targeted `ON CONFLICT`, `IF [NOT] EXISTS`,
+  `DROP … CASCADE`, a swallowed `IntegrityError`) without an allowlist entry and reason
+  (`--allowlist allow.toml`). A target-less `ON CONFLICT` is always banned: on
+  sequence-supplied ids it can never fire, so it inserts duplicates while looking idempotent.
+- **`insert_column_list.py`** — `INSERT INTO t VALUES (…)` with no column list, which
+  misplaces values the day column order drifts.
+
 ## Downgrade
 
 Always implement `downgrade()` — even if it's logically a no-op (e.g.

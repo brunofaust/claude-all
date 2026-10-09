@@ -1,5 +1,25 @@
 #!/usr/bin/env python3
-"""Regression-only baseline harness — introduce ANY new gate without a big-bang cleanup.
+"""Baseline harness: new findings fail, baselined pass, stale baseline entries fail."""
+
+from __future__ import annotations
+
+import argparse
+import re
+import shlex
+import subprocess
+import sys
+from pathlib import Path
+
+__all__ = [
+    "compare",
+    "load_baseline",
+    "load_seed_command",
+    "main",
+    "run_checker",
+    "strip_line_numbers",
+]
+
+HELP_TEXT = """Regression-only baseline harness — introduce ANY new gate without a big-bang cleanup.
 
 This is the reusable meta-pattern: a checker emits findings, this wrapper compares
 them against a grandfathered `<gate>_baseline.txt` so that
@@ -54,16 +74,6 @@ USAGE
 Copy this file per gate (or call it N times with different --baseline files).
 """
 
-from __future__ import annotations
-
-import argparse
-import shlex
-import subprocess
-import sys
-from pathlib import Path
-
-__all__ = ["compare", "load_baseline", "load_seed_command", "main", "run_checker"]
-
 #: Header line prefix recording the checker command a baseline was seeded with.
 #: It is a ``#`` comment, so :func:`load_baseline` ignores it as an annotation;
 #: only :func:`load_seed_command` reads it back for the scope-safety guard.
@@ -71,16 +81,6 @@ _SEED_MARKER = "# baseline_gate:seed-command: "
 
 
 def load_baseline(path: Path) -> set[str]:
-    """Read a baseline file into a set of finding keys.
-
-    Blank lines and ``#`` comments are ignored, so a baseline can be annotated
-    (e.g. ``# TICK-1: remove after the auth refactor``). A missing file is an
-    empty baseline — a brand-new gate with zero findings then passes, and any
-    finding shows up as NEW.
-
-    Args:
-        path: Path to the baseline file.
-    """
     if not path.exists():
         return set()
     findings: set[str] = set()
@@ -92,17 +92,6 @@ def load_baseline(path: Path) -> set[str]:
 
 
 def load_seed_command(path: Path) -> list[str] | None:
-    """Read the checker command a baseline was seeded with, if recorded.
-
-    ``--update`` writes the seed command into a ``_SEED_MARKER`` header line so
-    enforce can detect a scope divergence (seeding a wider path than the gate
-    checks — see the SCOPE SAFETY note in the module docstring). Returns the
-    parsed argv, or ``None`` for a missing file or a legacy baseline with no
-    recorded command (in which case the guard is skipped).
-
-    Args:
-        path: Path to the baseline file.
-    """
     if not path.exists():
         return None
     for raw in path.read_text(encoding="utf-8").splitlines():
@@ -112,11 +101,7 @@ def load_seed_command(path: Path) -> list[str] | None:
 
 
 def run_checker(command: list[str]) -> set[str]:
-    """Run the checker command and collect its stdout findings.
-
-    Fails closed: a missing executable or a non-zero exit (internal checker
-    error) raises, so the gate errors out rather than reporting a false clean.
-    """
+    """Run the checker command and collect its stdout findings."""
     try:
         proc = subprocess.run(command, capture_output=True, text=True, check=False)
     except FileNotFoundError as exc:
@@ -129,19 +114,29 @@ def run_checker(command: list[str]) -> set[str]:
     return {line.strip() for line in proc.stdout.splitlines() if line.strip()}
 
 
-def compare(seen: set[str], baseline: set[str]) -> tuple[set[str], set[str]]:
-    """Return ``(new, stale)`` findings relative to the baseline.
+LINE_PREFIX = re.compile(r"^(?P<path>[^:\s]+):\d+(?::\d+)?:")
 
-    Args:
-        seen: Finding keys reported by the checker on this run.
-        baseline: Finding keys already accepted in the baseline file.
-    """
+
+def strip_line_numbers(findings: set[str]) -> set[str]:
+    """Key findings by path + message, not line, so edits above them don't churn the baseline."""
+    keyed: set[str] = set()
+    for finding in sorted(findings):
+        key = LINE_PREFIX.sub(r"\g<path>:", finding)
+        occurrence, candidate = 1, key
+        while candidate in keyed:  # same message twice in one file: keep both, by order
+            occurrence += 1
+            candidate = f"{key} #{occurrence}"
+        keyed.add(candidate)
+    return keyed
+
+
+def compare(seen: set[str], baseline: set[str]) -> tuple[set[str], set[str]]:
     return seen - baseline, baseline - seen
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+        description=HELP_TEXT, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     parser.add_argument(
         "--baseline", required=True, type=Path, help="path to the <gate>_baseline.txt file"
@@ -150,6 +145,16 @@ def main(argv: list[str] | None = None) -> int:
         "--update",
         action="store_true",
         help="rewrite the baseline from the current findings (seed / re-seed), then exit 0",
+    )
+    parser.add_argument(
+        "--seed-label",
+        help="stable identity recorded/compared instead of the literal command "
+        "(use when the command embeds machine-specific paths)",
+    )
+    parser.add_argument(
+        "--strip-lines",
+        action="store_true",
+        help="drop `path:LINE:` line numbers from finding keys (for checkers that print them)",
     )
     parser.add_argument(
         "checker",
@@ -165,9 +170,10 @@ def main(argv: list[str] | None = None) -> int:
     # SCOPE SAFETY: enforce over the SAME command the baseline was seeded with.
     # A wider seed path is silent amnesty (see the module docstring). Check before
     # running the checker so a mismatch fails fast and loud.
+    identity = shlex.split(args.seed_label) if args.seed_label else command
     if not args.update:
         seed_command = load_seed_command(args.baseline)
-        if seed_command is not None and seed_command != command:
+        if seed_command is not None and seed_command != identity:
             raise SystemExit(
                 "baseline_gate: SCOPE MISMATCH — the baseline was seeded with a different "
                 "checker command than the one being enforced. Baselining a WIDER path than "
@@ -176,13 +182,15 @@ def main(argv: list[str] | None = None) -> int:
                 "this way). Re-seed with --update using the SAME command, or fix the enforce "
                 "command so both match.\n"
                 f"  seeded with:  {shlex.join(seed_command)}\n"
-                f"  enforcing:    {shlex.join(command)}"
+                f"  enforcing:    {shlex.join(identity)}"
             )
 
     seen = run_checker(command)
+    if args.strip_lines:
+        seen = strip_line_numbers(seen)
 
     if args.update:
-        header = _SEED_MARKER + shlex.join(command) + "\n"
+        header = _SEED_MARKER + shlex.join(identity) + "\n"
         body = "\n".join(sorted(seen)) + ("\n" if seen else "")
         args.baseline.write_text(header + body, encoding="utf-8")
         print(f"baseline_gate: wrote {len(seen)} finding(s) to {args.baseline}")

@@ -1,40 +1,9 @@
 #!/usr/bin/env python3
-"""PreToolUse hook — flag supply-chain risks in package-install commands.
-
-Fires on the `Bash` tool. When the command installs packages
-(`npm/pnpm/yarn/bun install|add|ci`, `pip install`, `uv add`, `uv pip install`,
-`uv sync`, `poetry add`, `poetry install`, `pipx install`), it emits a
-NON-BLOCKING reminder (exit 0 + JSON `additionalContext`, so it is NOT rendered as
-a hook error) covering the applicable risks and the safer invocation.
-
-STATIC checks (no network, instant):
-- **git/URL sources** (`git+https://`, `github:owner/repo`, `git://`) bypass
-  registry review and run arbitrary code — strongly avoid.
-- **lifecycle scripts** run arbitrary code at install time — pass
-  `--ignore-scripts` on npm/pnpm/yarn/bun and run the build deliberately.
-- **lockfile drift** — a bare `npm install` with a lockfile present mutates it;
-  use the frozen/`ci` variant for a reproducible install.
-- **alternate Python indexes** — `--index-url`/`--extra-index-url` can shadow
-  public names (dependency confusion); `--trusted-host` disables TLS verification.
-
-COOLDOWN check (the actual Shai-Hulud-style defense): for every package being
-installed it checks the release date and ALERTS if the version was published
-within the cooldown window (default 7 days — most malicious releases are caught
-within days). Date sources, cheapest first:
-- **`uv.lock`** already records `upload-time` per artifact, so `uv sync` (and any
-  uv-locked package) is checked entirely OFFLINE — no network, no cache.
-- For named installs (`pip install x`, `uv add x`, …) and lockfiles without dates
-  (poetry.lock, package-lock.json, requirements) it does a small LIVE registry
-  lookup — no cache (installs are rare), under a time budget with a short
-  per-request timeout, and it FAILS OPEN (an unreachable registry never blocks).
-
-Covers npm/pnpm/yarn/bun and pip/pipx/uv/poetry.
-
-Bypass: prefix the command with `CC_SUPPLY_CHAIN_OK=1 ` (inline marker in the
-command string — the primary escape hatch). Env vars:
-  CC_SUPPLY_CHAIN_OK=1            silence the whole hook (hook's own env)
-  CC_SUPPLY_CHAIN_NO_NETWORK=1   skip live lookups (uv.lock dates still checked)
-  CC_SUPPLY_CHAIN_COOLDOWN_DAYS  cooldown window in days (default 7)
+"""PreToolUse hook — flag supply-chain risks in package-install commands. Fires on the `Bash`
+tool. When the command installs packages (`npm/pnpm/yarn/bun install|add|ci`, `pip install`,
+`uv add`, `uv pip install`, `uv sync`, `poetry add`, `poetry install`, `pipx install`), it
+emits a NON-BLOCKING reminder (exit 0 + JSON `additionalContext`, so it is NOT rendered as a
+hook error) covering the applicable risks and the safer invocation.
 """
 
 from __future__ import annotations
@@ -66,31 +35,11 @@ HEREDOC_RE = re.compile(r"<<-?\s*(['\"]?)(?P<tag>[A-Za-z_][A-Za-z0-9_]*)\1")
 
 
 def _blank(match: re.Match[str]) -> str:
-    """Replace a matched span with an equal-length run of spaces.
-
-    Args:
-        match: A regex match object to replace with spaces.
-    """
     return " " * len(match.group())
 
 
 def executable_text(command: str) -> str:
-    """Return ``command`` with every non-executable span blanked to spaces.
-
-    Trigger detection must never fire on text the shell will not RUN as a
-    command. A `grep` pattern searching logs for ``pip install``, an ``echo``
-    of setup instructions, a heredoc writing documentation, or a trailing
-    ``# remember to npm install`` comment all MENTION an install without
-    performing one; matching them trains the reader to ignore the guard,
-    which is worse than having no guard at all.
-
-    Spans are replaced with equal-length runs of spaces rather than deleted,
-    so every offset in the result still lines up with ``command`` and no two
-    previously-separated tokens can be joined into a spurious match.
-
-    Args:
-        command: The full Bash command line being inspected.
-    """
+    """Return ``command`` with every non-executable span blanked to spaces."""
     text = command
     # 1. Heredoc bodies. Scan the ORIGINAL for openers: blanking preserves
     #    length, so match offsets stay valid across iterations.
@@ -127,11 +76,6 @@ Target = tuple[str, str | None, str | None]
 
 
 def nudge(message: str) -> int:
-    """Emit a non-error reminder into Claude's context, then allow the tool.
-
-    Args:
-        message: Reminder text surfaced to Claude via ``additionalContext``.
-    """
     json.dump(
         {"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": message}},
         sys.stdout,
@@ -141,12 +85,6 @@ def nudge(message: str) -> int:
 
 # ── static checks ────────────────────────────────────────────────────────────
 def analyze(command: str, cwd: Path) -> list[str]:
-    """Static (no-network) supply-chain findings for one Bash command.
-
-    Args:
-        command: The full Bash command line being inspected.
-        cwd: Working directory the command runs in (used to locate lockfiles).
-    """
     # Triggers match EXECUTABLE text only — a command that merely mentions an
     # install (grep pattern, heredoc, comment) must not fire the guard.
     scan = executable_text(command)
@@ -211,15 +149,6 @@ def _requirement_file(args: list[str]) -> str | None:
 
 
 def classify(command: str) -> tuple[str, str, list[str], str | None]:
-    """Return (ecosystem, mode, named_pkgs, requirement_file).
-
-    ecosystem ∈ {"npm","pypi",""}; mode ∈ {"named","lock",""}. For `lock` mode the
-    packages come from a lockfile (named_pkgs empty); requirement_file is set when a
-    `pip -r <file>` was used.
-
-    Args:
-        command: The full Bash command line to classify.
-    """
     # Sanitise first: `shlex.split` on a heredoc body would tokenise its prose
     # into what looks like a genuine install and trigger registry lookups.
     scan = executable_text(command)
@@ -304,11 +233,6 @@ def _parse_requirements(path: Path) -> list[Target]:
 
 
 def _uv_upload_time(pkg: dict[str, Any]) -> str | None:
-    """Earliest `upload-time` recorded for a uv.lock package's artifacts, if any.
-
-    Args:
-        pkg: A single ``[[package]]`` table parsed from uv.lock.
-    """
     stamps: list[str] = []
     sdist = pkg.get("sdist")
     if isinstance(sdist, dict) and isinstance(sdist.get("upload-time"), str):
@@ -408,20 +332,6 @@ def _age_days(iso: str) -> int | None:
 def cooldown_findings(
     eco: str, mode: str, named: list[str], req: str | None, cwd: Path, days: int, *, network: bool
 ) -> list[str]:
-    """Alert on packages whose release date is within the cooldown window.
-
-    Uses `upload-time` embedded in uv.lock when present (offline); otherwise does a
-    bounded, uncached live registry lookup (only when ``network`` is allowed).
-
-    Args:
-        eco: Ecosystem — "npm", "pypi", or "" when no install was detected.
-        mode: "named" (packages on the command line) or "lock" (from a lockfile).
-        named: Explicit package specs, used when ``mode`` is "named".
-        req: Path to a pip requirements file, when one was given.
-        cwd: Working directory used to locate lockfiles.
-        days: Cooldown window in days; releases newer than this are flagged.
-        network: Whether bounded live registry lookups are permitted.
-    """
     targets = _parse_named(eco, named) if mode == "named" else _lock_targets(eco, req, cwd)
     seen: set[tuple[str, str | None]] = set()
     uniq: list[Target] = []

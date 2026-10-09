@@ -1,0 +1,43 @@
+{
+  "prek_hooks": [
+    {
+      "id": "lambda-reserved-env",
+      "name": "🚫 claude-all · No AWS-reserved Lambda env vars",
+      "description": "Flags aws_lambda_function environment variables that AWS reserves (AWS_REGION, AWS_LAMBDA_*, _HANDLER, ...) and rejects at apply time.",
+      "script": "checkers/lambda_reserved_env.py",
+      "args": [
+        "{infra}"
+      ],
+      "types": [
+        "terraform"
+      ],
+      "exit_zero_flag": "--exit-zero"
+    },
+    {
+      "id": "lambda-env-size",
+      "name": "📏 claude-all · Lambda env under 4KB",
+      "description": "Statically estimates each aws_lambda_function's Environment.Variables JSON size and flags any over the 4096-byte AWS cap.",
+      "script": "checkers/lambda_env_size.py",
+      "args": [
+        "{infra}"
+      ],
+      "types": [
+        "terraform"
+      ],
+      "exit_zero_flag": "--exit-zero"
+    },
+    {
+      "id": "ecs-task-def-ownership",
+      "name": "🧊 claude-all · Terraform owns ECS container definitions",
+      "description": "Flags aws_ecs_task_definition lifecycle ignore_changes covering container_definitions (or all), which freezes the container env block.",
+      "script": "checkers/ecs_task_def_ownership.py",
+      "args": [
+        "{infra}"
+      ],
+      "types": [
+        "terraform"
+      ],
+      "exit_zero_flag": "--exit-zero"
+    }
+  ]
+}

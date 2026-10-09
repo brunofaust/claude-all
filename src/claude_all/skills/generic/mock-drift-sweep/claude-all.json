@@ -2,5 +2,89 @@
   "requires": [
     "agents/test-runner",
     "agents/test-author"
+  ],
+  "prek_hooks": [
+    {
+      "id": "async-mock-target",
+      "name": "🧪 claude-all · No MagicMock for async targets",
+      "description": "A patch() of an async def must use AsyncMock.",
+      "script": "checkers/async_mock_target.py",
+      "args": [
+        "{src}",
+        "{tests}"
+      ],
+      "exit_zero_flag": "--exit-zero"
+    },
+    {
+      "id": "mock-assert-signature",
+      "name": "🧪 claude-all · Mock asserts fit the real signature",
+      "description": "assert_*_with() args must match the patched callable.",
+      "script": "checkers/mock_assert_signature.py",
+      "args": [
+        "--check",
+        "{src}",
+        "{tests}"
+      ]
+    },
+    {
+      "id": "patch-target-exists",
+      "name": "🧪 claude-all · patch() targets exist",
+      "description": "Every patch() target resolves to a real attribute.",
+      "script": "checkers/patch_target_exists.py",
+      "args": [
+        "{src}",
+        "{tests}"
+      ]
+    },
+    {
+      "id": "unspecced-model-mock",
+      "name": "🧪 claude-all · No unspecced mock for a model",
+      "description": "A patched Pydantic model class needs a spec'd mock.",
+      "script": "checkers/unspecced_model_mock.py",
+      "args": [
+        "--check",
+        "{src}",
+        "{tests}"
+      ]
+    },
+    {
+      "id": "unconstrained-patch",
+      "name": "🧪 claude-all · patch() must be autospec/real new=/PropertyMock",
+      "description": "Flags a resolvable patch() target whose double accepts any call: callables lacking autospec=True, constants lacking a non-Mock new=, properties lacking new_callable=PropertyMock.",
+      "script": "checkers/unconstrained_patch.py",
+      "args": [
+        "{tests}",
+        "--src",
+        "{src}"
+      ],
+      "exit_zero_flag": "--exit-zero"
+    },
+    {
+      "id": "unscoped-patch",
+      "name": "🧪 claude-all · Patches must revert on their own",
+      "description": "Flags patch(...).start() (inline or via a bound patcher such as self.p) and direct Mock-family assignment onto an imported module attribute; only with-blocks and @patch decorators are allowed.",
+      "script": "checkers/unscoped_patch.py",
+      "args": [
+        "{tests}",
+        "--allow",
+        "conftest.py"
+      ],
+      "exit_zero_flag": "--exit-zero"
+    },
+    {
+      "id": "orphan-test-file",
+      "name": "🧪 claude-all · Unit test must mirror a real module",
+      "description": "Flags a flat-mirrored tests/unit/test_<a>_<b>.py whose source module <src>/<package>/a/b.py no longer exists.",
+      "script": "checkers/orphan_test_file.py",
+      "args": [
+        "--unit-tests",
+        "{unit_tests}",
+        "--src",
+        "{src}",
+        "--package",
+        "{package}"
+      ],
+      "exit_zero_flag": "--exit-zero"
+    }
   ]
 }

@@ -11,7 +11,7 @@ src/<project>/
 ├── settings.py                      # pydantic-settings singleton — lives at ROOT, never in core/
 │
 ├── domain/                          # ← BUSINESS LOGIC, pure Python, no I/O
-│   ├── models/                      # Pydantic boundary models + frozen dataclasses
+│   ├── models/                      # Pydantic models (boundary + internal)
 │   ├── errors.py                    # domain exceptions
 │   └── protocols.py                 # Protocol definitions for DI
 │
@@ -19,7 +19,7 @@ src/<project>/
 │   └── <feature_name>/
 │       ├── service.py               # business logic
 │       ├── pipeline.py              # orchestration
-│       ├── models.py                # feature-internal dataclasses
+│       ├── models.py                # feature-internal Pydantic models
 │       └── README.md
 │
 ├── integrations/                    # ← EXTERNAL SYSTEM OWNERS

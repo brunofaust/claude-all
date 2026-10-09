@@ -1,26 +1,9 @@
 #!/usr/bin/env python3
-"""Sync vendored (third-party) skills/agents from their upstream repos.
+"""Sync vendored skills/agents from upstream repos listed in ``vendored.json``.
 
-Reads ``vendored.json`` (repo root) and, for each entry, shallow-clones the
-upstream repo at its ref and refreshes the local copy — while preserving
-``local_only`` files (our sidecars: ATTRIBUTION.md, claude_md.md, hook.*) and
-re-applying ``frontmatter_inject`` keys to the entry's SKILL.md.
-
-Usage::
-
-    python scripts/vendor_sync.py                 # sync every entry, update registry
-    python scripts/vendor_sync.py --id humanink   # sync one entry
-    python scripts/vendor_sync.py --check         # dry-run: report drift, write nothing
-    python scripts/vendor_sync.py --ack <id>      # mark a watch entry as reviewed
-
-`reference` entries (live-fetched at runtime) are reported and skipped.
-`watch` entries track upstreams our resources were DERIVED from (synthesized,
-not byte-copied): the script never writes their local files — it reports how
-many upstream commits touched the watched path since ``last_reviewed`` (with a
-compare URL) so the port/review stays a deliberate human step. Watch reports
-are informational only and never affect the ``--check`` exit code; after
-reviewing, run ``--ack <id>`` to advance ``last_reviewed`` to upstream HEAD.
-Requires ``git`` and network access. Review the diff and commit the result.
+Preserves ``local_only`` sidecars and re-applies ``frontmatter_inject``. `watch`
+entries are report-only (never written, never affect ``--check``); ``--ack <id>``
+advances ``last_reviewed``. Other flags: ``--id``, ``--check`` (dry run).
 """
 
 import argparse
@@ -59,11 +42,6 @@ def clone_upstream(repo: str, ref: str, dest: Path) -> str:
 
 
 def clone_with_history(repo: str, ref: str, dest: Path) -> str:
-    """Blobless single-branch clone (full history, no file contents); return HEAD.
-
-    Watch entries need history to count commits since ``last_reviewed``; a
-    ``--filter=blob:none`` clone keeps that cheap.
-    """
     run_git(["clone", "--filter=blob:none", "--single-branch", "--branch", ref, repo, str(dest)])
     return run_git(["rev-parse", "HEAD"], cwd=dest)
 
@@ -74,12 +52,6 @@ def compare_url(repo: str, old: str, new: str) -> str:
 
 
 def process_watch(entry: dict[str, Any], *, ack: bool) -> tuple[bool, bool]:
-    """Report upstream movement for a derived (watch) entry; never writes local files.
-
-    Returns ``(changed, errored)`` where ``changed`` is always False — watch
-    reports are informational and must not flip the ``--check`` exit code.
-    With ``ack=True``, advances ``last_reviewed`` to upstream HEAD instead.
-    """
     name, src = entry["id"], entry["source"]
     with tempfile.TemporaryDirectory() as tmp:
         try:
@@ -131,12 +103,6 @@ def list_files(root: Path) -> set[Path]:
 
 
 def frontmatter_additions(skill_md: Path, inject: dict[str, Any]) -> list[str]:
-    """Return the ``key: value`` lines from ``inject`` missing in the frontmatter.
-
-    Empty when there is nothing to inject, the file is absent, or it has no
-    parseable ``---``-fenced frontmatter. Only reports missing top-level keys;
-    an existing value is never considered drift.
-    """
     if not inject or not skill_md.exists():
         return []
     lines = skill_md.read_text(encoding="utf-8").splitlines()
@@ -151,11 +117,6 @@ def frontmatter_additions(skill_md: Path, inject: dict[str, Any]) -> list[str]:
 
 
 def apply_frontmatter(skill_md: Path, inject: dict[str, Any]) -> bool:
-    """Ensure each ``inject`` key is present in the SKILL.md YAML frontmatter.
-
-    Returns True if the file was modified. Only inserts missing top-level keys;
-    never overwrites an existing value.
-    """
     additions = frontmatter_additions(skill_md, inject)
     if not additions:
         return False

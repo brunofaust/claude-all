@@ -1,5 +1,136 @@
 {
   "requires": [
     "skills/regression-gates"
+  ],
+  "prek_hooks": [
+    {
+      "id": "model-contract",
+      "name": "🧩 claude-all · Pydantic model contract",
+      "description": "Shared config, no dataclass/alias/barrel, verbatim strip, private access.",
+      "script": "checkers/model_contract.py",
+      "args": [
+        "{src}"
+      ],
+      "exit_zero_flag": "--exit-zero"
+    },
+    {
+      "id": "pydantic-contract",
+      "name": "🧩 claude-all · No opaque types or masking defaults",
+      "description": "No Any/dict model fields, masking defaults, TypedDict or cast.",
+      "script": "checkers/pydantic_contract.py",
+      "args": [
+        "{src}"
+      ],
+      "exit_zero_flag": "--exit-zero"
+    },
+    {
+      "id": "all-contract",
+      "name": "🐍 claude-all · __all__ export contract",
+      "description": "Every module declares an accurate __all__.",
+      "script": "checkers/all_contract.py",
+      "args": [
+        "--package",
+        "{package}",
+        "{src}"
+      ],
+      "exit_zero_flag": "--exit-zero"
+    },
+    {
+      "id": "flat-test-mirror",
+      "name": "🧪 claude-all · Flat source-mirrored unit tests",
+      "description": "src/<pkg>/a/b.py is tested in tests/unit/test_a_b.py.",
+      "script": "checkers/flat_test_mirror.py",
+      "args": [
+        "--root",
+        "{unit_tests}"
+      ],
+      "exit_zero_flag": "--exit-zero"
+    },
+    {
+      "id": "lambda-event-validation",
+      "name": "🧩 claude-all · Lambda handlers validate their event",
+      "description": "Every Lambda handler parses its event into a Pydantic model.",
+      "script": "checkers/lambda_event_validation.py",
+      "args": [
+        "{src}"
+      ],
+      "exit_zero_flag": "--exit-zero",
+      "default": false
+    },
+    {
+      "id": "docstring-budget",
+      "name": "📝 claude-all · Docstring/comment size budget",
+      "description": "Docstrings and comments are optional but size-bounded.",
+      "script": "checkers/docstring_budget.py",
+      "pass_filenames": true
+    },
+    {
+      "id": "masking-or-fallback",
+      "name": "🐍 claude-all · No identity `or 0` / `or \"\"` fallbacks",
+      "description": "Flags `<identity> or <falsy literal>` (e.g. `org_id or 0`, `token or \"\"`) that manufacture a fake identity instead of failing on absence.",
+      "script": "checkers/masking_or_fallback.py",
+      "args": [
+        "{src}"
+      ],
+      "exit_zero_flag": "--exit-zero"
+    },
+    {
+      "id": "dynamic-import",
+      "name": "🐍 claude-all · No dynamic first-party imports",
+      "description": "Flags `importlib.import_module` / `__import__` of a first-party literal module, which hides every attribute access from mypy.",
+      "script": "checkers/dynamic_import.py",
+      "args": [
+        "--package",
+        "{package}",
+        "{src}",
+        "{tests}"
+      ],
+      "exit_zero_flag": "--exit-zero"
+    },
+    {
+      "id": "e2e-no-bypass",
+      "name": "🐍 claude-all · e2e tests must not bypass real execution",
+      "description": "Flags e2e tests that patch or spec first-party code, mutate the environment, or import a production entrypoint to call it in-process.",
+      "script": "checkers/e2e_no_bypass.py",
+      "args": [
+        "--package",
+        "{package}",
+        "--e2e-root",
+        "{e2e_tests}"
+      ],
+      "exit_zero_flag": "--exit-zero"
+    },
+    {
+      "id": "no-process-globals",
+      "name": "🐍 claude-all · No process-global state",
+      "description": "Flags module/class-scope state (lazy slots, mutable literals, locks/clients/engines, global statements, cls-mutating classmethods, __new__ singletons, namespace classes) that survives warm starts and leaks across tenants and tests.",
+      "script": "checkers/process_globals.py",
+      "args": [
+        "--package",
+        "{package}",
+        "{src}"
+      ],
+      "exit_zero_flag": "--exit-zero"
+    },
+    {
+      "id": "no-adhoc-cache",
+      "name": "🐍 claude-all · No ad-hoc caches",
+      "description": "Flags functools.lru_cache/functools.cache decorators and cachetools/diskcache/aiocache/beaker imports; functools.cached_property is allowed.",
+      "script": "checkers/adhoc_cache.py",
+      "args": [
+        "{src}"
+      ],
+      "exit_zero_flag": "--exit-zero"
+    },
+    {
+      "id": "unlocked-singleton",
+      "name": "🐍 claude-all · Lazy singleton built under a lock",
+      "description": "Flags `global X; if X is None: X = ...` assignments not inside a lock-named with/async with block.",
+      "script": "checkers/unlocked_singleton.py",
+      "args": [
+        "{src}"
+      ],
+      "exit_zero_flag": "--exit-zero"
+    }
   ]
 }

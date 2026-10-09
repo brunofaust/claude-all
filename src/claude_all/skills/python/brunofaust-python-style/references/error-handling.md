@@ -469,3 +469,39 @@ def install_handled_exception_logger() -> None:
 
 **Caveat:** `EXCEPTION_HANDLED` fires on *every* caught exception process-wide — keep it at DEBUG and
 off by default; enable it only when hunting a swallowed-error bug, or route it to a sampled sink.
+
+**Filter to first-party origin by default.** Stdlib and third-party code (botocore, httpx, asyncio)
+use caught exceptions as ordinary control flow. In one measured 12-hour dev sweep they made up
+**95.5% of 12.2M events**. Log only exceptions whose raising frame's `co_filename` is under your own
+package root, and put a second flag (`LOG_HANDLED_EXCEPTIONS_THIRD_PARTY`, default off) behind
+anything else. The hook also changes how to read rule 2 above: a benign `except` that you
+deliberately swallow stays clean, because the hook surfaces it at DEBUG. A genuinely notable failure
+still gets an explicit `warning`/`error` in its `except` body. Nothing is ever fully silent.
+
+### No `<identity> or <falsy literal>` fallbacks
+
+`x or 0` / `x or ""` is the masking-default bug written as an expression. It fires on **any** falsy
+value, not just on absence (unlike `.get(k, default)`), so a missing required value turns into a
+plausible-looking wrong one.
+
+```python
+# BAD — the org-0 incident: the config model had no org_id and the SELECT never
+# projected it, so every token lookup ran against org 0, found nothing, and built
+# an UNAUTHENTICATED API client. The vendor answers that with "404 not found or no
+# permission" — it was triaged as a permissions bug for months.
+client = await build_client(org_id=int(connector.get("org_id") or 0))
+
+# GOOD — model the payload; a missing id fails at the parse, where it happened
+connector = ConnectorRow.model_validate(row)  # org_id: PositiveId, required
+client = await build_client(org_id=connector.org_id)
+```
+
+**Gate it narrowly, or it gets routed around.** Flag `or <falsy literal>` only when the defaulted
+name (or the keyword argument receiving it) is an **identity or tenancy name**: `org_id`, `*_id`,
+`*_key`, `token`, `branch`, `*_arn`, `owner`, `scope`. In the incident repo that cut ~314
+candidates down to 53 real findings. Keep explicit, named carve-out sets rather than silent skips:
+tracing handles (`request_id`, `correlation_id`) whose empty case is meaningful, and the stdlib
+`key=` sort parameter. Generic `or []` / `or {}` stay out of scope. Those sites go away when the
+untyped `dict` becomes a model, which removes the reason to defend with `or` at all. Roll the gate
+out with a regression-only baseline ([regression-gates](../../../generic/regression-gates/SKILL.md)),
+and burn down the `identity-or-zero` tier first, because that is where a repeat incident would live.

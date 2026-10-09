@@ -18,15 +18,6 @@ from claude_all import cli
 
 @pytest.fixture
 def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Run inside a repository nested in a temp HOME with only Claude on PATH.
-
-    Args:
-        tmp_path: pytest's per-test temporary directory.
-        monkeypatch: fixture used to repoint HOME, cwd and module constants.
-
-    Returns:
-        The repository directory used as the working directory.
-    """
     home_dir = tmp_path / "home"
     repo_dir = home_dir / "repo"
     repo_dir.mkdir(parents=True)
@@ -44,14 +35,6 @@ def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 def agent_item(tmp_path: Path) -> cli.Item:
-    """Build a minimal flat agent resource.
-
-    Args:
-        tmp_path: Directory that holds the agent source.
-
-    Returns:
-        The agent item.
-    """
     source = tmp_path / "src" / "demo.md"
     source.parent.mkdir(parents=True)
     source.write_text(
@@ -67,14 +50,6 @@ def test_update_refreshes_project_install_in_project_scope(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """A project install is refreshed in place, not reported as missing.
-
-    Args:
-        tmp_path: pytest's per-test temporary directory.
-        repo: Working repository nested in HOME.
-        monkeypatch: fixture used to stub repository discovery.
-        capsys: fixture capturing the update report.
-    """
     item = agent_item(tmp_path)
     cli.install_item(item, repo / ".claude")
     link = repo / ".claude" / "agents" / "demo.md"
@@ -97,13 +72,6 @@ def test_update_never_replaces_a_user_owned_file(
     repo: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A real file at the recorded target survives an update.
-
-    Args:
-        tmp_path: pytest's per-test temporary directory.
-        repo: Working repository nested in HOME.
-        monkeypatch: fixture used to stub repository discovery.
-    """
     item = agent_item(tmp_path)
     cli.install_item(item, repo / ".claude")
     link = repo / ".claude" / "agents" / "demo.md"

@@ -1,10 +1,16 @@
-# Data Modeling — Pydantic vs Dataclass (TypedDict is banned)
+# Data Modeling — Pydantic everywhere (dataclass and TypedDict are banned)
 
-**Decision rule:** Pydantic everywhere a contract exists — at trust boundaries AND
-for internal contracts. A `@dataclass` is the rare, allowlisted exception, used
-only for a proven STRUCTURAL reason (see *Internal contracts* below), never as the
-internal default: a dataclass validates nothing. **TypedDict is banned outright**
-(checker rule `no-typeddict`), and so is `typing.cast` (checker rule `no-cast`).
+**Decision rule:** every piece of structured data in the app is a Pydantic model and is
+validated **where it is created**: at trust boundaries, between modules, inside a feature.
+**`@dataclass` is banned with no allowlist** (checker rule `no-dataclass`). So are `TypedDict`
+(`no-typeddict`) and `typing.cast` (`no-cast`).
+
+**Why: in AI-assisted code, errors must surface where they happen.** A dataclass validates
+nothing. When an agent-written caller passes `org_id=0`, a string where an enum belongs, or a
+`None` that should never be absent, the dataclass accepts it. The bad value then travels until
+something far away fails with a misleading error, and the agent "fixes" that symptom. A
+validating model fails at the construction site with the field name and the offending value.
+That is the one place the bug can be fixed correctly.
 
 ## Gate findings: repair the contract
 
@@ -180,6 +186,7 @@ PYDANTIC_CONFIG = ConfigDict(
     extra="forbid",
     strict=True,
     validate_assignment=True,
+    validate_default=True,  # a bad default fails at class use, not silently
     str_strip_whitespace=True,
 )
 
@@ -195,6 +202,60 @@ Extend it with `|` when one model genuinely needs a different setting — the sh
 decisions still come along: `model_config = PYDANTIC_CONFIG | ConfigDict(...)`.
 This shared object is the anchor for the `extra="forbid"` rule below: forbid lives
 in ONE place, not re-typed (and re-forgettable) on every model.
+
+**A shared config, never a shared base class.** Do not create a `class AppModel(BaseModel)`
+for every model to inherit. Every model-aware tool recognises a model by its base class's
+**literal name**: ruff's pydantic rules, mypy's pydantic plugin, FastAPI, and your own AST
+gates. A custom base blinds all of them at once, and it does so silently. (This was tried and
+reverted in a production repo once the measurements came in.) Write `class M(BaseModel)` with
+`model_config = PYDANTIC_CONFIG`.
+
+**Relax strictness in named, shared places, never per model:**
+
+```python
+# HTTP request DTOs: FastAPI validates from Python objects, not JSON text, so strict
+# would reject a valid "2026-01-01" string. Constraints (gt=0, min_length) still hold.
+FASTAPI_REQUEST_CONFIG = PYDANTIC_CONFIG | ConfigDict(strict=False)
+
+# Per-field lax types for values that arrive as JSON TEXT inside an otherwise strict model
+# (e.g. a json_agg() column): strict=True would reject the string form.
+type WireUUID = Annotated[UUID, Field(strict=False)]
+type WireDatetime = Annotated[datetime, Field(strict=False)]
+type WireEnum[E: Enum] = Annotated[E, Field(strict=False)]
+```
+
+**Fix the driver before relaxing the model.** If strict rejects a DB value, first make the driver
+return the right type: register an asyncpg codec for Postgres enums, and drop the `::text` cast
+that bypasses it. Relaxing the model treats the symptom.
+
+### Reusable `Annotated` aliases — one owner per normalisation
+
+```python
+type RequiredText = Annotated[str, BeforeValidator(reject_blank)]  # "" / "  " → error
+type OptionalText = Annotated[str | None, BeforeValidator(blank_to_none)]
+type BranchName = Annotated[RequiredText, AfterValidator(reject_sentinel_branch)]  # layered
+```
+
+Build domain types by layering validators on the shared aliases, and keep them in one
+`type_utils.py`. Never re-implement `.strip() == ""` checks at call sites.
+
+### Row models, JSON columns, polymorphic payloads
+
+- **DB row models are frozen** (`PYDANTIC_CONFIG | ConfigDict(frozen=True)`) and keep
+  `extra="forbid"`. That is why a query **names its columns**: `SELECT *` / `json_agg(t.*)` trips
+  `extra_forbidden` the day a column is added.
+- **Write-model constraints mirror DB `CHECK` constraints.** A column with a non-blank `CHECK`
+  needs `min_length=1` (or a pattern/enum) on the write model. Otherwise the DB is the first
+  thing to reject the value, as an `IntegrityError` far from the input. A checker can diff
+  migrations against models.
+- **JSON/JSONB columns decode in a `mode="before"` validator** that calls one owner function
+  (`parse_json_list`). Each model does not decode them its own way.
+- **Lists and polymorphic payloads go through a module-level `TypeAdapter`.** The adapter is an
+  immutable, tenant-free constant, so a module-level one is fine:
+  `ROWS = TypeAdapter(list[OrderRow])`, and
+  `CONFIG = TypeAdapter(Annotated[ConnectorConfig, Field(discriminator="kind")])` for a
+  discriminated union.
+- **Defaults use `Field(default_factory=...)`**, never `dataclasses.field`.
 
 ## `str_strip_whitespace=True` corrupts verbatim content — opt out
 
@@ -334,65 +395,55 @@ TASK_SETTINGS = TaskSettings()  # fails fast at import if RUN_DATE is unset
 See [`config.md`](config.md) for the full `pydantic-settings` patterns and
 [`serialization.md`](serialization.md) for crossing back out over a boundary.
 
-## Internal contracts — default to Pydantic, dataclass is the allowlisted exception
+## Internal contracts — Pydantic, always (no dataclass, no allowlist)
 
-**A dataclass validates NOTHING.** "It's already validated upstream, so skip
-Pydantic" is not a reason — it just means the type is a hint nobody checks. In the
-incident that produced this file, 85 of 98 internal dataclasses became Pydantic
-models; the 13 survivors each had a proven STRUCTURAL reason, not a performance one.
+**A dataclass validates NOTHING.** "It's already validated upstream" is not a reason. It only
+means the type is a hint nobody checks, and in AI-written code "upstream" is the part most likely
+to be wrong. In the incident that produced this file, 85 of 98 internal dataclasses became
+Pydantic models. The 13 survivors were kept for "structural" reasons, and every one of those
+reasons turned out to have a validating Pydantic answer:
 
-**Default: a Pydantic `BaseModel`** — for data passed between modules,
-business-logic return types, `domain/models/`, and already-validated data flowing
-between features. If the concern is re-validating trusted data in a hot loop, use
-`model_construct()` (see *Performance note*) to skip validation on a REAL model —
-never drop to a dataclass for speed.
-
-**Yes, validation costs something — and it is worth it.** A `BaseModel` is heavier
-to construct than a `@dataclass` (roughly ~1–5μs per simple model; a dataclass is
-near-free), and every boundary parse spends a little CPU a dataclass would not.
-That cost buys the entire point of this file: a renamed key fails loud instead of
-silently defaulting (incident 1 — silent billing), a credential can carry
-`repr=False`, a schema drift is caught at construction rather than three calls
-deep, and content survives verbatim or is rejected — never quietly corrupted
-(incident 6). The failures this trades against were *invisible* and ran for months;
-the microseconds are visible and bounded. When the microseconds genuinely matter,
-the answer is `model_construct()` on a real model (validate once at the boundary,
-skip re-validation on the trusted hot path) — not a dataclass that validates
-nothing, ever. Security and robustness first; buy back the speed narrowly, where a
-profiler proves you need it. → [`incidents.md`](incidents.md)
+| Old "structural" reason | Pydantic answer (measured, Pydantic 2.14) |
+| --- | --- |
+| Holds a live object (DB pool, aiobotocore client, socket) | `arbitrary_types_allowed=True`. It is **not** "validation off": the field gets an `isinstance` check, and a wrong type fails with `is_instance_of` |
+| A DI container wiring dependencies | Same: a frozen model of live objects |
+| A `Protocol`-typed field | Mark the Protocol `@runtime_checkable`. A plain Protocol fails at schema build (`SchemaError`); a runtime-checkable one gets an `isinstance` check |
+| A `TYPE_CHECKING`-only annotation (the real import is heavy) | Declare a small `@runtime_checkable` Protocol of the methods you actually use, next to the model, and type the field with it. If you need the real type, import it for real |
+| Target of `dataclasses.replace()` | A validated copy: `type(m).model_validate({**dict(m), **changes})` (below) |
 
 ```python
-# GOOD: default — a model even for an internal, already-validated contract
-class TicketContext(BaseModel):
-    """Context assembled for a ticket. A model, not a dataclass — it validates."""
+class StoreDeps(BaseModel):
+    """Live clients for one run — validated by isinstance, never serialized."""
 
-    model_config = PYDANTIC_CONFIG  # the shared strict config
-
-    ticket_key: str
-    parent_summary: str | None
-    siblings: tuple[str, ...]
-```
-
-**A `@dataclass(frozen=True, slots=True)` is allowed ONLY for a proven structural
-reason, and each such use is allowlisted:**
-
-- it holds a live, non-serializable object (a DB client / connection pool, an open
-  socket, an aiobotocore client) that Pydantic would refuse to validate;
-- it is a DI container wiring dependencies together;
-- it carries a `TYPE_CHECKING`-only type a model field can't reference;
-- it is the target of `dataclasses.replace()`.
-
-"Already validated" is **not** on that list. If none of these apply, use a model.
-
-```python
-# ALLOWED (allowlisted): holds live clients a model can't validate
-@dataclass(frozen=True, slots=True)
-class StoreDeps:
-    """DI container — holds live clients, not serializable data."""
+    model_config = PYDANTIC_CONFIG | ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
     ddb: DynamoClient
-    sqs: SqsClient
+    queue: QueueSender  # a @runtime_checkable Protocol
 ```
+
+**Yes, validation costs something, and it is worth it.** A `BaseModel` costs roughly 1–5 μs per
+simple model to construct. That buys a renamed key failing loudly instead of silently defaulting
+(incident 1, silent billing), `repr=False` on credentials, schema drift caught at construction,
+and verbatim content preserved or rejected rather than quietly corrupted (incident 6). Those
+failures were *invisible* and ran for months. The microseconds are visible and bounded.
+→ [`incidents.md`](incidents.md)
+
+### Copying with changes — `model_copy(update=...)` does NOT validate
+
+`model_copy(update=...)` skips validation even with `validate_assignment=True`. Measured:
+`Outer(n=1).model_copy(update={"n": -5})` on a `Field(gt=0)` field returns `n == -5`. Build a
+changed copy through validation instead:
+
+```python
+# BAD — skips every constraint; a bad value enters silently
+hydrated = envelope.model_copy(update={"resolved_at": now})
+
+# GOOD — validated; dict(m) (not model_dump) keeps nested model instances as they are
+hydrated = type(envelope).model_validate({**dict(envelope), "resolved_at": now})
+```
+
+Keep one helper (`with_changes(model, **changes)`) in `type_utils.py` so the pattern has a
+single owner.
 
 ## Migration realities
 
@@ -406,12 +457,9 @@ through its callers; don't trust a name search.
 ### Frozen models break four things
 
 Freezing a model breaks `**` splatting, `del obj.field`, in-place mutation, and
-`.get()`. Sweep for all four when you freeze. Use `model_copy(update=...)` for
-post-hoc hydration:
-
-```python
-hydrated = envelope.model_copy(update={"resolved_at": now})
-```
+`.get()`. Sweep for all four when you freeze. For post-hoc hydration use a **validated
+copy** (`type(m).model_validate({**dict(m), **changes})`), never `model_copy(update=...)`.
+See *Copying with changes* above.
 
 ## Security — `Field(repr=False)` on credentials and PII
 
@@ -431,9 +479,11 @@ assert repr(OrgSecrets(org_id="acme", api_token="•••••")) == "OrgSecre
 
 ## Performance note
 
-Pydantic validation costs ~1-5μs per simple model. Don't re-validate trusted data
-inside hot loops; `model_construct()` bypasses validation when the source is
-already validated.
+Pydantic validation costs ~1-5μs per simple model. Validate by default, everywhere.
+`model_construct()` skips validation, so treat it like a suppression: use it only in a hot loop
+where a **profiler** shows validation matters, on data that one model validated moments earlier,
+and leave a comment that names the measurement. Never use it because data "came from our own
+code".
 
 ## Don't
 

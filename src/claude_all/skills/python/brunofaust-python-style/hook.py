@@ -1,25 +1,5 @@
 #!/usr/bin/env python3
-"""Reminder hook for brunofaust-python-style skill.
-
-Fires PreToolUse on Edit|Write. If target file is Python, emit a one-time
-non-blocking reminder per Claude Code session so Sonnet remembers the skill's
-conventions WITHOUT flooding the transcript with the same message on every edit.
-
-This is the HIGH-SIGNAL trigger: it fires at the moment Python is actually being
-written, which is when the skill most needs loading. It dedups on its OWN flag
-(`claude-all-brunofaust-py-edit-<session_id>`), independent of the SessionStart
-loader (`python-style-skill-loader.py`) — so the reminder still lands on the
-first real `.py` edit even when the session-start nudge already fired (that early
-nudge is easy to forget dozens of turns before any Python work). At most one
-session-start reminder + one first-edit reminder per session; they never pile
-onto the same edit.
-
-Session detection: Claude Code passes `session_id` in the hook input JSON.
-We flag `<tmpdir>/claude-all-brunofaust-py-edit-<session_id>` on each emit and
-re-fire at most **once per hour** — the flag's mtime is the last-fired time, so a
-long session keeps the conventions fresh instead of being reminded only once.
-Edits within the hour see a fresh flag and exit silently.
-"""
+"""PreToolUse reminder for Python edits; fires at most once per hour per session."""
 
 from __future__ import annotations
 
@@ -72,8 +52,12 @@ def main() -> int:
                     "strict type hints (Literal, @overload) — TypedDict and typing.cast "
                     "are BANNED: a TypedDict validates nothing at runtime, so "
                     "cast(row_dtype, dict(row)) is a no-op that only pretends to type. "
-                    "Every payload crossing a boundary is a Pydantic model with "
-                    'extra="forbid" — and when a gate fires, fix the contract, never '
+                    "ALL structured data is a Pydantic model with "
+                    'extra="forbid", validated where it is created — @dataclass is '
+                    "banned too (live objects: arbitrary_types_allowed=True; changed "
+                    "copies: model_validate, never model_copy(update=...)). Docstrings "
+                    "are optional and size-bounded, never Args:/Returns: boilerplate. "
+                    "When a gate fires, fix the contract, never "
                     'widen the gate (never relax to extra="ignore", never add a '
                     '"safe-looking" default); '
                     "structured logging via structlog; "

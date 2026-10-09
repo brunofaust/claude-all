@@ -2,5 +2,17 @@
   "requires": [
     "agents/code-quality",
     "agents/lint-fixer"
+  ],
+  "prek_hooks": [
+    {
+      "id": "hooks-installed",
+      "name": "🪝 claude-all · Installed hook shims",
+      "description": "Fails when any stage in default_install_hook_types has no executable prek/pre-commit shim in the hooks dir git actually uses (local only; CI has no shims).",
+      "script": "checkers/hooks_installed.py",
+      "types": [
+        "toml"
+      ],
+      "default": false
+    }
   ]
 }

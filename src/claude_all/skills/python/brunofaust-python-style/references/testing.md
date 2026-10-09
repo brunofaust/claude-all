@@ -1311,7 +1311,7 @@ uv run pytest tests --collect-only
 
 ### Factory pattern
 
-Use `polyfactory` for Pydantic, `factory_boy` for dataclasses.
+Use `polyfactory` for Pydantic models (there are no dataclasses to build).
 
 ```python
 # tests/factories/ticket.py

@@ -1,0 +1,26 @@
+{
+  "prek_hooks": [
+    {
+      "id": "assertive-sql",
+      "name": "🗄️ claude-all · Assertive SQL (no silent ON CONFLICT / IF EXISTS / CASCADE)",
+      "description": "Flags tolerant SQL (targeted ON CONFLICT, IF [NOT] EXISTS, DROP ... CASCADE, swallowed IntegrityError) lacking an allowlist entry with a reason, and bans target-less ON CONFLICT outright.",
+      "script": "checkers/assertive_sql.py",
+      "args": [
+        "{migrations}",
+        "{src}"
+      ],
+      "exit_zero_flag": "--exit-zero"
+    },
+    {
+      "id": "insert-column-list",
+      "name": "🗄️ claude-all · INSERT INTO names its columns",
+      "description": "Flags INSERT INTO t VALUES (...) statements in Python string/f-string literals that have no explicit column list.",
+      "script": "checkers/insert_column_list.py",
+      "args": [
+        "{migrations}",
+        "{src}"
+      ],
+      "exit_zero_flag": "--exit-zero"
+    }
+  ]
+}

@@ -455,6 +455,44 @@ service = UserService(
 )
 ```
 
+### Pattern 7b: No process-global state — instance-per-run
+
+Every Lambda invocation, ECS run or CLI execution **builds its collaborators inside
+`async def main()`** (a per-run scope object), uses them, and closes them. Nothing that holds a
+resource, a credential, tenant data or a cache lives at module or class scope. A
+`close_all()`/`reset_registry()` helper that tests call between cases is the **symptom** of global
+state, not a fix for it.
+
+```python
+# BAD — a lazy module slot: the first tenant's client serves every later warm invocation
+client: AsyncStore | None = None
+
+async def get_client() -> AsyncStore:
+    global client
+    if client is None:
+        client = AsyncStore()
+    return client
+
+
+# GOOD — built per run, injected, closed in finally
+async def main(event: InvocationEvent) -> None:
+    async with InvocationScope.open(event) as scope:  # builds clients/caches for THIS run
+        await process(event, store=scope.store, cache=scope.cache)
+```
+
+An AST checker can flag the shapes mechanically (regression-only baseline that only shrinks):
+
+- module lazy slots (`x: T | None = None` that a function later assigns) and `global` statements
+- module-level mutable literals (`{}`, `[]`, `set()`) and module-level resource instances (locks,
+  `ContextVar`s, `Async*()` clients, DB engines, HTTP clients, template environments)
+- class-body mutable attributes, classmethods that mutate `cls`, `__new__` singletons, namespace
+  classes holding state, and module-level instances of first-party classes
+
+Exempt: `Final` constants and immutable `Mapping`/`Sequence`/`frozenset`/tuple constants. Keep
+the permanent exceptions few and named, e.g. `get_settings()` (immutable, tenant-free platform
+config) and a `sys.monitoring` tool id. Why this matters for multi-tenant code:
+[tenant-isolation.md §2](tenant-isolation.md). For caches: [caching.md](caching.md).
+
 ### Pattern 8: Avoiding Common Anti-Patterns
 
 **Don't expose internal types in APIs:**

@@ -22,14 +22,6 @@ HOOK_PATH = (
 
 @pytest.fixture
 def project(tmp_path: Path) -> Path:
-    """Build a uv project whose virtualenv provides pytest and ruff.
-
-    Args:
-        tmp_path: pytest's per-test temporary directory.
-
-    Returns:
-        The project root.
-    """
     (tmp_path / "uv.lock").write_text("version = 1\n", encoding="utf-8")
     bin_dir = tmp_path / ".venv" / "bin"
     bin_dir.mkdir(parents=True)
@@ -40,15 +32,6 @@ def project(tmp_path: Path) -> Path:
 
 
 def run_hook(command: str, cwd: Path) -> subprocess.CompletedProcess[str]:
-    """Invoke the guard with one Bash command.
-
-    Args:
-        command: Shell command placed in ``tool_input.command``.
-        cwd: Working directory reported in the payload.
-
-    Returns:
-        The completed hook process.
-    """
     payload = json.dumps({"tool_name": "Bash", "cwd": str(cwd), "tool_input": {"command": command}})
     return subprocess.run(
         [sys.executable, str(HOOK_PATH)],
@@ -74,12 +57,6 @@ def run_hook(command: str, cwd: Path) -> subprocess.CompletedProcess[str]:
     ],
 )
 def test_blocks_lock_bypassing_commands(project: Path, command: str) -> None:
-    """Commands that skip the locked environment are refused with the fix.
-
-    Args:
-        project: uv project fixture.
-        command: Command that must be blocked.
-    """
     result = run_hook(command, project)
 
     assert result.returncode == 2, result.stderr
@@ -101,12 +78,6 @@ def test_blocks_lock_bypassing_commands(project: Path, command: str) -> None:
     ],
 )
 def test_allows_locked_or_unrelated_commands(project: Path, command: str) -> None:
-    """Locked runs, tools the venv lacks, overrides and unparsable input pass.
-
-    Args:
-        project: uv project fixture.
-        command: Command that must be allowed.
-    """
     assert run_hook(command, project).returncode == 0
 
 

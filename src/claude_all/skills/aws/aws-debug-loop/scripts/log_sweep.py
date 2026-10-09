@@ -3,30 +3,11 @@
 # requires-python = ">=3.12"
 # dependencies = []
 # ///
-"""All-groups CloudWatch log sweep -> sqlite, surfacing only the errors.
-
-Fetches CloudWatch Logs for every log group whose name matches a filter, over a
-time window, and loads EVERY event into a stdlib ``sqlite3`` database. During
-ingest it flags events matching an error-keyword set (case-insensitive) and
-prints a compact, deduplicated signature table -- group, a short snippet, the
-sqlite rowid, and a count -- so the caller spends tokens only on real errors.
-
-The caller then drills into any error by its rowid, pulling N lines of context
-from the same stream::
-
-    sqlite3 sweep.sqlite "SELECT ts_iso, message FROM logs \\
-      WHERE log_stream = '<stream>' AND id BETWEEN <id>-5 AND <id>+5 ORDER BY id"
-
-Rows are inserted ordered by (log_group, log_stream, ts), so the rowid is the
-chronological position within a stream and ``id +/- N`` gives real context.
-
-Stdlib only. Log fetching tries, in order: boto3 (if importable) -> the ``aws``
-CLI -> the ``awslogs`` CLI. If none are available (or all fail), it warns and
-exits non-zero.
-
-Usage::
-
-    log_sweep.py --profile myapp-dev --name-filter myapp-dev- --since 3h
+"""All-groups CloudWatch log sweep -> sqlite, surfacing only the errors. Fetches CloudWatch Logs
+for every log group whose name matches a filter, over a time window, and loads EVERY event
+into a stdlib ``sqlite3`` database. During ingest it flags events matching an error-keyword
+set (case-insensitive) and prints a compact, deduplicated signature table -- group, a short
+snippet, the sqlite rowid, and a count -- so the caller spends tokens only on real errors.
 """
 
 from __future__ import annotations

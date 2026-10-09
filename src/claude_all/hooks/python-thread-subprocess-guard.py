@@ -1,30 +1,6 @@
 #!/usr/bin/env python3
-"""PreToolUse hook — block raw threads/subprocess (prefer the owner wrappers).
-
-Fires on `Edit`/`Write`/`MultiEdit`. When the new Python content reaches for a
-raw concurrency primitive instead of the single-owner wrapper the
-brunofaust-python-style skill mandates, the edit is **BLOCKED** (exit 2) and the
-message names which construct was hit and its replacement:
-
-- ``asyncio.create_subprocess`` → ``run_exec()`` / ``run_shell()`` from the
-  subprocess owner module
-- ``asyncio.to_thread`` → ``run_in_thread()`` from the thread-pool owner
-- ``ThreadPoolExecutor`` → the ``ThreadPool`` owner wrapper
-
-This is the edit-time layer complementing the skill's prek/ruff ``banned-api`` CI
-layer.
-
-Exempt (allowed): non-``.py`` files, and paths under ``tests`` / ``scripts`` /
-``migrations`` / ``alembic`` or a ``test_*`` basename.
-
-## Override
-
-- add a ``# guard:allow`` comment to the content (the owner module itself wraps
-  the raw primitive), or
-- set ``CLAUDE_ALL_ALLOW_RAW_CONCURRENCY=1``.
-
-Exit codes: 0 = allow · 2 = block (stderr shown to Claude, edit skipped). Any
-malformed input / missing key / non-``.py`` / exempt path → 0.
+"""PreToolUse hook — block raw threads/subprocess (prefer the owner wrappers). Fires on
+`Edit`/`Write`/`MultiEdit`.
 """
 
 from __future__ import annotations
@@ -61,14 +37,8 @@ _ESCAPE = (
 
 
 def _is_exempt(path: str) -> bool:
-    """True if the guard should skip this path (non-.py or a stdlib-legit dir).
-
-    Args:
-        path: The ``file_path`` from the tool input.
-
-    Returns:
-        True when the file is not Python or lives under tests/scripts/migrations/
-        alembic (or has a ``test_*`` basename) — the guard stays silent.
+    """True if the guard should skip this path (non-.py or a stdlib-legit dir). Args: path: The
+    ``file_path`` from the tool input.
     """
     norm = path.replace("\\", "/")
     if not norm.endswith(".py"):
@@ -81,32 +51,12 @@ def _is_exempt(path: str) -> bool:
 
 
 def _block(reason: str) -> int:
-    """Print the block reason to stderr (shown to Claude) and return exit code 2.
-
-    Args:
-        reason: Human-readable explanation of why the edit was blocked.
-
-    Returns:
-        2 — the PreToolUse block exit code (the edit does NOT run).
-    """
+    """Print the block reason to stderr (shown to Claude) and return exit code 2."""
     print(f"[python-thread-subprocess-guard] BLOCKED — {reason}", file=sys.stderr)
     return 2
 
 
 def _edited_text(tool_name: str, tool_input: dict[str, object]) -> str:
-    """Return the new text this call writes, across Write / Edit / MultiEdit shapes.
-
-    A ``MultiEdit`` carries its content in an ``edits[]`` array, not a top-level
-    ``new_string`` — miss that and a MultiEdit adding the banned construct slips
-    through the guard.
-
-    Args:
-        tool_name: The tool being called (``Write`` / ``Edit`` / ``MultiEdit``).
-        tool_input: The tool input dict.
-
-    Returns:
-        The concatenated new text, or ``""`` when there is none.
-    """
     if tool_name == "MultiEdit":
         edits = tool_input.get("edits", [])
         if isinstance(edits, list):

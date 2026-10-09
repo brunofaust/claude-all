@@ -1,22 +1,9 @@
 #!/usr/bin/env python3
-"""PreToolUse hook (ships with the `wait-for-ready` skill).
-
-Fires on the `Bash` tool. Catches two friction patterns:
-
-- A long fixed `sleep N` (N >= threshold) in the main session — it blocks the
-  session for the whole duration.
-- The `… && sleep N && curl …` (or `while/until … sleep … curl/pg_isready …`)
-  readiness loop — a fixed delay is flaky: too short and the probe fails, too
-  long and you wait for nothing.
-
-On match it emits a NON-BLOCKING reminder (exit 0 + JSON `additionalContext`, so
-it is NOT rendered as a hook error) pointing at the `wait-for-ready` skill, which
-polls until the service/container is actually healthy (timeout + interval). This
-hook is installed alongside that skill, so the skill it points to is always present.
-
-Bypass: prefix the command with `CC_ALLOW_SLEEP=1 ` (inline marker in the command
-string — the primary escape hatch). Setting CC_ALLOW_SLEEP in the hook's own
-environment also works.
+"""PreToolUse hook (ships with the `wait-for-ready` skill). Fires on the `Bash` tool. Catches two
+friction patterns: - A long fixed `sleep N` (N >= threshold) in the main session — it blocks
+the session for the whole duration. - The `… && sleep N && curl …` (or `while/until … sleep …
+curl/pg_isready …`) readiness loop — a fixed delay is flaky: too short and the probe fails,
+too long and you wait for nothing.
 """
 
 from __future__ import annotations
@@ -42,10 +29,8 @@ PROBE_RE = re.compile(
 
 
 def nudge(message: str) -> int:
-    """Emit a non-error reminder into Claude's context, then allow the tool.
-
-    Args:
-        message: The reminder text to inject as additional context.
+    """Emit a non-error reminder into Claude's context, then allow the tool. Args: message: The
+    reminder text to inject as additional context.
     """
     json.dump(
         {"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": message}},
