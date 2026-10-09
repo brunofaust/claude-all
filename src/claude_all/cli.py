@@ -1081,15 +1081,19 @@ def resource_config_path(item: Item) -> Path:
     return item.src.parent / "claude-all.json"
 
 
-def load_requires(item: Item) -> list[str]:
+def load_resource_config(item: Item) -> dict:
     path = resource_config_path(item)
     if not path.exists():
-        return []
+        return {}
     try:
-        config = json.loads(path.read_text())
+        config = json.loads(path.read_text())  # guard:allow — zero-dependency installer
     except (json.JSONDecodeError, OSError):
-        return []
-    requires = config.get("requires", [])
+        return {}
+    return config if isinstance(config, dict) else {}
+
+
+def load_requires(item: Item) -> list[str]:
+    requires = load_resource_config(item).get("requires", [])
     if not isinstance(requires, list):
         return []
     return [dep for dep in requires if isinstance(dep, str)]
@@ -2540,7 +2544,29 @@ def main(argv: list[str]) -> int:
     ap.add_argument(
         "--yes",
         action="store_true",
-        help="Skip the --uninstall confirmation prompt (for non-interactive use)",
+        help="Skip the --uninstall / --install-hooks confirmation prompt (non-interactive use)",
+    )
+    ap.add_argument(
+        "--install-hooks",
+        action="store_true",
+        help="Wire the checkers of your installed skills into this project's prek.toml / "
+        ".pre-commit-config.yaml (claude-all as a pinned hook repo). Shows a diff, then asks",
+    )
+    ap.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="With --install-hooks: print the diff, write nothing",
+    )
+    ap.add_argument(
+        "--hook",
+        action="append",
+        default=[],
+        metavar="ID",
+        help="With --install-hooks: also enable an optional hook (repeatable)",
+    )
+    ap.add_argument(
+        "--rev",
+        help="With --install-hooks: pin this claude-all tag instead of the installed version",
     )
     ap.add_argument("filters", nargs="*", help="Filter tokens (each must appear in path)")
     args = ap.parse_args(argv)
@@ -2552,6 +2578,13 @@ def main(argv: list[str]) -> int:
         written = rebuild_codex_agents(all_items)
         print(f"Rebuilt {written} installed Codex agent(s): {Path.home() / '.codex' / 'agents'}")
         return 0
+
+    if args.install_hooks:
+        from claude_all.prek_hooks import cmd_install_hooks
+
+        return cmd_install_hooks(
+            assume_yes=args.yes, dry_run=args.dry_run, rev=args.rev, only=args.hook
+        )
 
     if args.uninstall:
         return cmd_uninstall(
@@ -2673,6 +2706,11 @@ def main(argv: list[str]) -> int:
         notify_stale(scope)
         return 1
     print("\nDone. Codex agents are generated directly in its agent directory.")
+    if any(it.kind == "skills" and "prek_hooks" in load_resource_config(it) for it in chosen):
+        print(
+            "Some installed skills ship checkers. In each project, run "
+            "`claude-all --install-hooks` to wire them into prek/pre-commit."
+        )
     notify_stale(scope)
     return 0
 

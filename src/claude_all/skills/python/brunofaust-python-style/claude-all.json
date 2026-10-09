@@ -1,5 +1,68 @@
 {
   "requires": [
     "skills/regression-gates"
+  ],
+  "prek_hooks": [
+    {
+      "id": "model-contract",
+      "name": "🧩 claude-all · Pydantic model contract",
+      "description": "Shared config, no dataclass/alias/barrel, verbatim strip, private access.",
+      "script": "checkers/model_contract.py",
+      "args": [
+        "{src}"
+      ],
+      "exit_zero_flag": "--exit-zero"
+    },
+    {
+      "id": "pydantic-contract",
+      "name": "🧩 claude-all · No opaque types or masking defaults",
+      "description": "No Any/dict model fields, masking defaults, TypedDict or cast.",
+      "script": "checkers/pydantic_contract.py",
+      "args": [
+        "{src}"
+      ],
+      "exit_zero_flag": "--exit-zero"
+    },
+    {
+      "id": "all-contract",
+      "name": "🐍 claude-all · __all__ export contract",
+      "description": "Every module declares an accurate __all__.",
+      "script": "checkers/all_contract.py",
+      "args": [
+        "--package",
+        "{package}",
+        "{src}"
+      ],
+      "exit_zero_flag": "--exit-zero"
+    },
+    {
+      "id": "flat-test-mirror",
+      "name": "🧪 claude-all · Flat source-mirrored unit tests",
+      "description": "src/<pkg>/a/b.py is tested in tests/unit/test_a_b.py.",
+      "script": "checkers/flat_test_mirror.py",
+      "args": [
+        "--root",
+        "{unit_tests}"
+      ],
+      "exit_zero_flag": "--exit-zero"
+    },
+    {
+      "id": "lambda-event-validation",
+      "name": "🧩 claude-all · Lambda handlers validate their event",
+      "description": "Every Lambda handler parses its event into a Pydantic model.",
+      "script": "checkers/lambda_event_validation.py",
+      "args": [
+        "{src}"
+      ],
+      "exit_zero_flag": "--exit-zero",
+      "default": false
+    },
+    {
+      "id": "docstring-budget",
+      "name": "📝 claude-all · Docstring/comment size budget",
+      "description": "Docstrings and comments are optional but size-bounded.",
+      "script": "checkers/docstring_budget.py",
+      "pass_filenames": true
+    }
   ]
 }
