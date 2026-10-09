@@ -1,1 +1,1 @@
-Delegate gate-weakening audits of a diff (tests, baselines, lint config) to `diff-weakening-auditor` before readiness claims; it never fixes.
+Delegate gate-weakening diff audits to `diff-weakening-auditor` before readiness claims; it never fixes.
