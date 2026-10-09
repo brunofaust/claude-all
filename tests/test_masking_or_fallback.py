@@ -29,6 +29,7 @@ from masking_or_fallback import main
         ("def f(org_id):\n    return org_id or 0\n", "identity-or-zero"),
         ('def f(conn):\n    return int(conn.get("org_id") or 0)\n', "identity-or-zero"),
         ('def f(user):\n    return user.token or ""\n', "identity-or-empty"),
+        ("def f(a, org_id):\n    return a or org_id or 0\n", "identity-or-zero"),
         ('def f(c, v):\n    return c(project=v or "", branch=v or "")\n', "identity-kwarg-or"),
     ],
 )

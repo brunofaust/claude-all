@@ -11,6 +11,7 @@ import argparse
 import difflib
 import json  # guard:allow — zero-dependency package (hook envs install it bare), like cli.py
 import re
+import shlex
 import subprocess
 import sys
 import tomllib
@@ -119,11 +120,13 @@ def run_check(argv: Sequence[str] | None = None) -> int:
         if spec.exit_zero_flag is None and not spec.stdout_findings:
             print(f"claude-all-check: {spec.id} does not support --baseline", file=sys.stderr)
             return 2
-        gate = [sys.executable, str(BASELINE_GATE), "--baseline", rest[1]]
+        gate = [sys.executable, str(BASELINE_GATE), "--baseline", rest[1], "--strip-lines"]
         rest = rest[2:]
         if rest[:1] == ["--update"]:
             gate.append("--update")
             rest = rest[1:]
+        # Record a machine-independent identity: the interpreter/script paths differ per env.
+        gate += ["--seed-label", shlex.join(["claude-all-check", spec.id, *rest])]
         if spec.exit_zero_flag:
             rest.append(spec.exit_zero_flag)
         command = [*gate, "--", *command]
@@ -205,12 +208,16 @@ def installed_skills(state: Mapping[str, object]) -> set[str]:
 def plan_install(
     root: Path, state: Mapping[str, object], rev: str, only: Sequence[str] = ()
 ) -> InstallPlan:
+    specs = load_hook_specs()
+    unknown = sorted(set(only) - {spec.id for spec in specs})
+    if unknown:
+        raise ValueError(f"unknown hook id(s): {', '.join(unknown)}")
     skills = installed_skills(state)
     layout = detect_layout(root)
     hooks: list[tuple[str, list[str]]] = []
     skipped: dict[str, str] = {}
     optional: list[str] = []
-    for spec in load_hook_specs():
+    for spec in specs:
         if spec.skill not in skills:
             continue
         if not spec.default and spec.id not in only:
@@ -226,6 +233,7 @@ def plan_install(
     repo_url = hook_repo_url()
     if target.suffix == ".toml":
         new_text = replace_block(old_text, toml_block(repo_url, rev, hooks))
+        ensure_valid_toml(old_text, new_text, target)
     else:
         new_text = insert_yaml_block(old_text, repo_url, rev, hooks)
     return InstallPlan(target, old_text, new_text, hooks, skipped, optional)
@@ -256,9 +264,38 @@ def toml_block(repo_url: str, rev: str, hooks: Sequence[tuple[str, list[str]]]) 
     return "\n".join(lines)
 
 
+def ensure_valid_toml(old_text: str, new_text: str, target: Path) -> None:
+    try:
+        tomllib.loads(old_text)
+    except tomllib.TOMLDecodeError:
+        return  # a dialect tomllib can't read (e.g. TOML 1.1): nothing to compare against
+    try:
+        tomllib.loads(new_text)
+    except tomllib.TOMLDecodeError as exc:
+        raise ValueError(
+            f"the managed block would not be valid TOML in {target.name} ({exc}); if it "
+            "declares `repos = [...]` inline, switch it to `[[repos]]` tables first"
+        ) from exc
+
+
+def marker_span(text: str, start: str, end: str) -> tuple[int, int] | None:
+    """Return the (start, end) offsets of the one managed block in text, or None."""
+    starts, ends = text.count(start), text.count(end)
+    if (starts, ends) == (0, 0):
+        return None
+    begin, finish = text.find(start), text.find(end)
+    if (starts, ends) != (1, 1) or finish < begin:
+        raise ValueError(
+            "claude-all hooks markers are missing, duplicated or out of order; fix them by "
+            "hand (keep exactly one start and one end marker) and re-run"
+        )
+    return begin, finish + len(end)
+
+
 def replace_block(text: str, block: str) -> str:
-    if START in text and END in text:
-        return text.split(START, 1)[0] + block + text.split(END, 1)[1]
+    span = marker_span(text, START, END)
+    if span is not None:
+        return text[: span[0]] + block + text[span[1] :]
     prefix = text.rstrip("\n")
     return f"{prefix}\n\n{block}\n" if prefix else f"{block}\n"
 
@@ -267,11 +304,17 @@ def insert_yaml_block(
     text: str, repo_url: str, rev: str, hooks: Sequence[tuple[str, list[str]]]
 ) -> str:
     lines = text.splitlines(keepends=True)
-    repos_at = next((i for i, line in enumerate(lines) if re.match(r"^repos:\s*$", line)), None)
+    repos_re = re.compile(r"^repos:\s*(\[\s*\])?\s*(#.*)?$")
+    repos_at = next((i for i, line in enumerate(lines) if repos_re.match(line)), None)
     if repos_at is None:
         raise ValueError("no top-level `repos:` key in the pre-commit config")
+    match = repos_re.match(lines[repos_at])
+    if match and match.group(1):  # `repos: []` -> block list, keeping any trailing comment
+        lines[repos_at] = "repos:" + (f"  {match.group(2)}" if match.group(2) else "") + "\n"
     indent = "  "
     for line in lines[repos_at + 1 :]:
+        if re.match(r"^\S", line) and not line.startswith("#"):
+            break  # next top-level key: repos had no items
         match = re.match(r"^(\s*)- ", line)
         if match:
             indent = match.group(1)
@@ -283,11 +326,14 @@ def insert_yaml_block(
         if args:
             block.append(f"{indent}      args: {json.dumps(args)}")
     block.append(f"{indent}{END}")
-    rendered = "".join(f"{line}\n" for line in block)
     body = "".join(lines)
-    start_line, end_line = f"{indent}{START}\n", f"{indent}{END}\n"
-    if start_line in body and end_line in body:
-        return body.split(start_line, 1)[0] + rendered + body.split(end_line, 1)[1]
+    span = marker_span(body, START, END)
+    if span is not None:
+        line_start = body.rfind("\n", 0, span[0]) + 1
+        line_end = body.find("\n", span[1])
+        line_end = len(body) if line_end == -1 else line_end + 1
+        return body[:line_start] + "".join(f"{line}\n" for line in block) + body[line_end:]
+    rendered = "".join(f"{line}\n" for line in block)
     return "".join(lines[: repos_at + 1]) + rendered + "".join(lines[repos_at + 1 :])
 
 
@@ -305,9 +351,13 @@ def project_root() -> Path:
 def cmd_install_hooks(
     *, assume_yes: bool, dry_run: bool, rev: str | None = None, only: Sequence[str] = ()
 ) -> int:
-    state = json.loads(STATE_FILE.read_text()) if STATE_FILE.exists() else {}
     root = project_root()
-    plan = plan_install(root, state, rev or f"v{version('claude-all')}", only)
+    try:
+        state = json.loads(STATE_FILE.read_text()) if STATE_FILE.exists() else {}
+        plan = plan_install(root, state, rev or f"v{version('claude-all')}", only)
+    except (ValueError, OSError) as exc:  # JSON/TOML decode errors are ValueErrors
+        print(f"claude-all --install-hooks: {exc}", file=sys.stderr)
+        return 2
     if not plan.hooks:
         print("No claude-all hooks to wire: install a skill that ships checkers first.")
         return 0

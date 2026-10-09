@@ -170,3 +170,74 @@ def test_layout_ignores_directories_without_matching_files(tmp_path: Path) -> No
     layout = prek_hooks.detect_layout(tmp_path)
     assert layout["tests"] == "tests" and layout["unit_tests"] == "tests/unit"
     assert layout["infra"] == "infra"
+
+
+def test_baseline_identity_is_portable_and_line_shift_safe(tmp_path: Path) -> None:
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "a.py").write_text("def f(org_id=None):\n    return g(org_id=org_id or 0)\n")
+    baseline = tmp_path / "b.txt"
+    args = ("masking-or-fallback", "--baseline", str(baseline))
+    assert run_check(*args, "--update", "src", cwd=tmp_path).returncode == 0
+    header = baseline.read_text().splitlines()[0]
+    assert "claude-all-check masking-or-fallback src" in header
+    assert sys.executable not in header and ":2:" not in baseline.read_text()
+
+    (src / "a.py").write_text("\n\n" + (src / "a.py").read_text())
+    shifted = run_check(*args, "src", cwd=tmp_path)
+    assert shifted.returncode == 0, shifted.stdout + shifted.stderr
+
+
+GATES = installed("skills/regression-gates")
+
+
+def test_inline_repos_toml_is_refused_not_corrupted(tmp_path: Path) -> None:
+    make_project(tmp_path)
+    (tmp_path / "prek.toml").write_text('repos = [{ repo = "local", hooks = [] }]\n')
+    with pytest.raises(ValueError, match="would not be valid TOML"):
+        prek_hooks.plan_install(tmp_path, GATES, rev="v1")
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        f"{prek_hooks.START}\n[[repos]]\n",
+        f"{prek_hooks.START}\n{prek_hooks.END}\n{prek_hooks.START}\n{prek_hooks.END}\n",
+        f"{prek_hooks.END}\n{prek_hooks.START}\n",
+    ],
+)
+def test_broken_markers_are_refused(tmp_path: Path, text: str) -> None:
+    make_project(tmp_path)
+    (tmp_path / "prek.toml").write_text(text)
+    with pytest.raises(ValueError, match="markers"):
+        prek_hooks.plan_install(tmp_path, GATES, rev="v1")
+
+
+@pytest.mark.parametrize("repos_line", ["repos: []", "repos:  # mine"])
+def test_yaml_repos_variants(tmp_path: Path, repos_line: str) -> None:
+    make_project(tmp_path)
+    cfg = tmp_path / ".pre-commit-config.yaml"
+    cfg.write_text(f"{repos_line}\nexclude: ^vendor/\n")
+    plan = prek_hooks.plan_install(tmp_path, GATES, rev="v1")
+    assert "  - repo: https://github.com/brunofaust/claude-all\n" in plan.new_text
+    assert plan.new_text.rstrip().endswith("exclude: ^vendor/")
+    assert "[]" not in plan.new_text
+    assert ("# mine" in plan.new_text) == ("# mine" in repos_line)
+
+
+def test_unknown_hook_id_is_an_error(tmp_path: Path) -> None:
+    make_project(tmp_path)
+    with pytest.raises(ValueError, match="unknown hook id"):
+        prek_hooks.plan_install(tmp_path, GATES, rev="v1", only=["junk-drawr"])
+
+
+def test_cli_reports_errors_without_traceback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    make_project(tmp_path)
+    state_file = tmp_path / "state.json"
+    state_file.write_text("{not json")
+    monkeypatch.setattr(prek_hooks, "STATE_FILE", state_file)
+    monkeypatch.chdir(tmp_path)
+    assert prek_hooks.cmd_install_hooks(assume_yes=True, dry_run=True, rev="v1") == 2
+    assert "claude-all --install-hooks:" in capsys.readouterr().err

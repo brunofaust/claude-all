@@ -4,12 +4,20 @@
 from __future__ import annotations
 
 import argparse
+import re
 import shlex
 import subprocess
 import sys
 from pathlib import Path
 
-__all__ = ["compare", "load_baseline", "load_seed_command", "main", "run_checker"]
+__all__ = [
+    "compare",
+    "load_baseline",
+    "load_seed_command",
+    "main",
+    "run_checker",
+    "strip_line_numbers",
+]
 
 HELP_TEXT = """Regression-only baseline harness — introduce ANY new gate without a big-bang cleanup.
 
@@ -106,6 +114,22 @@ def run_checker(command: list[str]) -> set[str]:
     return {line.strip() for line in proc.stdout.splitlines() if line.strip()}
 
 
+LINE_PREFIX = re.compile(r"^(?P<path>[^:\s]+):\d+(?::\d+)?:")
+
+
+def strip_line_numbers(findings: set[str]) -> set[str]:
+    """Key findings by path + message, not line, so edits above them don't churn the baseline."""
+    keyed: set[str] = set()
+    for finding in sorted(findings):
+        key = LINE_PREFIX.sub(r"\g<path>:", finding)
+        occurrence, candidate = 1, key
+        while candidate in keyed:  # same message twice in one file: keep both, by order
+            occurrence += 1
+            candidate = f"{key} #{occurrence}"
+        keyed.add(candidate)
+    return keyed
+
+
 def compare(seen: set[str], baseline: set[str]) -> tuple[set[str], set[str]]:
     return seen - baseline, baseline - seen
 
@@ -123,6 +147,16 @@ def main(argv: list[str] | None = None) -> int:
         help="rewrite the baseline from the current findings (seed / re-seed), then exit 0",
     )
     parser.add_argument(
+        "--seed-label",
+        help="stable identity recorded/compared instead of the literal command "
+        "(use when the command embeds machine-specific paths)",
+    )
+    parser.add_argument(
+        "--strip-lines",
+        action="store_true",
+        help="drop `path:LINE:` line numbers from finding keys (for checkers that print them)",
+    )
+    parser.add_argument(
         "checker",
         nargs=argparse.REMAINDER,
         help="-- followed by the checker command (prints one stable finding key per line)",
@@ -136,9 +170,10 @@ def main(argv: list[str] | None = None) -> int:
     # SCOPE SAFETY: enforce over the SAME command the baseline was seeded with.
     # A wider seed path is silent amnesty (see the module docstring). Check before
     # running the checker so a mismatch fails fast and loud.
+    identity = shlex.split(args.seed_label) if args.seed_label else command
     if not args.update:
         seed_command = load_seed_command(args.baseline)
-        if seed_command is not None and seed_command != command:
+        if seed_command is not None and seed_command != identity:
             raise SystemExit(
                 "baseline_gate: SCOPE MISMATCH — the baseline was seeded with a different "
                 "checker command than the one being enforced. Baselining a WIDER path than "
@@ -147,13 +182,15 @@ def main(argv: list[str] | None = None) -> int:
                 "this way). Re-seed with --update using the SAME command, or fix the enforce "
                 "command so both match.\n"
                 f"  seeded with:  {shlex.join(seed_command)}\n"
-                f"  enforcing:    {shlex.join(command)}"
+                f"  enforcing:    {shlex.join(identity)}"
             )
 
     seen = run_checker(command)
+    if args.strip_lines:
+        seen = strip_line_numbers(seen)
 
     if args.update:
-        header = _SEED_MARKER + shlex.join(command) + "\n"
+        header = _SEED_MARKER + shlex.join(identity) + "\n"
         body = "\n".join(sorted(seen)) + ("\n" if seen else "")
         args.baseline.write_text(header + body, encoding="utf-8")
         print(f"baseline_gate: wrote {len(seen)} finding(s) to {args.baseline}")

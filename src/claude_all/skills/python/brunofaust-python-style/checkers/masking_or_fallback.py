@@ -155,17 +155,17 @@ class Visitor(ast.NodeVisitor):
         self.generic_visit(node)
 
     def visit_BoolOp(self, node: ast.BoolOp) -> None:
-        if isinstance(node.op, ast.Or) and len(node.values) == 2:
+        if isinstance(node.op, ast.Or):
             self.classify(node)
         self.generic_visit(node)
 
     def classify(self, node: ast.BoolOp) -> None:
-        fallback = falsy_literal(node.values[1])
+        fallback = falsy_literal(node.values[-1])  # `a or b or 0`: the literal is last
         if fallback is None:
             return
         self.candidates += 1
         text = ast.unparse(node)
-        if self.rules.is_identity(subject_name(node.values[0])):
+        if self.rules.is_identity(subject_name(node.values[-2])):
             kind = "identity-or-zero" if fallback == "0" else "identity-or-empty"
             self.findings.append(Finding(self.path, node.lineno, kind, text))
             return
