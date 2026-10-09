@@ -1,1 +1,1 @@
-Create task worktrees with `wt switch --create <branch>` (runs `.config/wt.toml`); no `.config/wt.toml` yet: load `worktree-dev-environment`.
+Create task worktrees with `wt switch --create <branch>`; no `.config/wt.toml`: load `worktree-dev-environment`.
