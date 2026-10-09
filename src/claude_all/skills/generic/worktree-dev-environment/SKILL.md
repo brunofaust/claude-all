@@ -1,10 +1,6 @@
 ---
 name: worktree-dev-environment
-description: >-
-  Use when setting up or debugging a project's per-worktree development environment with
-  Worktrunk (`wt`): creating `.config/wt.toml` and `.worktreeinclude`, making a fresh task
-  worktree ready to run tests and commit, or fixing worktrees that share git hooks, venvs or
-  local settings.
+description: "Use when setting up .config/wt.toml and .worktreeinclude so each Worktrunk task worktree is ready in one command (per-worktree git hooks, locked deps)."
 ---
 
 # Worktree development environment (Worktrunk)

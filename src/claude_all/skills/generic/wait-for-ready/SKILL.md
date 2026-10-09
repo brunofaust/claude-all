@@ -1,14 +1,6 @@
 ---
 name: wait-for-ready
-description: >-
-  Wait for a service, container, port, or database to become healthy by POLLING until ready —
-  instead of a fixed `sleep N`. Use whenever you just started something and need to wait before
-  the next step: after `docker compose up` / `docker run`, after starting a dev server or API,
-  before running smoke tests or `curl` against a just-started endpoint, before connecting to a
-  freshly-started Postgres/Redis. Covers any request to wait, sleep, or pause before probing a
-  process that was just started. A fixed `sleep` is the wrong tool — too
-  short and the probe fails, too long and you waste the wait; poll with a timeout + interval and
-  fail fast instead.
+description: "Use after starting a service, container, dev server or database: poll until it is healthy, with a timeout, instead of a fixed sleep."
 disable-model-invocation: false
 ---
 

@@ -294,7 +294,8 @@ tracked in `vendored.json` (repo root) and refreshed with `python scripts/vendor
 detail in the `vendored-sources` skill):
 
 - Keep vendored files **byte-identical to upstream** — local additions go in `local_only` sidecars
-  (`ATTRIBUTION.md`, `claude_md.md`, `hook.*`); the only in-file change is `frontmatter_inject`.
+  (`ATTRIBUTION.md`, `claude_md.md`, `hook.*`); the only in-file changes are `frontmatter_inject` (add keys) and
+  `frontmatter_override` (replace keys, e.g. trim a `description` under 200 chars).
 - Every vendored dir has an **`ATTRIBUTION.md`**; vendor the upstream **`LICENSE` verbatim** if it has
   one. Never fabricate a copyright notice. Only vendor permissive licenses (MIT/Apache/BSD/ISC).
 - Add a `vendored.json` entry for anything imported so it's attributed and updatable.

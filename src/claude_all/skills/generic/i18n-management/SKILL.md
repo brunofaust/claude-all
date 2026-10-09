@@ -1,14 +1,6 @@
 ---
 name: i18n-management
-description: >-
-  Add a translation key and audit for locale drift across a project's i18n systems — a project
-  commonly has MORE THAN ONE (a frontend framework's JSON locale tree, a backend's own JSON locale
-  tree, template-based per-locale files like email HTML) and they rarely share a key set, a locale
-  list, or even a locale-code convention (a frontend `pt-BR` vs a backend `pt`, for example). Use
-  when: adding a new translation/i18n key, updating copy that needs to propagate to every locale,
-  auditing locale files for missing/orphan keys or empty placeholder strings, reviewing email or
-  document templates for per-locale drift, or before a release to catch a locale that silently
-  fell behind.
+description: "Use when adding or renaming translation keys or auditing locale drift across a project's i18n systems (frontend, backend, email templates)."
 disable-model-invocation: false
 user-invocable: true
 ---

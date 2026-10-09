@@ -1,14 +1,6 @@
 ---
 name: python-module-migration
-description: >-
-  Mechanically and safely relocate Python modules/packages and repoint every importer. Use when:
-  moving a module to a new package (e.g. myapp.foo → myapp.core.foo), splitting a module into a
-  package, restructuring layout (containment / move-by-subject refactors), repointing imports after
-  a git mv, fixing stale patch() targets after a move, or executing a move plan across src/ + tests/.
-  Covers the git mv + import-repoint + collect-only verify loop and the hard-won foot-guns (perl
-  negative-lookbehind to avoid double-nesting, zsh word-split, BSD-grep substring false-positives,
-  ruff-hook deleting just-added imports, untracked-destination check, patch-target drift that
-  collect-only misses). Pairs with the python-module-migrator agent (the executor).
+description: "Use when moving or splitting Python modules: git mv, repoint every import and patch() target, then verify with pytest collection."
 disable-model-invocation: false
 user-invocable: true
 ---

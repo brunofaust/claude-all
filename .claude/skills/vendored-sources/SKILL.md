@@ -1,12 +1,6 @@
 ---
 name: vendored-sources
-description: >-
-  How this repo vendors (copies) third-party skills/agents from upstream GitHub repos, and how to keep
-  them updated and properly attributed. Use when: importing/copying an external skill or agent into the
-  repo, asked to "update the imported/vendored skills", refreshing a vendored resource from upstream,
-  adding attribution/license to a copied resource, or auditing provenance. Covers the central registry
-  (vendored.json), the sync script (scripts/vendor_sync.py), the keep-vendored-files-pristine
-  discipline, and the MIT/attribution rules. Pairs with research-before-build (reuse) and repo-audit.
+description: "Use when importing, refreshing or auditing vendored third-party skills/agents: the vendored.json registry, vendor_sync.py, pristine files and attribution."
 disable-model-invocation: false
 user-invocable: true
 ---
@@ -31,7 +25,8 @@ One entry per imported resource. The sync script and all provenance derive from 
 | `license`, `author` | for attribution |
 | `files` | (files mode) the explicit list to copy |
 | `local_only` | files that live **only** here (sidecars) — the sync never overwrites or deletes them |
-| `frontmatter_inject` | key/values re-applied to the entry's `SKILL.md` after each sync (e.g. claude-all's `user-invocable`) |
+| `frontmatter_inject` | key/values re-applied to the entry's `SKILL.md` after each sync (e.g. claude-all's `user-invocable`); only ADDS keys upstream lacks |
+| `frontmatter_override` | key/values that REPLACE an upstream key, including its folded lines (e.g. a `description` trimmed under 200 chars for the skill-listing budget) |
 | `last_synced` | `{ date, commit }` — stamped by the sync script (copy modes) |
 | `last_reviewed` | `{ date, commit }` — (watch mode) last upstream commit a human reviewed; advanced only by `--ack <id>` |
 
@@ -44,7 +39,7 @@ python scripts/vendor_sync.py --id humanink    # sync just one
 ```
 
 For each entry the script shallow-clones `source.repo` at `source.ref`, refreshes the local files,
-**preserves `local_only`**, re-applies `frontmatter_inject` to `SKILL.md`, and records the upstream
+**preserves `local_only`**, re-applies `frontmatter_inject`/`frontmatter_override` to `SKILL.md`, and records the upstream
 commit. It needs `git` + network. **Always review the diff and commit** — the script never commits.
 `reference` entries are reported and skipped (they're already always-latest).
 
@@ -69,7 +64,7 @@ two entries (`<skill>@<source>` ids).
 
 - **Don't edit vendored files in place.** Byte-identical-to-upstream files mean clean sync diffs. Put
   every local addition (attribution, CLAUDE.md snippet, hooks) in a **`local_only`** sidecar so the
-  sync preserves it. The only sanctioned in-file change is `frontmatter_inject` (re-applied each sync).
+  sync preserves it. The only sanctioned in-file changes are `frontmatter_inject` / `frontmatter_override` (re-applied each sync).
 - **Attribution is mandatory.** Each vendored dir gets an `ATTRIBUTION.md` (source repo, path, ref,
   author, license, local changes). If upstream ships a `LICENSE`, **vendor it verbatim** (MIT etc.
   require keeping the copyright + permission notice). If upstream declares a license but ships no
@@ -83,7 +78,7 @@ two entries (`<skill>@<source>` ids).
 1. `research-before-build` — confirm it's worth importing and check the license.
 1. Copy the files into `skills/<cat>/<name>/` (or `agents/...`); keep them verbatim.
 1. Add `ATTRIBUTION.md` (+ vendor the upstream `LICENSE` if it has one).
-1. Add a `vendored.json` entry; list sidecars in `local_only` and any patches in `frontmatter_inject`.
+1. Add a `vendored.json` entry; list sidecars in `local_only` and any frontmatter patches in `frontmatter_inject` / `frontmatter_override`.
 1. If the resource ships multilingual / intentional-misspelling content, scope-exclude its path from
    the prek `typos` hook (see the `prek` skill).
 1. `python scripts/vendor_sync.py --check --id <id>` to confirm the entry resolves;
@@ -97,5 +92,5 @@ two entries (`<skill>@<source>` ids).
 | Copying without attribution / license | always `ATTRIBUTION.md`; vendor upstream `LICENSE` verbatim |
 | Fabricating a copyright line when upstream has none | record the declared license in `ATTRIBUTION.md` only |
 | Vendoring a non-permissive / unlicensed repo | stop and ask; consider a `reference` entry |
-| Hand-editing vendored files then losing them on sync | put local changes in `local_only` / `frontmatter_inject` |
+| Hand-editing vendored files then losing them on sync | put local changes in `local_only` / `frontmatter_inject` / `frontmatter_override` |
 | No registry entry | add to `vendored.json` so it's tracked + updatable |

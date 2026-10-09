@@ -1,14 +1,6 @@
 ---
 name: agent-orchestration
-description: >-
-  Measured failure modes of running many subagents in parallel against one
-  repository, and the dispatch rules that fixed them. Use when: fanning out
-  parallel work across worktrees, an agent went silent / "parked" / returned a
-  status line instead of a report, deciding whether to believe a subagent's
-  report before acting on it, a long verification run needs to be proven,
-  partitioning a retrospective or audit across several agents, or two
-  individually-green PRs broke the main branch. Covers what happens AFTER
-  dispatch — `subagent-prompting` covers writing the prompt itself.
+description: "Use when fanning out parallel subagents across worktrees, deciding whether to trust a subagent report, or when individually green PRs broke main together."
 disable-model-invocation: false
 user-invocable: true
 ---
