@@ -98,6 +98,22 @@ prek install
 uv run prek install
 ```
 
+### Git worktrees — give each one its own hooks dir
+
+Worktrees share `.git/hooks`. `prek install` in a worktree writes the **shared** hooks with that
+worktree's interpreter path, so removing the worktree breaks commits in every other one. Before
+installing, point this worktree at its own hooks dir:
+
+```bash
+git config extensions.worktreeConfig true
+git config --worktree core.hooksPath "$(git rev-parse --absolute-git-dir)/hooks"
+uv run prek install
+```
+
+With Worktrunk, put this in the project's `.config/wt.toml` so `wt switch --create` does it (plus
+locked deps and copied local files) for every task worktree — copy
+[`wt.toml.example`](wt.toml.example). For the `wt` CLI itself, load the `worktrunk:worktrunk` skill.
+
 ______________________________________________________________________
 
 ## Daily commands
