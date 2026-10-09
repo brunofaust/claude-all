@@ -1,15 +1,6 @@
 ---
 name: architecture-decision-guard
-description: >-
-  Guardrails before adding structural boundaries to a codebase. Use when: deciding whether to split a
-  module into layers/tiers, introducing an abstraction or interface "for flexibility", adding a new
-  package boundary, debating containment vs layering, designing where shared/generic code should live,
-  or rolling out a new lint/complexity gate across an existing codebase. The core rule: don't add a
-  boundary (layer, tier, abstraction, indirection) without a concrete present need — prefer
-  containment (single-owner + banned-api enforcement) over layering when the only goal is "keep this
-  kind of code in one place". Prevents speculative architecture (tiers that create DI/base-class
-  puzzles they were meant to avoid) and commit-blocking lint backlogs. Pairs with
-  brunofaust-python-style (project-structure, external-system-ownership) and python-module-migration.
+description: "Use before adding a layer, abstraction, package boundary or repo-wide gate: require a concrete present need and prefer containment over layering."
 disable-model-invocation: false
 user-invocable: true
 ---

@@ -1,14 +1,6 @@
 ---
 name: ship
-description: >-
-  Lightweight pre-commit pipeline — run the quality gates and commit, in order, stopping on the first
-  hard failure. Sequence: simplification audit (vs yagni.md) → test-coverage gate → lint-fixer →
-  test-runner → full prek gate (--all-files, both stages, zero-Failed) → verification-loop →
-  (confirm) → git-committer.
-  Use when: "ship this", "run the gates and commit", finishing a small change and wanting it linted +
-  tested + committed without a full PR ceremony. This is the LIGHT flow — no code review, no PR. For
-  the heavier review + draft-PR flow use `/ship-pr`. Orchestrator only: it sequences existing agents
-  and skills and gates on their results; it never re-implements their logic.
+description: "Use to run the quality gates and commit locally, stopping on the first failure. No review and no PR (use ship-pr for that)."
 disable-model-invocation: true
 user-invocable: true
 ---

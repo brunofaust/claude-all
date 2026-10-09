@@ -1,21 +1,6 @@
 ---
 name: repo-audit
-description: >-
-  Whole-repo, point-in-time code-quality audit for an existing / brownfield codebase in ANY language
-  or architecture (Python, TypeScript/JS & frontend, Go, Rust, …). It audits the repo against a set of
-  GENERIC boundaries — format/lint, static type safety, bounded complexity, layering & dependency
-  direction, single-owner external systems, typed contracts at trust boundaries, no silent error
-  swallowing, docs, dead code, tests/coverage, config discipline, secrets/SAST — plus IaC
-  (CloudFormation + Terraform) and a process-tooling pass (session-harvest). The brunofaust-python-style
-  standard + prek are the REFERENCE instantiation of these boundaries; for other stacks you translate
-  the same idea to the stack's tooling (eslint/tsc, golangci-lint, clippy, …) and reason about
-  anything with no off-the-shelf tool. Also profiles the project and recommends which claude-all
-  agents/skills/hooks to install — run it per-project. Use when: onboarding a colleague or inherited
-  repo, a first-time congruence audit, establishing a quality baseline before adopting gates, deciding
-  what to fix first, or a recurring health check. Produces a per-dimension scorecard + a RATCHETING
-  remediation roadmap (improve without a commit-blocking big-bang). Report-only — measures and plans;
-  fixes happen in later reviewed PRs. Distinct from verification-loop (gates ONE diff), code-review-
-  discipline (review output shape), and security-audit (security layers — this delegates to it).
+description: "Use for a whole-repo quality audit in any language: per-dimension scorecard, ratcheting remediation roadmap, and which claude-all resources to install."
 disable-model-invocation: false
 user-invocable: true
 ---

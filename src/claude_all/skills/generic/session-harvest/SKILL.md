@@ -1,18 +1,6 @@
 ---
 name: session-harvest
-description: >-
-  Mine AI coding-assistant session histories — Claude Code, Cursor, Codex, GitHub Copilot — for
-  recurring friction, re-derived knowledge, and repeated workflows, then turn each pattern into a
-  proposed reusable resource (skill / agent / hook / CLAUDE.md instruction / settings change) that
-  would most improve the project. Use when: onboarding a repo and wanting to harvest the team's
-  assistant usage into durable tooling, mining past sessions for improvements, deciding which
-  skills/agents/hooks a project should have or what to automate next, or as the process-tooling dimension of a
-  repo-audit. Output is a PRIORITIZED BACKLOG: for each proposed resource — its type + name, a
-  description, the evidence, an estimated % improvement for the project, and effort. Report-only — it
-  PROPOSES the backlog; it never auto-creates hooks/settings/instructions (those need confirmation).
-  Reads histories PROGRAMMATICALLY (jq / sqlite3 / grep), never dumps raw transcripts into context.
-  Superset of the friction-analyzer agent (single Claude transcript → one rule); this is the
-  cross-assistant, multi-resource-type backlog.
+description: "Use to mine Claude Code, Cursor, Codex or Copilot session histories for recurring friction and propose skills, agents, hooks or rules. Report-only."
 disable-model-invocation: false
 user-invocable: true
 ---

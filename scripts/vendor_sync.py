@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Sync vendored skills/agents from upstream repos listed in ``vendored.json``.
 
-Preserves ``local_only`` sidecars and re-applies ``frontmatter_inject``. `watch`
+Preserves ``local_only`` sidecars and re-applies ``frontmatter_inject``/``_override``. `watch`
 entries are report-only (never written, never affect ``--check``); ``--ack <id>``
 advances ``last_reviewed``. Other flags: ``--id``, ``--check`` (dry run).
 """
@@ -102,29 +102,61 @@ def list_files(root: Path) -> set[Path]:
     return {p.relative_to(root) for p in root.rglob("*") if p.is_file() and ".git" not in p.parts}
 
 
-def frontmatter_additions(skill_md: Path, inject: dict[str, Any]) -> list[str]:
-    if not inject or not skill_md.exists():
-        return []
-    lines = skill_md.read_text(encoding="utf-8").splitlines()
-    if not lines or lines[0].strip() != "---":
-        return []
-    try:
-        close = lines.index("---", 1)
-    except ValueError:
-        return []
-    existing = {ln.split(":", 1)[0].strip() for ln in lines[1:close] if ":" in ln}
-    return [f"{key}: {yaml_scalar(val)}" for key, val in inject.items() if key not in existing]
-
-
-def apply_frontmatter(skill_md: Path, inject: dict[str, Any]) -> bool:
-    additions = frontmatter_additions(skill_md, inject)
-    if not additions:
-        return False
-    lines = skill_md.read_text(encoding="utf-8").splitlines()
+def render_frontmatter(text: str, inject: dict[str, Any], override: dict[str, Any]) -> str:
+    """Apply override (replace key + folded lines) and inject (add only if missing) to text."""
+    lines = text.splitlines()
+    if not lines or lines[0].strip() != "---" or "---" not in lines[1:]:
+        return text
     close = lines.index("---", 1)
-    new_lines = [*lines[:close], *additions, *lines[close:]]
-    skill_md.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
-    return True
+    head: list[str] = []
+    skipping = False
+    for line in lines[1:close]:
+        key = line.split(":", 1)[0].strip() if ":" in line and not line[:1].isspace() else None
+        if key is not None:
+            skipping = key in override
+            if skipping:
+                head.append(f"{key}: {json.dumps(override[key], ensure_ascii=False)}")
+                continue
+        elif skipping:
+            continue  # continuation line of an overridden key
+        head.append(line)
+    existing = {ln.split(":", 1)[0].strip() for ln in head if ":" in ln and not ln[:1].isspace()}
+    head += [
+        f"{k}: {json.dumps(v, ensure_ascii=False)}"
+        for k, v in override.items()
+        if k not in existing
+    ]
+    head += [
+        f"{k}: {yaml_scalar(v)}"
+        for k, v in inject.items()
+        if k not in existing and k not in override
+    ]
+    rendered = "\n".join([lines[0], *head, *lines[close:]])
+    return rendered + ("\n" if text.endswith("\n") else "")
+
+
+def pending_frontmatter(
+    skill_md: Path, inject: dict[str, Any], override: dict[str, Any]
+) -> str | None:
+    """Return skill_md's text with inject/override applied, or None if already applied."""
+    if not skill_md.exists():
+        return None
+    text = skill_md.read_text(encoding="utf-8")
+    rendered = render_frontmatter(text, inject, override)
+    return None if rendered == text else rendered
+
+
+def frontmatter_drift(skill_md: Path, inject: dict[str, Any], override: dict[str, Any]) -> bool:
+    return pending_frontmatter(skill_md, inject, override) is not None
+
+
+def apply_frontmatter(
+    skill_md: Path, inject: dict[str, Any], override: dict[str, Any] | None = None
+) -> bool:
+    rendered = pending_frontmatter(skill_md, inject, override or {})
+    if rendered is not None:
+        skill_md.write_text(rendered, encoding="utf-8")
+    return rendered is not None
 
 
 def yaml_scalar(val: Any) -> str:
@@ -135,7 +167,7 @@ def yaml_scalar(val: Any) -> str:
 
 
 def sync_entry(entry: dict[str, Any], srcroot: Path, *, write: bool) -> list[str]:
-    """Refresh one entry's local files from ``srcroot``. Returns a change list."""
+    """Refresh entry's files from srcroot (write=False only reports); returns the changes."""
     local = REPO_ROOT / entry["path"]
     local_only = set(entry.get("local_only", []))
     mode = entry["vendor_mode"]
@@ -148,6 +180,7 @@ def sync_entry(entry: dict[str, Any], srcroot: Path, *, write: bool) -> list[str
         return [f"skip ({mode})"]
 
     inject = entry.get("frontmatter_inject", {})
+    override = entry.get("frontmatter_override", {})
     changes: list[str] = []
     for rel in sorted(wanted):
         if str(rel) in local_only:
@@ -162,12 +195,12 @@ def sync_entry(entry: dict[str, Any], srcroot: Path, *, write: bool) -> list[str
         if not up.exists():
             changes.append(f"MISSING upstream: {rel}")
             continue
-        if inject and rel == Path("SKILL.md"):
+        if (inject or override) and rel == Path("SKILL.md"):
             # The local SKILL.md legitimately carries the injected frontmatter
             # keys, so comparing it against pristine upstream reports drift on
             # EVERY run. Normalize: inject into the (temp) upstream copy first,
             # then compare like-for-like.
-            apply_frontmatter(up, inject)
+            apply_frontmatter(up, inject, override)
         if not dst.exists() or not filecmp.cmp(up, dst, shallow=False):
             changes.append(f"{'add' if not dst.exists() else 'update'}: {rel}")
             if write:
@@ -183,11 +216,11 @@ def sync_entry(entry: dict[str, Any], srcroot: Path, *, write: bool) -> list[str
 
     skill_md = local / "SKILL.md"
     if write:
-        if apply_frontmatter(skill_md, inject):
-            changes.append("re-applied frontmatter_inject -> SKILL.md")
-    elif frontmatter_additions(skill_md, inject):
-        # --check must count a missing injected key as drift too.
-        changes.append("frontmatter_inject key(s) missing from SKILL.md")
+        if apply_frontmatter(skill_md, inject, override):
+            changes.append("re-applied frontmatter_inject/override -> SKILL.md")
+    elif frontmatter_drift(skill_md, inject, override):
+        # --check must count a missing injected/overridden key as drift too.
+        changes.append("frontmatter_inject/override not applied to SKILL.md")
     return changes
 
 

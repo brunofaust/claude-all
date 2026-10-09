@@ -1,18 +1,6 @@
 ---
 name: security-audit
-description: >-
-  Holistic security audit + threat modeling across the whole stack — application (OWASP Top 10),
-  secrets, dependency supply chain, CI/CD pipeline, LLM/AI, and cloud/infra. Use when: doing a
-  security pass before a release, threat-modeling a feature/service, reviewing auth/authz or input
-  handling on the backend, auditing dependencies for CVEs, hardening a CI/CD pipeline, securing an
-  LLM-integrated feature (prompt injection, untrusted model output), sweeping a repo/git history for
-  leaked secrets, or DESIGNING a tool/agent/automation that takes a side-effecting action to be safe by
-  default (schema validation, dry-run default, bounded params, rollback, confirmation gates). Two modes:
-  a daily zero-noise high-confidence gate, and a periodic deep audit.
-  Complements the security reference in brunofaust-frontend-style (frontend XSS/CSP), iam-auditor
-  (AWS IAM), and code-review-discipline
-  (output shape). Use the built-in `/security-review` for a quick diff pass; use this for the
-  whole-system view.
+description: "Use for a whole-stack security audit or threat model: OWASP, secrets, supply chain, CI/CD, LLM trust boundaries, cloud. For a quick diff pass use /security-review."
 disable-model-invocation: false
 user-invocable: true
 ---

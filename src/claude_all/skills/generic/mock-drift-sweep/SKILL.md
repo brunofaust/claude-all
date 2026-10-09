@@ -1,13 +1,6 @@
 ---
 name: mock-drift-sweep
-description: >-
-  Sweep and update every mock/fake/stub after changing a function signature, return shape, exception
-  type, or import path — so green tests don't hide a broken production seam. Use when: changing a
-  function/method signature or return type, renaming or moving a module, changing what an external SDK
-  or DB call returns or raises, "the tests pass but prod is broken", "update the mocks", migrating an
-  SDK, or reviewing a diff that touches a widely-mocked boundary. Mock drift is the #1 silent failure:
-  agents are excellent at making tests pass — they satisfy the fixture you gave them, not the
-  production system. A mock left asserting the old shape is a green test over a broken contract.
+description: "Use after changing a signature, return shape, exception or import path: update every mock and fake so green tests don't hide a broken production seam."
 disable-model-invocation: false
 user-invocable: true
 ---

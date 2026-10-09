@@ -1,13 +1,6 @@
 ---
 name: resource-scaffolder
-description: >-
-  Turn an APPROVED proposal (from session-harvest / repo-audit / diff-retrospective / friction-analyzer
-  / lessons-extractor) into a correctly-scaffolded Claude Code resource — a skill, subagent, hook, or
-  CLAUDE.md instruction — following the right conventions for the target (a project's `.claude/`, or a
-  contribution back to claude-all). Use when: "create the skill/agent/hook we just proposed", "scaffold
-  these into the project", or as the build phase of `/retro`. It is the generation engine those
-  propose-only resources lack. Generates files only after the proposal is confirmed; verifies discovery
-  + lint before declaring done.
+description: "Use to turn an approved proposal into a correctly scaffolded skill, agent, hook or CLAUDE.md instruction, for a project or a claude-all contribution."
 disable-model-invocation: false
 user-invocable: true
 ---

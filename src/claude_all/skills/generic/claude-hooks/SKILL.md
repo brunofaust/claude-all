@@ -1,13 +1,6 @@
 ---
 name: hook-authoring
-description: >-
-  Authoring and debugging Claude Code hooks — the scripts Claude Code runs automatically around tool
-  calls and lifecycle events. Use when: writing a new hook (a PreToolUse guard, a PostToolUse reaction,
-  a Stop/SessionStart action), wiring a hook into settings.json, debugging why a hook fires / blocks /
-  is ignored, or hardening a hook so its own failure never breaks a session. Covers the hook events +
-  matchers, the stdin/stderr/exit-code contract, the two archetypes (a guard that BLOCKS with exit 2
-  vs a utility that must NEVER break a turn → exit 0), the resilient-shim pattern, exit-code capture,
-  the settings.json schema, and how to test a hook. References this repo's hooks/ examples.
+description: "Use when writing, wiring or debugging Claude Code hooks: events, matchers, the exit-code contract, guard vs utility archetypes, settings.json and testing."
 disable-model-invocation: false
 user-invocable: true
 ---

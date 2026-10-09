@@ -53,6 +53,9 @@
       "last_synced": {
         "date": "2026-07-03",
         "commit": "f8a72b9603728bb92a217a879b7e62e43ad76c81"
+      },
+      "frontmatter_override": {
+        "description": "React and Next.js performance guidelines from Vercel. Use when writing, reviewing or refactoring React/Next.js code for rendering, data fetching or bundle size."
       }
     },
     {
@@ -76,6 +79,9 @@
       "last_synced": {
         "date": "2026-07-03",
         "commit": "f8a72b9603728bb92a217a879b7e62e43ad76c81"
+      },
+      "frontmatter_override": {
+        "description": "React composition patterns that scale. Use when refactoring boolean-prop sprawl or designing compound components, render props, context providers or reusable APIs."
       }
     },
     {
@@ -99,6 +105,9 @@
       "last_synced": {
         "date": "2026-08-26",
         "commit": "4ec6f84b61cd3c931046c3e6e398f3ae7de372f7"
+      },
+      "frontmatter_override": {
+        "description": "Use when adding page transitions, route-change or shared-element animations in React/Next.js with the View Transition API (<ViewTransition>)."
       }
     },
     {

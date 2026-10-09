@@ -1,14 +1,6 @@
 ---
 name: execution-trace-audit
-description: >-
-  Debugger-style flow-level audit of a service's entrypoints — trace each one hop-by-hop the way you'd
-  step a debugger, counting DB/network round-trips, to surface dead code and producer/consumer bugs
-  that file-level review misses. Use when: doing a periodic audit of Lambda / ECS / K8s / CLI / HTTP
-  entrypoints, after a big migration or refactor, hunting latency (too many round-trips) or flow-dead
-  code (a branch nothing can reach today, a helper only tests call), or when file-by-file review keeps
-  passing code that breaks in production. Produces a risk-rated simplification table + a separate bug
-  ledger. The honest payoff is NOT lines removed (usually single-digit %) — it's the round-trips saved
-  and the confirmed bugs the trace uncovers.
+description: "Use for a flow-level audit of a service's entrypoints: trace each hop like a debugger, count round-trips, and find dead code and producer/consumer bugs."
 disable-model-invocation: false
 user-invocable: true
 ---

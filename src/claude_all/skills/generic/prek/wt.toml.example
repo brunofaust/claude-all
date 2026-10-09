@@ -1,4 +1,4 @@
-# Worktrunk project config — copy to .config/wt.toml and commit it.
+# Worktrunk project config — copy to .config/wt.toml and commit it (see SKILL.md, "Git worktrees").
 # Hooks run when `wt switch --create` makes a worktree. Each [[...]] block is one pipeline
 # step (in order); keys inside a block run concurrently. pre-* blocks, post-* is background.
 

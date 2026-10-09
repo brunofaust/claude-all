@@ -1,7 +1,6 @@
 ---
 name: aws-debug-loop
-description: >-
-  Structured debug loop for AWS dev environments. Covers e2e and integration test failures: how to split a full test into isolated pieces, hotfix the dev environment directly (env vars, timeouts, image versions) before deploying, validate each fix in isolation, run independent pieces in parallel, sweep ALL log groups with `awslogs` for scattered/async root causes, and know when to declare a piece fixed vs when to redeploy. Stop condition: the full test passes clean — never stop earlier. Use when: debugging e2e or integration test failures against AWS dev environments, working with Lambda / Step Functions / SQS / DynamoDB / ECS, investigating multi-step pipeline failures, sweeping CloudWatch logs across every log group for a symptom with no obvious owner, or deciding whether to hotfix dev vs deploy.
+description: "Use when e2e/integration tests fail against an AWS dev environment: split the test, hotfix dev, sweep every log group, loop until the full test passes."
 user-invocable: true
 ---
 

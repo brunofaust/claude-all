@@ -1,14 +1,6 @@
 ---
 name: retro
-description: >-
-  Unified "learn & harden" workflow — gather evidence from THREE complementary sources (assistant
-  session history, merged-PR diffs, and the current code), synthesize ONE ranked backlog of guardrails
-  + new resources, and (after confirm) generate them. Sequence: [session-harvest + diff-retrospective
-  /lessons-extractor fan-out + repo-audit] → synthesize & dedup → confirm → resource-scaffolder /
-  regression-gates. Use when: "do a retrospective and harden the repo", "learn from our history and
-  PRs and build the missing skills/agents/hooks", a sprint/release post-mortem, or onboarding a repo
-  you want to instrument. Report-only until the confirmed build phase. Orchestrator: it sequences
-  existing resources, it doesn't re-implement them.
+description: "Use for a learn-and-harden retrospective: combine session history, merged-PR diffs and the current code into one ranked backlog of guardrails."
 disable-model-invocation: true
 user-invocable: true
 ---

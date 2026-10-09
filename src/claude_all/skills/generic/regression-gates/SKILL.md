@@ -1,15 +1,6 @@
 ---
 name: regression-gates
-description: >-
-  Introduce a NEW lint/quality/correctness gate to an existing (brownfield) codebase WITHOUT a
-  big-bang cleanup — the regression-only baseline harness + the three-step warn→error rollout. Use
-  when: adding a custom checker/AST rule/pre-commit hook to a repo that already has violations,
-  rolling a gate out without fixing everything first, baselining existing findings, ratcheting tech
-  debt down, scoping a rule to fail only on new code, wiring a gate into CI, or writing
-  a static checker (single migration head, banned env-var, junk-drawer module, module-level private
-  names). Ships a runnable `baseline_gate.py` template + example checkers under `checkers/`. The
-  governing principle: a rule in prose gets violated; a rule encoded as a checker holds — so every
-  "we should always…" becomes an executable gate, seeded against today's debt and ratcheted to zero.
+description: "Use when adding a new lint or correctness gate to a codebase with existing violations: baseline today's debt, fail only on new findings, ratchet to zero."
 disable-model-invocation: false
 user-invocable: true
 ---
