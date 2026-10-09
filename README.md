@@ -267,6 +267,7 @@ Reusable know-how Claude loads on demand — a checklist, a workflow, or a style
 | [security-audit](src/claude_all/skills/generic/security-audit/SKILL.md) | Whole-stack security review — app, secrets, dependencies, CI/CD, cloud. |
 | [hook-authoring](src/claude_all/skills/generic/claude-hooks/SKILL.md) | How to write and debug Claude Code hooks. |
 | [wait-for-ready](src/claude_all/skills/generic/wait-for-ready/SKILL.md) | Poll until a service is ready instead of a fixed sleep. |
+| [worktree-dev-environment](src/claude_all/skills/generic/worktree-dev-environment/SKILL.md) | Set up `.config/wt.toml` + `.worktreeinclude` so every Worktrunk task worktree is ready in one command. |
 | [humanink](src/claude_all/skills/generic/humanink/SKILL.md) | Detects AI-sounding writing and rewrites it to sound human. |
 | [repo-audit](src/claude_all/skills/generic/repo-audit/SKILL.md) | Full repo quality scorecard and improvement roadmap. |
 | [session-harvest](src/claude_all/skills/generic/session-harvest/SKILL.md) | Mines your Claude Code history for what to automate next. |
@@ -341,6 +342,7 @@ CLI tools installed at the OS level, not into `~/.claude/`. Each lives at `src/c
 | --- | --- |
 | [`rtk`](src/claude_all/tools/rtk/tool.json) | Cuts token cost on common CLI output (git, grep, aws, pytest, …) by 60-90%. |
 | [`code-review-graph`](src/claude_all/tools/code-review-graph/tool.json) | A code knowledge graph for faster, cheaper code review. |
+| [`worktrunk`](src/claude_all/tools/worktrunk/tool.json) | `wt` — one-command task worktrees for parallel agents; prints the shell-integration and Claude/Codex plugin steps to run. |
 
 ## Instructions
 

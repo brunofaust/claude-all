@@ -1,0 +1,8 @@
+{
+  "name": "worktrunk",
+  "github": "https://github.com/max-sixty/worktrunk",
+  "type": "brew",
+  "package": "worktrunk",
+  "post_install_message": "Worktrunk (`wt`) installed. Finish setup yourself (each step edits your shell/agent config, so it is not run for you):\n  1. Shell integration (lets `wt switch` cd you into the worktree): wt config shell install\n  2. Claude Code plugin (worktrunk skill + /wt-switch-create): wt config plugins claude install\n     (or: claude plugin marketplace add max-sixty/worktrunk && claude plugin install worktrunk@worktrunk)\n  3. Codex plugin (optional): wt config plugins codex install\nThen restart your shell and Claude Code. Per-project setup (.config/wt.toml, .worktreeinclude): load the `worktree-dev-environment` skill.",
+  "description": "Git worktree manager for parallel AI-agent work. `wt switch --create <branch>` makes a task worktree and runs the project's .config/wt.toml hooks (deps, git hooks, copied local files)."
+}
