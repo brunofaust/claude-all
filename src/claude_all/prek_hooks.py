@@ -145,20 +145,27 @@ def detect_layout(root: Path) -> dict[str, str]:
     if package is not None:
         layout["package"] = package
         layout.setdefault("src", package)
-    if (root / "tests").is_dir():
+    # A hook over a directory with nothing to scan exits 2 (fail closed): only offer real ones.
+    if has_files(root / "tests", "*.py"):
         layout["tests"] = "tests"
-        layout["unit_tests"] = "tests/unit" if (root / "tests" / "unit").is_dir() else "tests"
-        if (root / "tests" / "e2e").is_dir():
+        layout["unit_tests"] = (
+            "tests/unit" if has_files(root / "tests" / "unit", "*.py") else "tests"
+        )
+        if has_files(root / "tests" / "e2e", "*.py"):
             layout["e2e_tests"] = "tests/e2e"
     for candidate in ("infra", "terraform", "iac"):
-        if (root / candidate).is_dir():
+        if has_files(root / candidate, "*.tf"):
             layout["infra"] = candidate
             break
     for candidate in ("alembic/versions", "migrations/versions", "db/migrations/versions"):
-        if (root / candidate).is_dir():
+        if has_files(root / candidate, "*.py"):
             layout["migrations"] = candidate
             break
     return layout
+
+
+def has_files(directory: Path, pattern: str) -> bool:
+    return directory.is_dir() and next(directory.rglob(pattern), None) is not None
 
 
 def project_package(root: Path) -> str | None:

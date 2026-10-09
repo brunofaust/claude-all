@@ -60,6 +60,7 @@ def make_project(root: Path) -> None:
     (root / "src" / "my_app").mkdir(parents=True)
     (root / "src" / "my_app" / "__init__.py").write_text("")
     (root / "tests" / "unit").mkdir(parents=True)
+    (root / "tests" / "unit" / "test_my_app.py").write_text("")
 
 
 def installed(*keys: str) -> dict:
@@ -157,3 +158,15 @@ def test_runner_baseline_seed_then_ratchet(tmp_path: Path) -> None:
     assert run_check(*ratchet, cwd=tmp_path).returncode == 0
     (tmp_path / "helpers.py").write_text("x = 1\n")
     assert run_check(*ratchet, cwd=tmp_path).returncode == 1
+
+
+def test_layout_ignores_directories_without_matching_files(tmp_path: Path) -> None:
+    (tmp_path / "tests" / "unit").mkdir(parents=True)
+    (tmp_path / "infra").mkdir()
+    layout = prek_hooks.detect_layout(tmp_path)
+    assert "tests" not in layout and "unit_tests" not in layout and "infra" not in layout
+    (tmp_path / "tests" / "unit" / "test_x.py").write_text("")
+    (tmp_path / "infra" / "main.tf").write_text("")
+    layout = prek_hooks.detect_layout(tmp_path)
+    assert layout["tests"] == "tests" and layout["unit_tests"] == "tests/unit"
+    assert layout["infra"] == "infra"
