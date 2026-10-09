@@ -119,10 +119,14 @@ def run_check(argv: Sequence[str] | None = None) -> int:
         if spec.exit_zero_flag is None and not spec.stdout_findings:
             print(f"claude-all-check: {spec.id} does not support --baseline", file=sys.stderr)
             return 2
-        baseline, rest = rest[1], rest[2:]
+        gate = [sys.executable, str(BASELINE_GATE), "--baseline", rest[1]]
+        rest = rest[2:]
+        if rest[:1] == ["--update"]:
+            gate.append("--update")
+            rest = rest[1:]
         if spec.exit_zero_flag:
             rest.append(spec.exit_zero_flag)
-        command = [sys.executable, str(BASELINE_GATE), "--baseline", baseline, "--", *command]
+        command = [*gate, "--", *command]
         return subprocess.run([*command, *rest], check=False).returncode
     if not spec.stdout_findings:
         return subprocess.run([*command, *rest], check=False).returncode
@@ -144,6 +148,12 @@ def detect_layout(root: Path) -> dict[str, str]:
     if (root / "tests").is_dir():
         layout["tests"] = "tests"
         layout["unit_tests"] = "tests/unit" if (root / "tests" / "unit").is_dir() else "tests"
+        if (root / "tests" / "e2e").is_dir():
+            layout["e2e_tests"] = "tests/e2e"
+    for candidate in ("infra", "terraform", "iac"):
+        if (root / candidate).is_dir():
+            layout["infra"] = candidate
+            break
     for candidate in ("alembic/versions", "migrations/versions", "db/migrations/versions"):
         if (root / candidate).is_dir():
             layout["migrations"] = candidate

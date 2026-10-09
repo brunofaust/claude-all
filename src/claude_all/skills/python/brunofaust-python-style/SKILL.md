@@ -23,28 +23,29 @@ Production-grade async Python. Async-first, strict types, immutable parameter ty
 
 ## Wiring the gates — shipped ≠ enforced (check this ON EVERY INVOCATION)
 
-Installing this skill copies the checkers under `checkers/` (`pydantic_contract.py`,
-`model_contract.py`, `lambda_event_validation.py`, `flat_test_mirror.py`,
-`all_contract.py`, `docstring_budget.py`) and `regression-gates/baseline_gate.py` into place **as files**.
-It does **NOT** wire them into any project's `prek.toml` / `.pre-commit-config.yaml`
-— gate wiring is *per-project* (each repo has its own hook config, paths, allowlists,
-and `language_version`). A shipped-but-unwired checker enforces **nothing**: it is the
-exact failure this whole skill is about — *a rule in prose gets violated; a rule in a
-checker holds*. An un-run checker is prose.
+Installing this skill ships its checkers under `checkers/`, but it does **NOT** wire them
+into any project. A shipped-but-unwired checker enforces **nothing**: *a rule in prose gets
+violated; a rule in a checker holds*. An un-run checker is prose.
 
-**So, whenever this skill is invoked on a Python project, first verify the gates are
-actually wired — do not assume they are:**
+**Wire them with `claude-all --install-hooks`** (run in the project root). claude-all is a
+prek/pre-commit hook repo: the command writes one managed block into `prek.toml` /
+`.pre-commit-config.yaml` with a pinned `rev` and the hook args filled from the project
+layout. Never copy checker scripts into the project. Copies drift from upstream and CI
+can't see `~/.claude`.
 
-1. **Enumerate what ships.** List the checker files this skill installs (glob the
-   skill's `checkers/*.py` + `baseline_gate.py`).
-2. **Check each is wired.** Grep the project's `prek.toml` **and**
-   `.pre-commit-config.yaml` for each checker's `entry`. A checker with no hook entry
-   is unenforced — report it, and offer to wire it (recipe → `references/enforcement.md`).
-3. **Confirm it actually runs, not just that it's present.** A hook can be listed and
-   still be a vacuous pass — see the `prek` skill's *vacuous PASS*: `prek run
-   --all-files` only sees git-tracked files and only the pre-commit stage, and an
-   AST hook on an older `language_version` skips files while exiting 0. "Wired" means
-   the entry exists AND `language_version` is pinned AND both stages are green.
+**Whenever this skill is invoked on a Python project, verify the gates are wired:**
+
+1. **Check the block exists.** Look for the `claude-all hooks` markers in `prek.toml` /
+   `.pre-commit-config.yaml`. Missing, or missing a hook this skill ships: run
+   `claude-all --install-hooks --dry-run` and offer to apply it.
+2. **Check the `rev` is current.** If it's older than the installed claude-all, re-run
+   `--install-hooks` to bump it (new checkers arrive with new releases).
+3. **Confirm it actually runs, not just that it's present.** See the `prek` skill's
+   *vacuous PASS*: `prek run --all-files` only sees git-tracked files and only the
+   pre-commit stage. "Wired" means the block exists AND both stages are green.
+4. **Existing debt:** never disable a hook to get green. Seed a baseline
+   (`claude-all-check <id> --baseline <id>_baseline.txt --update src`) and add
+   `--baseline <file>` to that hook's args, so the debt ratchets down.
 
 **Auto-improvement — a code change can mint a new gate.** New rules ship over time (this
 skill went from 0 checkers to 5 in one cycle), and a project may add its own. So the

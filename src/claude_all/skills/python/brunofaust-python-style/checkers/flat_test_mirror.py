@@ -46,14 +46,15 @@ def _relative_hint(path: Path, root: Path) -> str:
     return (root / path.name).as_posix()
 
 
-def find_violations(root: Path, select: frozenset[str]) -> list[Finding]:
+def iter_test_files(root: Path) -> list[Path]:
     if not root.is_dir():
         return []
+    return [p for p in sorted(root.rglob("*.py")) if not IGNORED_DIRS & set(p.parts)]
 
+
+def find_violations(root: Path, select: frozenset[str]) -> list[Finding]:
     findings: list[Finding] = []
-    for path in sorted(root.rglob("*.py")):
-        if IGNORED_DIRS & set(path.parts):
-            continue
+    for path in iter_test_files(root):
         rel = path.relative_to(root)
         key = path.as_posix()
 
@@ -123,6 +124,12 @@ def main(argv: list[str] | None = None) -> int:
     select = frozenset(r.strip() for r in args.select.split(",") if r.strip())
     if unknown := select - set(RULES):
         parser.error(f"unknown rule(s): {', '.join(sorted(unknown))}")
+
+    scanned = len(iter_test_files(args.root))
+    print(f"scanned={scanned}", file=sys.stderr)
+    if not scanned:
+        print("ERROR: scanned 0 files — refusing a vacuous pass", file=sys.stderr)
+        return 2
 
     findings = find_violations(args.root, select)
     for finding in findings:

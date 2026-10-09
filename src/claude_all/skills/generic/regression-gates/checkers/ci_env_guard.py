@@ -106,7 +106,12 @@ def main(argv: list[str] | None = None) -> int:
         "roots", nargs="+", type=Path, help="files or dirs to scan (dirs → test*.py)"
     )
     args = parser.parse_args(argv)
-    for file in iter_test_files(args.roots):
+    files = iter_test_files(args.roots)
+    print(f"scanned={len(files)}", file=sys.stderr)
+    if not files:
+        print("ERROR: scanned 0 files — refusing a vacuous pass", file=sys.stderr)
+        return 2
+    for file in files:
         for finding in find_violations(file):
             print(finding)
     return 0

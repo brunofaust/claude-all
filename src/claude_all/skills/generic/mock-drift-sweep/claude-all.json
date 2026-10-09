@@ -46,6 +46,45 @@
         "{src}",
         "{tests}"
       ]
+    },
+    {
+      "id": "unconstrained-patch",
+      "name": "🧪 claude-all · patch() must be autospec/real new=/PropertyMock",
+      "description": "Flags a resolvable patch() target whose double accepts any call: callables lacking autospec=True, constants lacking a non-Mock new=, properties lacking new_callable=PropertyMock.",
+      "script": "checkers/unconstrained_patch.py",
+      "args": [
+        "{tests}",
+        "--src",
+        "{src}"
+      ],
+      "exit_zero_flag": "--exit-zero"
+    },
+    {
+      "id": "unscoped-patch",
+      "name": "🧪 claude-all · Patches must revert on their own",
+      "description": "Flags patch(...).start() (inline or via a bound patcher such as self.p) and direct Mock-family assignment onto an imported module attribute; only with-blocks and @patch decorators are allowed.",
+      "script": "checkers/unscoped_patch.py",
+      "args": [
+        "{tests}",
+        "--allow",
+        "conftest.py"
+      ],
+      "exit_zero_flag": "--exit-zero"
+    },
+    {
+      "id": "orphan-test-file",
+      "name": "🧪 claude-all · Unit test must mirror a real module",
+      "description": "Flags a flat-mirrored tests/unit/test_<a>_<b>.py whose source module <src>/<package>/a/b.py no longer exists.",
+      "script": "checkers/orphan_test_file.py",
+      "args": [
+        "--unit-tests",
+        "{unit_tests}",
+        "--src",
+        "{src}",
+        "--package",
+        "{package}"
+      ],
+      "exit_zero_flag": "--exit-zero"
     }
   ]
 }

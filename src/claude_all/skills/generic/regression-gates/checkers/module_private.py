@@ -66,7 +66,12 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Ban module-level private names in Python.")
     parser.add_argument("roots", nargs="+", type=Path, help="files or dirs to scan")
     args = parser.parse_args(argv)
-    for file in iter_py_files(args.roots):
+    files = iter_py_files(args.roots)
+    print(f"scanned={len(files)}", file=sys.stderr)
+    if not files:
+        print("ERROR: scanned 0 files — refusing a vacuous pass", file=sys.stderr)
+        return 2
+    for file in files:
         for finding in find_violations(file):
             print(finding)
     return 0

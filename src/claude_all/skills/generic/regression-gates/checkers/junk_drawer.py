@@ -32,8 +32,7 @@ def is_excluded(rel: Path) -> bool:
     return any(part in EXCLUDED_DIRS or part.startswith(".") for part in rel.parts[:-1])
 
 
-def find_violations(roots: list[Path]) -> list[str]:
-    findings: list[str] = []
+def iter_files(roots: list[Path]) -> list[Path]:
     files: list[Path] = []
     for root in roots:
         if root.is_file():
@@ -42,7 +41,12 @@ def find_violations(roots: list[Path]) -> list[str]:
             files.extend(
                 p for p in root.rglob("*") if p.is_file() and not is_excluded(p.relative_to(root))
             )
-    for file in files:
+    return files
+
+
+def find_violations(roots: list[Path]) -> list[str]:
+    findings: list[str] = []
+    for file in iter_files(roots):
         if file.suffix in CODE_SUFFIXES and file.stem.lower() in BANNED_STEMS:
             findings.append(
                 f"{file}: junk-drawer module name {file.stem!r} — give it a name for what it "
@@ -55,7 +59,12 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Ban junk-drawer module names.")
     parser.add_argument("roots", nargs="+", type=Path, help="files or dirs to scan")
     args = parser.parse_args(argv)
-    for finding in find_violations(args.roots):
+    files = iter_files(args.roots)
+    print(f"scanned={len(files)}", file=sys.stderr)
+    if not files:
+        print("ERROR: scanned 0 files — refusing a vacuous pass", file=sys.stderr)
+        return 2
+    for finding in find_violations(files):
         print(finding)
     return 0
 

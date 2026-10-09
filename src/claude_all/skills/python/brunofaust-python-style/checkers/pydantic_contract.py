@@ -462,11 +462,17 @@ def main(argv: list[str] | None = None) -> int:
     if unknown := select - set(RULES):
         parser.error(f"unknown rule(s): {', '.join(sorted(unknown))}")
 
+    files = iter_py_files(args.roots)
+    print(f"scanned={len(files)}", file=sys.stderr)
+    if not files:
+        print("ERROR: scanned 0 files — refusing a vacuous pass", file=sys.stderr)
+        return 2
+
     model_bases = MODEL_BASES | frozenset(args.model_base)
 
     count = 0
     unparsable: list[str] = []
-    for file in iter_py_files(args.roots):
+    for file in files:
         try:
             findings = find_violations(file, select, model_bases)
         except (SyntaxError, ValueError, UnicodeDecodeError) as exc:

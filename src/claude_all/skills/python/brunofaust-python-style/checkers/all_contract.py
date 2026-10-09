@@ -403,6 +403,12 @@ def main(argv: list[str] | None = None) -> int:
     if unknown := select - set(RULES):
         parser.error(f"unknown rule(s): {', '.join(sorted(unknown))}")
 
+    files = iter_py_files(args.roots)
+    print(f"scanned={len(files)}", file=sys.stderr)
+    if not files:
+        print("ERROR: scanned 0 files — refusing a vacuous pass", file=sys.stderr)
+        return 2
+
     packages = discover_packages(args.roots, args.package)
     # Fail CLOSED: with no first-party package resolved, `not-in-all` can never
     # fire and the gate would report a broken repo clean.
@@ -416,7 +422,7 @@ def main(argv: list[str] | None = None) -> int:
     count = 0
     unparsable: list[str] = []
     cache: dict[Path, frozenset[str] | None] = {}
-    for file in iter_py_files(args.roots):
+    for file in files:
         try:
             findings = find_violations(file, select, packages, cache)
         except (SyntaxError, ValueError, UnicodeDecodeError) as exc:

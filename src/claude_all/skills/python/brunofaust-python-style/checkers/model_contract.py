@@ -580,9 +580,15 @@ def main(argv: list[str] | None = None) -> int:
         parser.error(f"unknown rule(s): {', '.join(sorted(unknown))}")
     opts = build_options(args, parser)
 
+    files = iter_py_files(args.roots)
+    print(f"scanned={len(files)}", file=sys.stderr)
+    if not files:
+        print("ERROR: scanned 0 files — refusing a vacuous pass", file=sys.stderr)
+        return 2
+
     count = 0
     unparsable: list[str] = []
-    for file in iter_py_files(args.roots):
+    for file in files:
         try:
             findings = find_violations(file, select, opts)
         except (SyntaxError, ValueError, UnicodeDecodeError) as exc:

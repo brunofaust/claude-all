@@ -51,6 +51,51 @@ claude-all --all --project skills      # install all skills, this project only
 
 Update anytime with `uv tool upgrade claude-all`.
 
+### Git hooks for your project (prek / pre-commit)
+
+Several skills ship checkers (Pydantic contracts, mock drift, junk-drawer modules, migration
+SQL, Lambda/ECS Terraform, …). This repo is also a **prek/pre-commit hook repo**
+([`.pre-commit-hooks.yaml`](.pre-commit-hooks.yaml)), so a project runs them pinned to a
+release — locally and in CI, with no copied scripts. In each project:
+
+```bash
+claude-all --install-hooks --dry-run   # show which hooks apply and the diff
+claude-all --install-hooks             # write it (asks first; --yes to skip)
+prek install && prek run --all-files
+```
+
+It offers only the hooks of the skills you installed, fills each hook's args from the
+project layout (`src/`, package name, `tests/unit`, `alembic/versions`, `infra/`), and writes
+one managed block into `prek.toml` or `.pre-commit-config.yaml` (created as `prek.toml` if
+neither exists). Your own hooks outside the markers are never touched. Re-run it after
+`uv tool upgrade claude-all` to bump the pinned `rev`. Options: `--hook <id>` enables an
+optional hook, `--rev <tag>` pins another release.
+
+The managed block looks like:
+
+```toml
+# >>> claude-all hooks (managed by `claude-all --install-hooks`; don't edit) >>>
+[[repos]]
+repo = "https://github.com/brunofaust/claude-all"
+rev = "v0.17.0"
+hooks = [
+  { id = "model-contract", args = ["src"] },
+  { id = "junk-drawer", args = ["src"] },
+]
+# <<< claude-all hooks <<<
+```
+
+**Existing codebase with debt?** Ratchet instead of a big-bang cleanup. Seed a baseline once,
+then put the same `--baseline` in the hook's args:
+
+```bash
+claude-all-check junk-drawer --baseline junk_drawer_baseline.txt --update src   # seed, commit it
+# prek.toml:  { id = "junk-drawer", args = ["--baseline", "junk_drawer_baseline.txt", "src"] }
+```
+
+New findings fail, baselined ones pass, and a fixed finding must be deleted from the file, so
+the baseline only shrinks (see [regression-gates](src/claude_all/skills/generic/regression-gates/SKILL.md)).
+
 ### Removing things
 
 ```bash
@@ -87,6 +132,7 @@ Subagents Claude Code delegates to for specific jobs. Haiku 5.5 for mechanical w
 | --- | --- | --- |
 | [`code-quality`](src/claude_all/agents/generic/code-quality/agent.md) | haiku | Runs all available linters and reports the results. |
 | [`bug-hunter`](src/claude_all/agents/generic/bug-hunter/agent.md) | sonnet | Hunts for real bugs in a given part of the code — not style. |
+| [`diff-weakening-auditor`](src/claude_all/agents/generic/diff-weakening-auditor.md) | sonnet | Checks a diff for changes that make gates pass by loosening them (deleted asserts, new skips, baseline growth). |
 | [`lint-fixer`](src/claude_all/agents/generic/lint-fixer/agent.md) | sonnet | Fixes lint/type errors that `code-quality` found. |
 | [`git-committer`](src/claude_all/agents/generic/git-committer/agent.md) | haiku | Stages, commits, and optionally pushes your changes. |
 | [`git-runner`](src/claude_all/agents/generic/git-runner/agent.md) | haiku | Reads git log, diff, status, blame. |

@@ -39,6 +39,22 @@
         "{migrations}"
       ],
       "stdout_findings": true
+    },
+    {
+      "id": "gate-denominator",
+      "name": "🧮 claude-all · Gate scanned= denominator",
+      "description": "Flags checker scripts that never print a scanned=N denominator line, so a zero-input run cannot pass silently.",
+      "script": "checkers/gate_denominator.py",
+      "exit_zero_flag": "--exit-zero",
+      "default": false
+    },
+    {
+      "id": "hook-registration",
+      "name": "🔌 claude-all · Checker hook registration",
+      "description": "Flags checker scripts that no hook entry/args in prek.toml or .pre-commit-config.yaml references, so a landed gate never stays unarmed.",
+      "script": "checkers/hook_registration.py",
+      "exit_zero_flag": "--exit-zero",
+      "default": false
     }
   ]
 }

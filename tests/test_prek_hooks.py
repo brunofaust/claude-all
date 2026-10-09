@@ -143,3 +143,17 @@ def test_cli_dry_run_writes_nothing(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     monkeypatch.chdir(tmp_path)
     assert prek_hooks.cmd_install_hooks(assume_yes=True, dry_run=True, rev="v1") == 0
     assert not (tmp_path / "prek.toml").exists()
+
+
+def test_runner_baseline_seed_then_ratchet(tmp_path: Path) -> None:
+    (tmp_path / "utils.py").write_text("x = 1\n")
+    baseline = tmp_path / "junk_baseline.txt"
+    seed = run_check(
+        "junk-drawer", "--baseline", str(baseline), "--update", str(tmp_path), cwd=tmp_path
+    )
+    assert seed.returncode == 0, seed.stderr
+    assert "utils" in baseline.read_text()
+    ratchet = ("junk-drawer", "--baseline", str(baseline), str(tmp_path))
+    assert run_check(*ratchet, cwd=tmp_path).returncode == 0
+    (tmp_path / "helpers.py").write_text("x = 1\n")
+    assert run_check(*ratchet, cwd=tmp_path).returncode == 1

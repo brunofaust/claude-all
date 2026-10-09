@@ -70,13 +70,19 @@ Any of these is a mock-drift risk — sweep before you call the change done:
 
 ## Gate it: `checkers/`
 
-This skill ships four AST checkers under `checkers/` that turn the sweep above
+This skill ships seven AST checkers under `checkers/` that turn the sweep above
 into an enforced gate instead of a habit to remember. All four are pure AST
 parses (no import of the code under test, no DB, fast enough for every
 commit) and share `mock_drift_common.py`'s dotted-target resolution — every
 one of them is conservative by design: silence over a false positive, because
 a noisy hook gets disabled and then protects nothing.
 
+- **`unconstrained_patch.py`** — a resolvable `patch()` target patched with a double that
+  accepts any call (no `autospec=True`, no non-Mock `new=`, no `PropertyMock`).
+- **`unscoped_patch.py`** — `patch(...).start()` or `mod.attr = MagicMock()` on an imported
+  module, which does not revert if the test raises; only `with` blocks and `@patch`.
+- **`orphan_test_file.py`** — a flat-mirrored unit test whose source module was renamed,
+  moved or deleted (a green test over a deleted module).
 - **`patch_target_exists.py`** — a `patch("dotted.path")` string whose target
   does not exist anywhere in the scanned tree (the #1 mock-drift class: a
   rename/move/delete leaves the string "working" because `patch()` happily
@@ -102,10 +108,10 @@ uv run python checkers/mock_assert_signature.py tests src/myapp --check
 uv run python checkers/unspecced_model_mock.py tests src/myapp --check
 ```
 
-Wire each as a prek/pre-commit hook (`language = "system"`) scoped to
-`tests/` + your source dir; pin `language_version` on each hook, since these
-parse with the interpreter's own `ast` module and an older interpreter
-silently fails to parse newer syntax it wasn't built to understand.
+Wire them with `claude-all --install-hooks` in the project root: it adds these checkers as
+pinned hooks from the claude-all hook repo, scoped to `tests/` + your source dir. Don't
+copy the scripts into the project. To adopt on a suite that already has findings, ratchet
+a hook with `--baseline <file>` (see the regression-gates skill).
 
 ## The deeper fix: one real-dependency test per contract
 

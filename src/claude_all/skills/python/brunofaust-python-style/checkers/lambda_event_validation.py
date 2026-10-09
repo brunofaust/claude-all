@@ -208,9 +208,15 @@ def main(argv: list[str] | None = None) -> int:
     except ValueError as exc:
         parser.error(str(exc))
 
+    files = iter_handler_files(args.roots, args.handler_glob)
+    print(f"scanned={len(files)}", file=sys.stderr)
+    if not files:
+        print("ERROR: scanned 0 files — refusing a vacuous pass", file=sys.stderr)
+        return 2
+
     count = 0
     unparsable: list[str] = []
-    for file in iter_handler_files(args.roots, args.handler_glob):
+    for file in files:
         try:
             findings = find_violations(file, select, allow)
         except (SyntaxError, ValueError, UnicodeDecodeError) as exc:

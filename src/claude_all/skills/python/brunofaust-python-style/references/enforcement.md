@@ -73,6 +73,12 @@ written, the ruff ban stops it being merged.
 | Verbatim content field keeps whitespace | `model_contract.py` rule `verbatim-strip` — a field whose name matches `content\|body\|text\|diff\|snippet\|patch\|raw\|chunk_text\|output\|source\|html\|preview` on a model that does NOT set `str_strip_whitespace=False`; the shared strict config strips whitespace and silently corrupted RAG code chunks. | none — set `str_strip_whitespace=False` on the model; the field-name pattern is the trigger |
 | No pydantic field alias               | `model_contract.py` rule `no-alias` — bans `Field(alias=...)` / `populate_by_name`; dig the wire key out explicitly so a renamed key fails loud. | none |
 | No `@dataclass`                       | `model_contract.py` rule `no-dataclass` — a dataclass validates nothing; use Pydantic. | none — live objects go in a model with `arbitrary_types_allowed=True` (an isinstance check); see data-modeling.md |
+| No process-global state | `process_globals.py` — module lazy slots, module mutable literals, module-level locks/ContextVar/`Async*()`/engines/HTTP clients/template envs, `global`, class-body mutable attrs, cls-mutating classmethods, `__new__` singletons, namespace classes, module-level first-party instances | `--exempt GLOB` (symbol or `path::symbol`); `Final`/`Mapping`/`Sequence`/`frozenset`/`tuple` annotations |
+| No ad-hoc caches | `adhoc_cache.py` — `@functools.lru_cache`/`@functools.cache` and imports of cachetools/diskcache/aiocache/beaker | `--allow-path GLOB` for the one sanctioned cache-owner module |
+| Lazy singleton under a lock | `unlocked_singleton.py` — `global X; if X is None: X = ...` outside a lock-named `with` | add lock names via `--lock-hint` |
+| No identity `or`-fallback | `masking_or_fallback.py` — `x or 0` / `x or ""` where the defaulted name or receiving kwarg is an identity (`org_id`, `*_id`, `*_key`, `token`, `*_arn`, …) | `--allow-name` (tracing names), `--sink-exclude` (default `key`), `--identity GLOB` |
+| No dynamic first-party import | `dynamic_import.py` — `importlib.import_module("<pkg>…")` / `__import__` with a literal first-party name | computed names and relative imports are exempt |
+| e2e tests drive real execution | `e2e_no_bypass.py` — patching/spec'ing first-party code, env mutation, or calling the entrypoint in-process from e2e tests | `--sdk-boundary DOTTED`, `--shared-env NAME` |
 | No cross-object private access        | `model_contract.py` rule `private-access` — a `_name` reached ACROSS objects (`other._conn`); `self._x`/`cls._x`/`super()._x`/`OwnClass._x` and dunders are allowed. | `--allow-private PATHSUFFIX=attr` + a documented-public-despite-underscore set (e.g. SQLAlchemy's `_mapping`); re-verified and `(path, attr)`-keyed so it can't drift silently |
 
 ### Positively-verified allowlists
@@ -244,7 +250,11 @@ require_dockerfile = ["lambdas/*", "ecs_tasks/*", "batch_jobs/*"]
 enabled = false
 ```
 
+
 ## Plug into `prek.toml`
+
+A project-specific `skill_enforcer.py` lives in the project, so it is a `local` hook (the
+checkers this skill ships are wired by `claude-all --install-hooks` instead):
 
 ```toml
 [[repos]]
@@ -258,108 +268,50 @@ hooks = [{
 }]
 ```
 
-## Wiring the pydantic contract gate
+## Wiring the checker gates
 
-`pydantic_contract.py` prints findings and always exits 0; the ratchet comes from
-wrapping it in `baseline_gate.py` (NEW findings fail, baselined ones pass, STALE
-ones also fail so the count only goes down).
-
-### 0. Copy the two scripts into the project
-
-Both ship with the skills — copy them next to this project's other gates, into
-`scripts/` (the convention the rest of this file uses):
-
-| Copy from                                                       | To                          |
-| --------------------------------------------------------------- | --------------------------- |
-| `brunofaust-python-style/checkers/pydantic_contract.py`         | `scripts/pydantic_contract.py` |
-| `regression-gates/baseline_gate.py`                             | `scripts/baseline_gate.py`  |
-
-### 1. Seed the baseline once, and commit it
+Every checker this skill ships is a hook in the claude-all hook repo. Don't copy scripts into
+the project. Generate the wiring:
 
 ```bash
-python scripts/baseline_gate.py --baseline pydantic_baseline.txt --update -- \
-    python scripts/pydantic_contract.py --exit-zero src/
-git add pydantic_baseline.txt   # an uncommitted baseline = no gate
+claude-all --install-hooks --dry-run   # shows the hooks + diff for this project
+claude-all --install-hooks             # writes the managed block (pinned rev)
 ```
 
-Wiring it WITHOUT the ratchet is simpler and needs neither script — the checker
-exits 1 on any finding all by itself, so prek prints them and fails the commit:
+### 1. Greenfield — the bare hook
+
+Each checker exits 1 on any finding, so the generated entry
+(`{ id = "pydantic-contract", args = ["src"] }`) fails the commit by itself. The same pinned
+hook runs in CI (`prek run --all-files`), so `--no-verify` can't bypass it.
+
+### 2. Existing debt — ratchet with a baseline
+
+Seed once and commit the file (an uncommitted baseline means there is no gate):
 
 ```bash
-python scripts/pydantic_contract.py src/          # exits 1 if anything is found
+claude-all-check pydantic-contract --baseline pydantic_baseline.txt --update src
+git add pydantic_baseline.txt
 ```
 
-Use the bare form on a greenfield (or once the baseline reaches zero); use the
-ratchet when adopting the gate on a codebase that already has findings.
+Then add the baseline to the hook's args **inside the managed block** (the next
+`--install-hooks` run keeps hand-added args only if you re-add them, so note them in the PR):
 
-Roll out **regression-only**: today's debt is grandfathered, tomorrow's is
-blocked. Then ratchet to zero — burn one notch per PR, deleting the fixed line
-from `pydantic_baseline.txt` (a stale entry fails the gate, so the file cannot
-rot). Never `SKIP=pydantic-contract` and never `--no-verify`; if a finding is
-truly not fixable now, baseline it with a ticket comment:
+```toml
+{ id = "pydantic-contract", args = ["--baseline", "pydantic_baseline.txt", "src"] },
+```
+
+NEW findings fail, baselined ones pass, and STALE ones (fixed but still listed) also fail,
+so the file only shrinks. Burn one notch per PR. Never `SKIP=pydantic-contract` and never
+`--no-verify`. If a finding truly can't be fixed now, baseline it with a ticket comment:
 
 ```text
 # TICK-1: myapp/integrations/acme/payload.py — polymorphic vendor body, model it in Q3
 src/myapp/integrations/acme/payload.py: [opaque-annotation] parse(body) — parameter is opaque (dict[..., Any]) …
 ```
 
-### 2. Enforce in prek AND in CI — the same command in both places
-
-A gate that only runs pre-commit is bypassable with `--no-verify`, so the CI job
-runs the identical line:
-
-```toml
-[[repos]]
-repo = "local"
-hooks = [{
-  id = "pydantic-contract",
-  name = "🐍 skill · Pydantic data contract (regression baseline)",
-  # `--exit-zero` is REQUIRED here and nowhere else: baseline_gate reads a non-zero
-  # exit as "the checker crashed" and fails closed. Without the flag, every run with
-  # findings would look like a tool error. (Wiring the checker WITHOUT the ratchet?
-  # Drop both baseline_gate and --exit-zero — it exits 1 on findings by itself.)
-  entry = "python scripts/baseline_gate.py --baseline pydantic_baseline.txt -- python scripts/pydantic_contract.py --exit-zero src/",
-  language = "system",
-  # Pin the interpreter. This checker parses with the `ast` of the Python it RUNS
-  # ON, so an env older than the project silently fails to parse new syntax (PEP
-  # 695 `type X = int`, `def first[T]()`) — see the interpreter-pin rule in
-  # the `prek` skill. A repo-level `default_language_version` does NOT reach a
-  # hook's isolated env. The checker exits 2 rather than skipping, so a wrong pin
-  # fails loudly instead of silently reporting clean.
-  language_version = "3.12",  # or your project's Python
-  pass_filenames = false,
-  always_run = true,
-  files = "\\.py$"
-}]
-```
-
-`pass_filenames = false` + `always_run = true` are load-bearing: `baseline_gate`
-diffs the FULL finding set against the baseline, so feeding it only the staged
-files would make every un-fed baseline entry look STALE and fail the gate.
-
-`.pre-commit-config.yaml` is the same hook, one level nested:
-
-```yaml
-- repo: local
-  hooks:
-      - id: pydantic-contract
-        name: 🐍 skill · Pydantic data contract (regression baseline)
-        entry: python scripts/baseline_gate.py --baseline pydantic_baseline.txt -- python scripts/pydantic_contract.py src/
-        language: system
-        pass_filenames: false
-        always_run: true
-```
-
-`pass_filenames = false` + `always_run = true` are load-bearing: the checker
-scans `src/` whole. Fed only the staged files it would report zero findings for
-untouched paths, and every baselined entry would look STALE.
-
-Adopt rules incrementally with `--select` (one gate per rule, one baseline each)
-when the full set is too big to land at once:
-
-```bash
-python scripts/pydantic_contract.py --select no-cast,extra-forbid src/
-```
+Baseline the SAME paths the hook checks (see *Baseline hygiene* below). Adopt rules
+incrementally with `--select` (one hook entry and one baseline per rule set) when the
+full set is too big to land at once: `args = ["--select", "no-cast,extra-forbid", "src"]`.
 
 ### 3. Gotcha — `prek run --all-files` can report a vacuous PASS
 

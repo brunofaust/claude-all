@@ -8,6 +8,14 @@
   types: ["python"]
   pass_filenames: false
 
+- id: assertive-sql
+  name: "🗄️ claude-all · Assertive SQL (no silent ON CONFLICT / IF EXISTS / CASCADE)"
+  description: "Flags tolerant SQL (targeted ON CONFLICT, IF [NOT] EXISTS, DROP ... CASCADE, swallowed IntegrityError) lacking an allowlist entry with a reason, and bans target-less ON CONFLICT outright."
+  entry: claude-all-check assertive-sql
+  language: python
+  types: ["python"]
+  pass_filenames: false
+
 - id: async-mock-target
   name: "🧪 claude-all · No MagicMock for async targets"
   description: "A patch() of an async def must use AsyncMock."
@@ -32,10 +40,66 @@
   types: ["python"]
   pass_filenames: true
 
+- id: dynamic-import
+  name: "🐍 claude-all · No dynamic first-party imports"
+  description: "Flags `importlib.import_module` / `__import__` of a first-party literal module, which hides every attribute access from mypy."
+  entry: claude-all-check dynamic-import
+  language: python
+  types: ["python"]
+  pass_filenames: false
+
+- id: e2e-no-bypass
+  name: "🐍 claude-all · e2e tests must not bypass real execution"
+  description: "Flags e2e tests that patch or spec first-party code, mutate the environment, or import a production entrypoint to call it in-process."
+  entry: claude-all-check e2e-no-bypass
+  language: python
+  types: ["python"]
+  pass_filenames: false
+
+- id: ecs-task-def-ownership
+  name: "🧊 claude-all · Terraform owns ECS container definitions"
+  description: "Flags aws_ecs_task_definition lifecycle ignore_changes covering container_definitions (or all), which freezes the container env block."
+  entry: claude-all-check ecs-task-def-ownership
+  language: python
+  types: ["terraform"]
+  pass_filenames: false
+
 - id: flat-test-mirror
   name: "🧪 claude-all · Flat source-mirrored unit tests"
   description: "src/<pkg>/a/b.py is tested in tests/unit/test_a_b.py."
   entry: claude-all-check flat-test-mirror
+  language: python
+  types: ["python"]
+  pass_filenames: false
+
+- id: gate-denominator
+  name: "🧮 claude-all · Gate scanned= denominator"
+  description: "Flags checker scripts that never print a scanned=N denominator line, so a zero-input run cannot pass silently."
+  entry: claude-all-check gate-denominator
+  language: python
+  types: ["python"]
+  pass_filenames: false
+
+- id: hook-registration
+  name: "🔌 claude-all · Checker hook registration"
+  description: "Flags checker scripts that no hook entry/args in prek.toml or .pre-commit-config.yaml references, so a landed gate never stays unarmed."
+  entry: claude-all-check hook-registration
+  language: python
+  types: ["python"]
+  pass_filenames: false
+
+- id: hooks-installed
+  name: "🪝 claude-all · Installed hook shims"
+  description: "Fails when any stage in default_install_hook_types has no executable prek/pre-commit shim in the hooks dir git actually uses (local only; CI has no shims)."
+  entry: claude-all-check hooks-installed
+  language: python
+  types: ["toml"]
+  pass_filenames: false
+
+- id: insert-column-list
+  name: "🗄️ claude-all · INSERT INTO names its columns"
+  description: "Flags INSERT INTO t VALUES (...) statements in Python string/f-string literals that have no explicit column list."
+  entry: claude-all-check insert-column-list
   language: python
   types: ["python"]
   pass_filenames: false
@@ -48,10 +112,34 @@
   types: ["python"]
   pass_filenames: false
 
+- id: lambda-env-size
+  name: "📏 claude-all · Lambda env under 4KB"
+  description: "Statically estimates each aws_lambda_function's Environment.Variables JSON size and flags any over the 4096-byte AWS cap."
+  entry: claude-all-check lambda-env-size
+  language: python
+  types: ["terraform"]
+  pass_filenames: false
+
 - id: lambda-event-validation
   name: "🧩 claude-all · Lambda handlers validate their event"
   description: "Every Lambda handler parses its event into a Pydantic model."
   entry: claude-all-check lambda-event-validation
+  language: python
+  types: ["python"]
+  pass_filenames: false
+
+- id: lambda-reserved-env
+  name: "🚫 claude-all · No AWS-reserved Lambda env vars"
+  description: "Flags aws_lambda_function environment variables that AWS reserves (AWS_REGION, AWS_LAMBDA_*, _HANDLER, ...) and rejects at apply time."
+  entry: claude-all-check lambda-reserved-env
+  language: python
+  types: ["terraform"]
+  pass_filenames: false
+
+- id: masking-or-fallback
+  name: "🐍 claude-all · No identity `or 0` / `or \"\"` fallbacks"
+  description: "Flags `<identity> or <falsy literal>` (e.g. `org_id or 0`, `token or \"\"`) that manufacture a fake identity instead of failing on absence."
+  entry: claude-all-check masking-or-fallback
   language: python
   types: ["python"]
   pass_filenames: false
@@ -88,6 +176,30 @@
   types: ["python"]
   pass_filenames: false
 
+- id: no-adhoc-cache
+  name: "🐍 claude-all · No ad-hoc caches"
+  description: "Flags functools.lru_cache/functools.cache decorators and cachetools/diskcache/aiocache/beaker imports; functools.cached_property is allowed."
+  entry: claude-all-check no-adhoc-cache
+  language: python
+  types: ["python"]
+  pass_filenames: false
+
+- id: no-process-globals
+  name: "🐍 claude-all · No process-global state"
+  description: "Flags module/class-scope state (lazy slots, mutable literals, locks/clients/engines, global statements, cls-mutating classmethods, __new__ singletons, namespace classes) that survives warm starts and leaks across tenants and tests."
+  entry: claude-all-check no-process-globals
+  language: python
+  types: ["python"]
+  pass_filenames: false
+
+- id: orphan-test-file
+  name: "🧪 claude-all · Unit test must mirror a real module"
+  description: "Flags a flat-mirrored tests/unit/test_<a>_<b>.py whose source module <src>/<package>/a/b.py no longer exists."
+  entry: claude-all-check orphan-test-file
+  language: python
+  types: ["python"]
+  pass_filenames: false
+
 - id: patch-target-exists
   name: "🧪 claude-all · patch() targets exist"
   description: "Every patch() target resolves to a real attribute."
@@ -100,6 +212,30 @@
   name: "🧩 claude-all · No opaque types or masking defaults"
   description: "No Any/dict model fields, masking defaults, TypedDict or cast."
   entry: claude-all-check pydantic-contract
+  language: python
+  types: ["python"]
+  pass_filenames: false
+
+- id: unconstrained-patch
+  name: "🧪 claude-all · patch() must be autospec/real new=/PropertyMock"
+  description: "Flags a resolvable patch() target whose double accepts any call: callables lacking autospec=True, constants lacking a non-Mock new=, properties lacking new_callable=PropertyMock."
+  entry: claude-all-check unconstrained-patch
+  language: python
+  types: ["python"]
+  pass_filenames: false
+
+- id: unlocked-singleton
+  name: "🐍 claude-all · Lazy singleton built under a lock"
+  description: "Flags `global X; if X is None: X = ...` assignments not inside a lock-named with/async with block."
+  entry: claude-all-check unlocked-singleton
+  language: python
+  types: ["python"]
+  pass_filenames: false
+
+- id: unscoped-patch
+  name: "🧪 claude-all · Patches must revert on their own"
+  description: "Flags patch(...).start() (inline or via a bound patcher such as self.p) and direct Mock-family assignment onto an imported module attribute; only with-blocks and @patch decorators are allowed."
+  entry: claude-all-check unscoped-patch
   language: python
   types: ["python"]
   pass_filenames: false

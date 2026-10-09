@@ -140,8 +140,16 @@ def main(argv: list[str] | None = None) -> int:
         if root.is_dir():
             files = [p for p in root.rglob("*.py") if not p.name.startswith("__")]
             groups.append((str(root), files))
+    parsed: list[tuple[str, list[Revision]]] = []
     for label, files in groups:
         revisions = [rev for rev in (parse_file(f) for f in files) if rev is not None]
+        parsed.append((label, revisions))
+    files = [rev.path for _, revisions in parsed for rev in revisions]
+    print(f"scanned={len(files)}", file=sys.stderr)
+    if not files:
+        print("ERROR: scanned 0 files — refusing a vacuous pass", file=sys.stderr)
+        return 2
+    for label, revisions in parsed:
         for finding in analyse(revisions, label=label):
             print(finding)
     return 0
