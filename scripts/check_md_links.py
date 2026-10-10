@@ -16,19 +16,18 @@ JSON output mode:
         },
         "broken_links": [
             {
-                "file": str,  # relative path of markdown file containing the broken link
+                "file": str,  # relative path of markdown file
                 "line": int,  # line number (1-indexed)
-                "raw_target": str,  # the link target as found in the markdown
-                "resolved_path": str  # the resolved path that did not exist (relative to repo root if possible, else absolute)
+                "raw_target": str,  # the link target as found in markdown
+                "resolved_path": str,  # the absolute path that was checked and did not exist
             }
         ],
         "unlinked_resources": [
             {
-                "resource": str  # relative path of the resource's SKILL.md (or agent.md) that is missing from README
+                "resource": str,  # relative path of resource file from repo root
             }
         ]
     }
-    Diagnostics (if any) go to stderr. Exit codes are identical to non-JSON mode.
 """
 
 import argparse
@@ -150,19 +149,21 @@ def check_readme_coverage():
     return unlinked, len(items)
 
 
-def main() -> int:
+def main(args: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Check markdown links and README coverage.")
     parser.add_argument(
         "--json",
         action="store_true",
         help="Emit machine-readable JSON instead of human-readable text.",
     )
-    args = parser.parse_args()
+    if args is None:
+        args = parser.parse_args()
+    else:
+        args = parser.parse_args(args)
 
     registry = json.loads((ROOT / "vendored.json").read_text()).get("vendored", [])
     broken_links, files_scanned, links_resolved, files_skipped_vendored = check_links(registry)
     unlinked_resources, resources_checked = check_readme_coverage()
-
     findings_exist = bool(broken_links or unlinked_resources)
 
     if args.json:
@@ -183,8 +184,8 @@ def main() -> int:
         for bl in broken_links:
             print(f"{bl['file']}:{bl['line']}: broken-link -> {bl['raw_target']}")
         for ur in unlinked_resources:
-            # Reconstruct the original message: "README.md: undocumented -> {resource} (add a row linking {resource})"
-            # Note: the original message used the resource path (which is the path to the SKILL.md) and the same path in the hint.
+            # Reconstruct the original message:
+            # "README.md: undocumented -> {resource} (add a row linking {resource})"
             print(
                 f"README.md: undocumented -> {ur['resource']} (add a row linking {ur['resource']})"
             )

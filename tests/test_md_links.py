@@ -13,6 +13,7 @@ import json
 import re
 import sys
 from pathlib import Path
+from typing import TextIO
 
 import pytest
 
@@ -227,7 +228,7 @@ class TestJsonOutput:
         # Set up a temporary repository
         monkeypatch.setattr("check_md_links.ROOT", tmp_path)
         # Create a vendored.json with empty vendored list
-        vendored = {"vendored": []}
+        vendored: dict[str, list] = {"vendored": []}
         (tmp_path / "vendored.json").write_text(json.dumps(vendored))
         # Create a README.md
         (tmp_path / "README.md").write_text("# README\n")
@@ -246,7 +247,8 @@ class TestJsonOutput:
 
         from check_md_links import main
 
-        old_stdout, old_stderr = sys.stdout, sys.stderr
+        old_stdout: TextIO = sys.stdout
+        old_stderr: TextIO = sys.stderr
         sys.stdout = io.StringIO()
         sys.stderr = io.StringIO()
         try:
@@ -290,7 +292,8 @@ class TestJsonOutput:
 
         from check_md_links import main
 
-        old_stdout, old_stderr = sys.stdout, sys.stderr
+        old_stdout: TextIO = sys.stdout
+        old_stderr: TextIO = sys.stderr
         sys.stdout = io.StringIO()
         sys.stderr = io.StringIO()
         try:
@@ -312,7 +315,7 @@ class TestJsonOutput:
         assert bl["file"] == "test.md"
         assert bl["line"] == 1
         assert bl["raw_target"] == "nonexistent.md"
-        # The resolved path should be the absolute path of nonexistent.md relative to tmp_path? We made it relative if possible.
+        # The resolved path should be absolute if possible, else relative to tmp_path.
         # Since we set ROOT to tmp_path, the resolved path should be relative to tmp_path.
         expected_resolved = (tmp_path / "nonexistent.md").resolve()
         try:
@@ -328,7 +331,7 @@ class TestJsonOutput:
         assert exit_code == 1
 
     def test_json_with_unlinked_resource(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
-        """--json with an unlinked resource should emit JSON with pass: false and one unlinked resource."""
+        """--json with unlinked resource: pass: false and one unlinked resource."""
         monkeypatch.setattr("check_md_links.ROOT", tmp_path)
         vendored = {"vendored": []}
         (tmp_path / "vendored.json").write_text(json.dumps(vendored))
@@ -353,7 +356,8 @@ class TestJsonOutput:
 
         from check_md_links import main
 
-        old_stdout, old_stderr = sys.stdout, sys.stderr
+        old_stdout: TextIO = sys.stdout
+        old_stderr: TextIO = sys.stderr
         sys.stdout = io.StringIO()
         sys.stderr = io.StringIO()
         try:
@@ -406,7 +410,8 @@ class TestJsonOutput:
 
         from check_md_links import main
 
-        old_stdout, old_stderr = sys.stdout, sys.stderr
+        old_stdout: TextIO = sys.stdout
+        old_stderr: TextIO = sys.stderr
         sys.stdout = io.StringIO()
         sys.stderr = io.StringIO()
         try:
@@ -417,17 +422,17 @@ class TestJsonOutput:
         output = sys.stdout.getvalue().strip()
         err_output = sys.stderr.getvalue().strip()
 
-        # Expect two findings: one broken link and one unlinked resource
-        # The broken link line format: "test.md:1: broken-link -> nonexistent.md"
-        # The unlinked resource line format: "README.md: undocumented -> resources/testskill/SKILL.md (add a row linking resources/testskill/SKILL.md)"
+        # Expect two findings: one broken link, one unlinked resource
+        # Broken link line format: "test.md:1: broken-link -> nonexistent.md"
+        # Unlinked resource line format: "README.md: undocumented -> resources/testskill/SKILL.md (add a row linking ...)"
         lines = output.splitlines()
         assert len(lines) == 2
         assert lines[0] == "test.md:1: broken-link -> nonexistent.md"
-        assert (
-            lines[1]
-            == "README.md: undocumented -> resources/testskill/SKILL.md (add a row linking resources/testskill/SKILL.md)"
+        expected_unlinked = (
+            "README.md: undocumented -> resources/testskill/SKILL.md "
+            "(add a row linking resources/testskill/SKILL.md)"
         )
-        # Stderr should have the count line
+        assert lines[1] == expected_unlinked
         assert err_output == "\n2 finding(s)."
         # Exit code should be 1
         assert exit_code == 1
@@ -435,8 +440,8 @@ class TestJsonOutput:
         # Now test with a clean tree to ensure exit code 0 and no output
         monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [])
         monkeypatch.setattr("check_md_links.discover", lambda _: [])
-        # Remove the markdown file we created? We'll just override the tracked_markdown to return empty.
-        # Also, we need to ensure there are no markdown files. We'll not create any.
+        # Override tracked_markdown to return empty (no markdown files).
+        # Also, we need to ensure there are no markdown files.
         sys.stdout = io.StringIO()
         sys.stderr = io.StringIO()
         try:
