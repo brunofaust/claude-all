@@ -74,29 +74,16 @@ def test_shipped_instructions_declare_every_reference() -> None:
 
 def test_zero_discovery_fails(tmp_path: Path, monkeypatch) -> None:
     """When no manifests or instruction snippets are found, exit with code 2."""
-    # Create a temporary directory with no claude-all.json or *.claude-all.json under src/claude_all
-    # and no instruction snippets.
-    # We'll monkeypatch the paths used by the script to point to temporary directories.
-    src_tmp = tmp_path / "src" / "claude_all"
-    src_tmp.mkdir(parents=True)
-    instructions_tmp = src_tmp / "instructions"
-    instructions_tmp.mkdir()
+    # We want to simulate an empty src/claude_all directory (so that the glob finds nothing).
+    # Set SRC to tmp_path / "src", so that SRC / "claude_all" points to tmp_path / "src" / "claude_all"
+    src_base = tmp_path / "src"
+    src_base.mkdir(parents=True)
+    src_claude_all = src_base / "claude_all"
+    src_claude_all.mkdir()
+    instructions_dir = src_claude_all / "instructions"
+    instructions_dir.mkdir()
 
-    # Monkeypatch the constants in the module
-    monkeypatch.setattr(check_requires, "SRC", src_tmp)
-    monkeypatch.setattr(check_requires, "INSTRUCTIONS_DIR", instructions_tmp)
-    # We also need to monkeypatch REPO_ROOT because load_resource_keys uses SRC which is derived from REPO_ROOT.
-    # But note: load_resource_keys uses SRC to add to sys.path and to call discover.
-    # We don't want to break the loading of known resources. We'll skip this test for now?
-    # Alternatively, we can create a minimal src/claude_all/cli.py? That's too heavy.
-    # Instead, we can test the zero discovery by mocking the glob results?
-    # Since we are changing the functions to return counts, we can test the main function with mocked globals.
-    # However, for simplicity, we'll test the zero discovery by creating a temporary repo structure.
-    # We'll create a minimal src/claude_all/cli.py that just returns an empty list for discover.
-    # But note: the ticket says no new dependencies, and we are allowed to write tests.
-    # We'll create a temporary src directory with a minimal cli.py.
-    src_claude_all = tmp_path / "src" / "claude_all"
-    src_claude_all.mkdir(parents=True)
+    # Provide a minimal cli.py for load_resource_keys to work (in src/claude_all)
     (src_claude_all / "cli.py").write_text("""
 def discover(_):
     return []
@@ -104,15 +91,10 @@ def discover(_):
 def state_key(kind, name):
     return f"{kind}/{name}"
 """)
-    # Set up the instructions directory
-    instructions_dir = src_claude_all / "instructions"
-    instructions_dir.mkdir()
 
-    # Now, we need to set the module's SRC and INSTRUCTIONS_DIR to our temporary directories.
-    # We'll do it by monkeypatching.
-    monkeypatch.setattr(check_requires, "SRC", src_claude_all)
+    # Monkeypatch the constants in the module
+    monkeypatch.setattr(check_requires, "SRC", src_base)
     monkeypatch.setattr(check_requires, "INSTRUCTIONS_DIR", instructions_dir)
-    # Also, REPO_ROOT is used for manifest paths. We'll set it to tmp_path.
     monkeypatch.setattr(check_requires, "REPO_ROOT", tmp_path)
 
     # Now run main and expect exit code 2.
@@ -121,17 +103,20 @@ def state_key(kind, name):
 
 def test_success_summary(tmp_path: Path, monkeypatch) -> None:
     """When there are files and no findings, print summary and exit 0."""
-    # Create a temporary directory with one manifest and one instruction snippet.
-    src_claude_all = tmp_path / "src" / "claude_all"
-    src_claude_all.mkdir(parents=True)
+    # We want one manifest and one instruction snippet.
+    # Set SRC to tmp_path / "src", so that SRC / "claude_all" points to tmp_path / "src" / "claude_all"
+    src_base = tmp_path / "src"
+    src_base.mkdir(parents=True)
+    src_claude_all = src_base / "claude_all"
+    src_claude_all.mkdir()
     instructions_dir = src_claude_all / "instructions"
     instructions_dir.mkdir()
 
-    # Create a manifest
+    # Create a manifest under src/claude_all
     manifest = src_claude_all / "claude-all.json"
     manifest.write_text('{"requires": []}')
 
-    # Create an instruction snippet
+    # Create an instruction snippet under src/claude_all/instructions
     instr_dir = instructions_dir / "test"
     instr_dir.mkdir()
     (instr_dir / "claude_md.md").write_text("See `demo`.")
@@ -145,7 +130,7 @@ def test_success_summary(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(check_requires, "load_resource_keys", mock_load_resource_keys)
 
     # Also, we need to set the SRC and INSTRUCTIONS_DIR in the module.
-    monkeypatch.setattr(check_requires, "SRC", src_claude_all)
+    monkeypatch.setattr(check_requires, "SRC", src_base)
     monkeypatch.setattr(check_requires, "INSTRUCTIONS_DIR", instructions_dir)
     monkeypatch.setattr(check_requires, "REPO_ROOT", tmp_path)
 
@@ -167,7 +152,9 @@ def test_success_summary(tmp_path: Path, monkeypatch) -> None:
 
     assert exit_code == 0
     # Check that the summary line is printed to stdout
-    assert "Inspected 1 manifest file(s) and 1 instruction snippet(s)." in stdout
+    expected_summary = "Inspected 1 manifest file(s) and 1 instruction snippet(s)."
+    assert expected_summary in stdout
     # No findings should be printed
-    assert stdout.strip() == "Inspected 1 manifest file(s) and 1 instruction snippet(s)."
+    # The summary line should be the only line in stdout (stripped)
+    assert stdout.strip() == expected_summary
     assert stderr == ""

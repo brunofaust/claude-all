@@ -56,8 +56,10 @@ def find_violations(known: set[str]) -> tuple[list[str], int]:
 
 
 def find_undeclared_instruction_refs(
-    known: set[str], instructions_dir: Path = INSTRUCTIONS_DIR
+    known: set[str], instructions_dir: Path | None = None
 ) -> tuple[list[str], int]:
+    if instructions_dir is None:
+        instructions_dir = INSTRUCTIONS_DIR
     keys_by_name: dict[str, set[str]] = {}
     for key in known:
         keys_by_name.setdefault(key.split("/", 1)[1], set()).add(key)
