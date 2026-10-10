@@ -162,6 +162,7 @@ def main(args: list[str] | None = None) -> int:
     broken_links, files_scanned, links_resolved, files_skipped_vendored = check_links(registry)
     unlinked_resources, resources_checked = check_readme_coverage()
     findings_exist = bool(broken_links or unlinked_resources)
+    exit_code = 1 if findings_exist else 0
 
     if parsed_args.json:
         output = {
@@ -189,8 +190,7 @@ def main(args: list[str] | None = None) -> int:
         if findings_exist:
             total_findings = len(broken_links) + len(unlinked_resources)
             print(f"\n{total_findings} finding(s).", file=sys.stderr)
-            return 1
-    return 0
+    return exit_code
 
 
 if __name__ == "__main__":

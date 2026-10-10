@@ -433,7 +433,7 @@ class TestJsonOutput:
             "(add a row linking resources/testskill/SKILL.md)"
         )
         assert lines[1] == expected_unlinked
-        assert err_output == "\n2 finding(s)."
+        assert err_output == "2 finding(s)."
         # Exit code should be 1
         assert exit_code == 1
 
