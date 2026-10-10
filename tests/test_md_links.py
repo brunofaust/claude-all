@@ -9,10 +9,12 @@ made the first version of this checker report 18 findings, all of them wrong.
 
 from __future__ import annotations
 
+import io
 import json
 import re
 import sys
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -23,6 +25,7 @@ from check_md_links import (
     LINK,
     check_links,
     is_vendored,
+    main,
     strip_code_blocks,
 )
 from vendor_sync import clone_upstream
@@ -141,7 +144,8 @@ class TestCheckLinks:
         # tracked-but-deleted file must be skipped, not crash read_text()
         missing = tmp_path / "GONE.md"
         monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [missing])
-        assert check_links(registry=[]) == []
+        broken_links, _, _, _ = check_links(registry=[])
+        assert broken_links == []
 
 
 def test_non_vendored_routes_use_discoverable_skill_names() -> None:
@@ -218,3 +222,188 @@ def test_claude_hook_examples_use_timeout_seconds() -> None:
                 findings.append(f"{path.relative_to(ROOT)}: timeout={value}")
 
     assert findings == []
+
+
+class TestJsonOutput:
+    def run_main(self, argv):
+        """Helper to run main with given argv and return (exit_code, stdout, stderr)."""
+        old_stderr = sys.stderr
+        old_stdout = sys.stdout
+        sys.stderr = io.StringIO()
+        sys.stdout = io.StringIO()
+        try:
+            with patch.object(sys, "argv", argv):
+                try:
+                    main()
+                except SystemExit as e:
+                    exit_code = e.code
+                else:
+                    exit_code = 0
+            stdout = sys.stdout.getvalue()
+            stderr = sys.stderr.getvalue()
+            return exit_code, stdout, stderr
+        finally:
+            sys.stderr = old_stderr
+            sys.stdout = old_stdout
+
+    @patch("check_md_links.check_links")
+    @patch("check_md_links.check_readme_coverage")
+    @patch("check_md_links.ROOT", Path("/dummy"))
+    def test_json_clean_tree(self, mock_check_links, mock_check_readme_coverage, mock_root):
+        mock_check_links.return_value = (
+            [],  # broken_links
+            5,  # md_scanned
+            10,  # links_resolved
+            2,  # vendored_skipped
+        )
+        mock_check_readme_coverage.return_value = (
+            [],  # unlinked_resources
+            3,  # resources_checked
+        )
+        exit_code, stdout, stderr = self.run_main(["check_md_links.py", "--json"])
+        assert exit_code == 0
+        data = json.loads(stdout)
+        assert data["passed"] is True
+        assert data["markdown_files_scanned"] == 5
+        assert data["links_resolved"] == 10
+        assert data["resources_checked"] == 3
+        assert data["files_skipped_as_vendored"] == 2
+        assert data["broken_links"] == []
+        assert data["unlinked_resources"] == []
+        assert stderr == ""
+
+    @patch("check_md_links.check_links")
+    @patch("check_md_links.check_readme_coverage")
+    @patch("check_md_links.ROOT", Path("/dummy"))
+    def test_json_with_broken_link(self, mock_check_links, mock_check_readme_coverage, mock_root):
+        # We'll create a broken link entry
+        mock_check_links.return_value = (
+            [  # broken_links list of dicts
+                {
+                    "file": "doc.md",
+                    "line": 42,
+                    "target": "target.md",
+                    "resolved": str((Path("/dummy") / "target.md").resolve()),
+                }
+            ],
+            1,  # md_scanned
+            0,  # links_resolved
+            0,  # vendored_skipped
+        )
+        mock_check_readme_coverage.return_value = (
+            [],  # unlinked_resources
+            0,  # resources_checked
+        )
+        exit_code, stdout, stderr = self.run_main(["check_md_links.py", "--json"])
+        assert exit_code == 1
+        data = json.loads(stdout)
+        assert data["passed"] is False
+        assert data["markdown_files_scanned"] == 1
+        assert data["links_resolved"] == 0
+        assert data["resources_checked"] == 0
+        assert data["files_skipped_as_vendored"] == 0
+        assert len(data["broken_links"]) == 1
+        bl = data["broken_links"][0]
+        assert bl["file"] == "doc.md"
+        assert bl["line"] == 42
+        assert bl["target"] == "target.md"
+        assert bl["resolved"] == str((Path("/dummy") / "target.md").resolve())
+        assert data["unlinked_resources"] == []
+        assert stderr == ""
+
+    @patch("check_md_links.check_links")
+    @patch("check_md_links.check_readme_coverage")
+    @patch("check_md_links.ROOT", Path("/dummy"))
+    def test_json_with_unlinked_resource(
+        self, mock_check_links, mock_check_readme_coverage, mock_root
+    ):
+        # We'll create an unlinked resource entry
+        mock_check_links.return_value = (
+            [],  # broken_links
+            1,  # md_scanned
+            0,  # links_resolved
+            0,  # vendored_skipped
+        )
+        mock_check_readme_coverage.return_value = (
+            [  # unlinked_resources list of dicts
+                {
+                    "path": "src/skill/SKILL.md",
+                    "kind": "skill",
+                    "name": "my-skill",
+                }
+            ],
+            1,  # resources_checked
+        )
+        exit_code, stdout, stderr = self.run_main(["check_md_links.py", "--json"])
+        assert exit_code == 1
+        data = json.loads(stdout)
+        assert data["passed"] is False
+        assert data["markdown_files_scanned"] == 1
+        assert data["links_resolved"] == 0
+        assert data["resources_checked"] == 1
+        assert data["files_skipped_as_vendored"] == 0
+        assert data["broken_links"] == []
+        assert len(data["unlinked_resources"]) == 1
+        ur = data["unlinked_resources"][0]
+        assert ur["path"] == "src/skill/SKILL.md"
+        assert ur["kind"] == "skill"
+        assert ur["name"] == "my-skill"
+        assert stderr == ""
+
+    @patch("check_md_links.check_links")
+    @patch("check_md_links.check_readme_coverage")
+    @patch("check_md_links.ROOT", Path("/dummy"))
+    def test_default_output_unaffected(
+        self, mock_check_links, mock_check_readme_coverage, mock_root
+    ):
+        # Test that without --json, the output is as expected (human-readable)
+        mock_check_links.return_value = (
+            [],  # broken_links
+            5,  # md_scanned
+            10,  # links_resolved
+            2,  # vendored_skipped
+        )
+        mock_check_readme_coverage.return_value = (
+            [],  # unlinked_resources
+            3,  # resources_checked
+        )
+        exit_code, stdout, stderr = self.run_main(["check_md_links.py"])
+        assert exit_code == 0
+        assert stdout == ""
+        # No findings, so nothing printed to stdout or stderr
+        assert stderr == ""
+
+        # Now with a broken link and unlinked resource to ensure error output
+        mock_check_links.return_value = (
+            [  # broken_links
+                {
+                    "file": "doc.md",
+                    "line": 1,
+                    "target": "target.md",
+                    "resolved": str((Path("/dummy") / "target.md").resolve()),
+                }
+            ],
+            1,  # md_scanned
+            0,  # links_resolved
+            0,  # vendored_skipped
+        )
+        mock_check_readme_coverage.return_value = (
+            [  # unlinked_resources
+                {
+                    "path": "src/skill/SKILL.md",
+                    "kind": "skill",
+                    "name": "my-skill",
+                }
+            ],
+            1,  # resources_checked
+        )
+        exit_code, stdout, stderr = self.run_main(["check_md_links.py"])
+        assert exit_code == 1
+        # Check stdout for the findings
+        assert "doc.md:1: broken-link -> target.md" in stdout
+        assert (
+            "README.md: undocumented -> skill/my-skill (add a row linking src/skill/SKILL.md)"
+            in stdout
+        )
+        # Check stderr for the count of findings
+        assert stderr == "\n2 finding(s).\n"
