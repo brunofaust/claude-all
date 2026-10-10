@@ -3,7 +3,7 @@
 
 Also checks that resources named by an instruction snippet are in its `requires`.
 Targets are resolved via the installer's own `discover()`, never re-derived here.
-Exit 0 = all resolve, 1 = dangling/malformed entry.
+Exit 0 = all resolve, 1 = dangling/malformed entry, 2 = zero input.
 """
 
 from __future__ import annotations
@@ -27,11 +27,13 @@ def load_resource_keys() -> set[str]:
     return {state_key(it.kind, it.name) for it in discover([])}
 
 
-def find_violations(known: set[str]) -> list[str]:
+def find_violations(known: set[str]) -> tuple[list[str], int]:
     findings: list[str] = []
+    manifest_count = 0
     for manifest in sorted((SRC / "claude_all").rglob("claude-all.json")) + sorted(
         (SRC / "claude_all").rglob("*.claude-all.json")
     ):
+        manifest_count += 1
         rel = manifest.relative_to(REPO_ROOT)
         try:
             config = json.loads(manifest.read_text(encoding="utf-8"))
@@ -50,17 +52,19 @@ def find_violations(known: set[str]) -> list[str]:
                     f"{rel}: requires '{dep}' — no such resource (renamed/deleted? "
                     "a built-in like /code-review does not belong in requires)"
                 )
-    return findings
+    return findings, manifest_count
 
 
 def find_undeclared_instruction_refs(
     known: set[str], instructions_dir: Path = INSTRUCTIONS_DIR
-) -> list[str]:
+) -> tuple[list[str], int]:
     keys_by_name: dict[str, set[str]] = {}
     for key in known:
         keys_by_name.setdefault(key.split("/", 1)[1], set()).add(key)
     findings: list[str] = []
+    snippet_count = 0
     for snippet in sorted(instructions_dir.glob("*/claude_md.md")):
+        snippet_count += 1
         manifest = snippet.parent / "claude-all.json"
         declared: set[str] = set()
         if manifest.exists():
@@ -77,15 +81,20 @@ def find_undeclared_instruction_refs(
                     f"{rel}: names `{token}` but its claude-all.json does not require "
                     + " or ".join(sorted(candidates))
                 )
-    return findings
+    return findings, snippet_count
 
 
 def main() -> int:
-    """CLI entry point — print findings to stdout, exit 1 on any."""
+    """CLI entry point — print findings to stdout, exit 1 on any, 2 on zero input."""
     known = load_resource_keys()
-    findings = find_violations(known) + find_undeclared_instruction_refs(known)
+    violations, manifest_count = find_violations(known)
+    undeclared, snippet_count = find_undeclared_instruction_refs(known)
+    findings = violations + undeclared
+    total_units = manifest_count + snippet_count
+
     for finding in findings:
         print(finding)
+
     if findings:
         print(
             f"\n{len(findings)} requires finding(s) — a dependency manifest points at a "
@@ -94,6 +103,19 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
+
+    if total_units == 0:
+        print(
+            "No files discovered for inspection. Manifest patterns '**/claude-all.json' and '**/*.claude-all.json' "
+            "under src/claude_all matched 0 files, and instruction snippet pattern '*/claude_md.md' "
+            "under src/claude_all/instructions matched 0 files.",
+            file=sys.stderr,
+        )
+        return 2
+
+    print(
+        f"Inspected {manifest_count} manifest file(s) and {snippet_count} instruction snippet(s)."
+    )
     return 0
 
 
