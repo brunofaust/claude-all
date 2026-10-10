@@ -218,3 +218,228 @@ def test_claude_hook_examples_use_timeout_seconds() -> None:
                 findings.append(f"{path.relative_to(ROOT)}: timeout={value}")
 
     assert findings == []
+
+
+def test_json_output_clean_tree(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture
+) -> None:
+    """Test --json output on a clean tree with no findings."""
+    # Create a temporary directory structure
+    (tmp_path / "README.md").write_text("# Test\n\nThis is a test.")
+
+    # Mock vendored.json to have no vendored entries
+    vendored_data: dict = {"vendored": []}
+    monkeypatch.setattr("check_md_links.ROOT", tmp_path)  # Change ROOT to temp dir for this test
+    monkeypatch.setattr(
+        "builtins.open", lambda *args, **kwargs: mock_open_vendored(vendored_data, *args, **kwargs)
+    )
+
+    # Mock git ls-files to return only README.md
+    def mock_tracked_markdown():
+        return [tmp_path / "README.md"]
+
+    monkeypatch.setattr("check_md_links.tracked_markdown", mock_tracked_markdown)
+
+    # Mock discover to return no resources
+    class MockItem:
+        def __init__(self, kind: str, name: str, src: Path) -> None:
+            self.kind = kind
+            self.name = name
+            self.src = src
+
+    def mock_discover(_args: list) -> list:
+        return []
+
+    monkeypatch.setattr("check_md_links.cli.discover", mock_discover)
+
+    # Test --json output
+    import sys
+
+    from check_md_links import main
+
+    # Save original argv
+    old_argv = sys.argv
+    try:
+        sys.argv = ["check_md_links.py", "--json"]
+        # Change working directory to temp path
+        monkeypatch.chdir(tmp_path)
+        # Run main
+        result = main()
+    finally:
+        sys.argv = old_argv
+
+    # Should return 0 (no findings)
+    assert result == 0
+
+    # Capture stdout and stderr
+    captured = capsys.readouterr()
+    stdout = captured.out.strip()
+    stderr = captured.err
+
+    # Should have no stderr output (no findings message)
+    assert stderr == ""
+
+    # Should be valid JSON
+    data = json.loads(stdout)
+
+    # Check structure
+    assert data["pass"] is True
+    assert data["counts"]["markdown_files_scanned"] == 1  # README.md
+    assert data["counts"]["links_resolved"] == 0
+    assert data["counts"]["resources_checked"] == 0
+    assert data["counts"]["files_skipped_as_vendored"] == 0
+    assert data["broken_links"] == []
+    assert data["unlinked_resources"] == []
+
+
+def test_json_output_with_broken_link(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture
+) -> None:
+    """Test --json output when there's a broken link."""
+    # Create a markdown file with a broken link
+    (tmp_path / "README.md").write_text("# Test\n\nSee [link](missing.md) for details.")
+    (tmp_path / "other.md").write_text("# Other\n\nNo links here.")
+
+    # Mock vendored.json to have no vendored entries
+    vendored_data: dict = {"vendored": []}
+    monkeypatch.setattr("check_md_links.ROOT", tmp_path)
+    monkeypatch.setattr(
+        "builtins.open", lambda *args, **kwargs: mock_open_vendored(vendored_data, *args, **kwargs)
+    )
+
+    # Mock git ls-files to return both markdown files
+    def mock_tracked_markdown():
+        return [tmp_path / "README.md", tmp_path / "other.md"]
+
+    monkeypatch.setattr("check_md_links.tracked_markdown", mock_tracked_markdown)
+
+    # Mock discover to return no resources
+    def mock_discover(_args: list) -> list:
+        return []
+
+    monkeypatch.setattr("check_md_links.cli.discover", mock_discover)
+
+    # Test --json output
+    import sys
+
+    from check_md_links import main
+
+    old_argv = sys.argv
+    try:
+        sys.argv = ["check_md_links.py", "--json"]
+        monkeypatch.chdir(tmp_path)
+        result = main()
+    finally:
+        sys.argv = old_argv
+
+    # Should return 1 (has findings)
+    assert result == 1
+
+    # Capture stdout and stderr
+    captured = capsys.readouterr()
+    stdout = captured.out.strip()
+    stderr = captured.err
+
+    # Should have no stderr output (the findings count goes to stderr in non-JSON mode only)
+    # In JSON mode, diagnostics should go to stderr but we don't have any beyond the count line
+    # Actually, in our implementation, we only print to stderr in non-JSON mode
+    assert stderr == ""
+
+    # Should be valid JSON
+    data = json.loads(stdout)
+
+    # Check structure
+    assert data["pass"] is False
+    assert data["counts"]["markdown_files_scanned"] == 2  # Both files
+    assert data["counts"]["links_resolved"] == 1  # One link in README.md
+    assert data["counts"]["resources_checked"] == 0
+    assert data["counts"]["files_skipped_as_vendored"] == 0
+    assert len(data["broken_links"]) == 1
+    broken_link = data["broken_links"][0]
+    assert broken_link["file"] == "README.md"
+    assert broken_link["line"] == 2  # Line number of the link
+    assert broken_link["target"] == "missing.md"
+    assert broken_link["resolved_path"] == str((tmp_path / "missing.md").resolve())
+    assert data["unlinked_resources"] == []
+
+
+def test_json_output_with_unlinked_resource(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture
+) -> None:
+    """Test --json output when there's an unlinked resource."""
+    # Create a README that doesn't link to a resource
+    (tmp_path / "README.md").write_text("# Test\n\nSome content but no link to resource.")
+
+    # Mock vendored.json to have no vendored entries
+    vendored_data: dict = {"vendored": []}
+    monkeypatch.setattr("check_md_links.ROOT", tmp_path)
+    monkeypatch.setattr(
+        "builtins.open", lambda *args, **kwargs: mock_open_vendored(vendored_data, *args, **kwargs)
+    )
+
+    # Mock git ls-files to return only README.md
+    def mock_tracked_markdown():
+        return [tmp_path / "README.md"]
+
+    monkeypatch.setattr("check_md_links.tracked_markdown", mock_tracked_markdown)
+
+    # Mock discover to return a resource that's not in README
+    class MockItem:
+        def __init__(self, kind: str, name: str, src: Path) -> None:
+            self.kind = kind
+            self.name = name
+            self.src = src
+
+    def mock_discover(_args: list) -> list:
+        # Return a resource with a src that won't be found in README
+        return [MockItem("skill", "test-skill", tmp_path / "src" / "test-skill" / "SKILL.md")]
+
+    monkeypatch.setattr("check_md_links.cli.discover", mock_discover)
+
+    # Test --json output
+    import sys
+
+    from check_md_links import main
+
+    old_argv = sys.argv
+    try:
+        sys.argv = ["check_md_links.py", "--json"]
+        monkeypatch.chdir(tmp_path)
+        result = main()
+    finally:
+        sys.argv = old_argv
+
+    # Should return 1 (has findings)
+    assert result == 1
+
+    # Capture stdout and stderr
+    captured = capsys.readouterr()
+    stdout = captured.out.strip()
+    stderr = captured.err
+
+    # Should have no stderr output
+    assert stderr == ""
+
+    # Should be valid JSON
+    data = json.loads(stdout)
+
+    # Check structure
+    assert data["pass"] is False
+    assert data["counts"]["markdown_files_scanned"] == 1  # README.md
+    assert data["counts"]["links_resolved"] == 0
+    assert data["counts"]["resources_checked"] == 1  # One resource discovered
+    assert data["counts"]["files_skipped_as_vendored"] == 0
+    assert data["broken_links"] == []
+    assert len(data["unlinked_resources"]) == 1
+    # The unlinked resource should be the src path relative to repo root
+    assert data["unlinked_resources"][0] == "src/test-skill/SKILL.md"
+
+
+def mock_open_vendored(mock_data: dict, *args, **kwargs):
+    """Mock open function to return vendored.json data when that file is requested."""
+    if len(args) > 0 and "vendored.json" in str(args[0]):
+        from io import StringIO
+
+        return StringIO(json.dumps(mock_data))
+    # For all other files, use the real open
+    return open(*args, **kwargs)
