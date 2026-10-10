@@ -141,7 +141,8 @@ class TestCheckLinks:
         # tracked-but-deleted file must be skipped, not crash read_text()
         missing = tmp_path / "GONE.md"
         monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [missing])
-        assert check_links(registry=[]) == []
+        broken_links, _, _, _ = check_links(registry=[])
+        assert broken_links == []
 
 
 def test_non_vendored_routes_use_discoverable_skill_names() -> None:
@@ -218,3 +219,233 @@ def test_claude_hook_examples_use_timeout_seconds() -> None:
                 findings.append(f"{path.relative_to(ROOT)}: timeout={value}")
 
     assert findings == []
+
+
+class TestJsonOutput:
+    def test_json_clean_tree(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+        """--json on a clean tree should emit JSON with pass: true and zero counts."""
+        # Set up a temporary repository
+        monkeypatch.setattr("check_md_links.ROOT", tmp_path)
+        # Create a vendored.json with empty vendored list
+        vendored = {"vendored": []}
+        (tmp_path / "vendored.json").write_text(json.dumps(vendored))
+        # Create a README.md
+        (tmp_path / "README.md").write_text("# README\n")
+        # Create a markdown file with no links
+        md = tmp_path / "test.md"
+        md.write_text("Some text\n")
+        # Mock tracked_markdown to return our markdown file
+        monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [md])
+        # Mock discover to return no resources
+        monkeypatch.setattr("check_md_links.discover", lambda _: [])
+
+        # Import the main function from the script
+        # Capture stdout and stderr
+        import io
+        import sys
+
+        from check_md_links import main
+
+        old_stdout, old_stderr = sys.stdout, sys.stderr
+        sys.stdout = io.StringIO()
+        sys.stderr = io.StringIO()
+        try:
+            # Run with --json
+            exit_code = main(["--json"])
+        finally:
+            sys.stdout = old_stdout
+            sys.stderr = old_stderr
+        output = sys.stdout.getvalue().strip()
+        err_output = sys.stderr.getvalue().strip()
+
+        # Parse JSON
+        data = json.loads(output)
+        # Check shape
+        assert data["pass"] is True
+        assert data["counts"]["markdown_files_scanned"] == 1
+        assert data["counts"]["links_resolved"] == 0
+        assert data["counts"]["resources_checked"] == 0
+        assert data["counts"]["files_skipped_as_vendored"] == 0
+        assert data["broken_links"] == []
+        assert data["unlinked_resources"] == []
+        # No stderr output (diagnostics go to stderr, but there are none)
+        assert err_output == ""
+        # Exit code should be 0
+        assert exit_code == 0
+
+    def test_json_with_broken_link(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+        """--json with a broken link should emit JSON with pass: false and one broken link."""
+        monkeypatch.setattr("check_md_links.ROOT", tmp_path)
+        vendored = {"vendored": []}
+        (tmp_path / "vendored.json").write_text(json.dumps(vendored))
+        (tmp_path / "README.md").write_text("# README\n")
+        # Create a markdown file with a broken relative link
+        md = tmp_path / "test.md"
+        md.write_text("See [broken](nonexistent.md) for details.\n")
+        monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [md])
+        monkeypatch.setattr("check_md_links.discover", lambda _: [])
+
+        import io
+        import sys
+
+        from check_md_links import main
+
+        old_stdout, old_stderr = sys.stdout, sys.stderr
+        sys.stdout = io.StringIO()
+        sys.stderr = io.StringIO()
+        try:
+            exit_code = main(["--json"])
+        finally:
+            sys.stdout = old_stdout
+            sys.stderr = old_stderr
+        output = sys.stdout.getvalue().strip()
+        err_output = sys.stderr.getvalue().strip()
+
+        data = json.loads(output)
+        assert data["pass"] is False
+        assert data["counts"]["markdown_files_scanned"] == 1
+        assert data["counts"]["links_resolved"] == 1
+        assert data["counts"]["resources_checked"] == 0
+        assert data["counts"]["files_skipped_as_vendored"] == 0
+        assert len(data["broken_links"]) == 1
+        bl = data["broken_links"][0]
+        assert bl["file"] == "test.md"
+        assert bl["line"] == 1
+        assert bl["raw_target"] == "nonexistent.md"
+        # The resolved path should be the absolute path of nonexistent.md relative to tmp_path? We made it relative if possible.
+        # Since we set ROOT to tmp_path, the resolved path should be relative to tmp_path.
+        expected_resolved = (tmp_path / "nonexistent.md").resolve()
+        try:
+            expected_rel = expected_resolved.relative_to(tmp_path)
+            expected_str = str(expected_rel)
+        except ValueError:
+            expected_str = str(expected_resolved)
+        assert bl["resolved_path"] == expected_str
+        assert data["unlinked_resources"] == []
+        # Stderr should be empty (in JSON mode, we do not print findings count to stderr)
+        assert err_output == ""
+        # Exit code should be 1 (since there is a finding)
+        assert exit_code == 1
+
+    def test_json_with_unlinked_resource(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+        """--json with an unlinked resource should emit JSON with pass: false and one unlinked resource."""
+        monkeypatch.setattr("check_md_links.ROOT", tmp_path)
+        vendored = {"vendored": []}
+        (tmp_path / "vendored.json").write_text(json.dumps(vendored))
+        # Create a README.md that does not link to the resource
+        (tmp_path / "README.md").write_text("# README\n")
+        # Create a resource directory with a SKILL.md
+        resource_dir = tmp_path / "resources" / "testskill"
+        resource_dir.mkdir(parents=True)
+        skill_file = resource_dir / "SKILL.md"
+        skill_file.write_text("# Test Skill\n")
+        # We need to mock discover to return this resource.
+        # We'll create a mock Item class that mimics the one from claude_all.cli
+        from types import SimpleNamespace
+
+        item = SimpleNamespace(kind="skill", name="testskill", src=skill_file)
+        monkeypatch.setattr("check_md_links.discover", lambda _: [item])
+        # No markdown files to scan for links
+        monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [])
+
+        import io
+        import sys
+
+        from check_md_links import main
+
+        old_stdout, old_stderr = sys.stdout, sys.stderr
+        sys.stdout = io.StringIO()
+        sys.stderr = io.StringIO()
+        try:
+            exit_code = main(["--json"])
+        finally:
+            sys.stdout = old_stdout
+            sys.stderr = old_stderr
+        output = sys.stdout.getvalue().strip()
+        err_output = sys.stderr.getvalue().strip()
+
+        data = json.loads(output)
+        assert data["pass"] is False
+        assert data["counts"]["markdown_files_scanned"] == 0
+        assert data["counts"]["links_resolved"] == 0
+        assert data["counts"]["resources_checked"] == 1
+        assert data["counts"]["files_skipped_as_vendored"] == 0
+        assert data["broken_links"] == []
+        assert len(data["unlinked_resources"]) == 1
+        ur = data["unlinked_resources"][0]
+        # The resource path should be relative to ROOT (tmp_path)
+        expected_resource = skill_file.relative_to(tmp_path)
+        assert ur["resource"] == str(expected_resource)
+        # Stderr should be empty
+        assert err_output == ""
+        # Exit code should be 1
+        assert exit_code == 1
+
+    def test_non_json_output_unaffected(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+        """Ensure that without --json, the output and exit code are unchanged from today."""
+        monkeypatch.setattr("check_md_links.ROOT", tmp_path)
+        vendored = {"vendored": []}
+        (tmp_path / "vendored.json").write_text(json.dumps(vendored))
+        (tmp_path / "README.md").write_text("# README\n")
+        # Create a markdown file with a broken link and an unlinked resource scenario
+        md = tmp_path / "test.md"
+        md.write_text("See [broken](nonexistent.md) and []( SKIPPED due to empty anchor).\n")
+        monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [md])
+        # Create a resource that is not linked in README
+        resource_dir = tmp_path / "resources" / "testskill"
+        resource_dir.mkdir(parents=True)
+        skill_file = resource_dir / "SKILL.md"
+        skill_file.write_text("# Test Skill\n")
+        from types import SimpleNamespace
+
+        item = SimpleNamespace(kind="skill", name="testskill", src=skill_file)
+        monkeypatch.setattr("check_md_links.discover", lambda _: [item])
+
+        import io
+        import sys
+
+        from check_md_links import main
+
+        old_stdout, old_stderr = sys.stdout, sys.stderr
+        sys.stdout = io.StringIO()
+        sys.stderr = io.StringIO()
+        try:
+            exit_code = main([])  # no --json
+        finally:
+            sys.stdout = old_stdout
+            sys.stderr = old_stderr
+        output = sys.stdout.getvalue().strip()
+        err_output = sys.stderr.getvalue().strip()
+
+        # Expect two findings: one broken link and one unlinked resource
+        # The broken link line format: "test.md:1: broken-link -> nonexistent.md"
+        # The unlinked resource line format: "README.md: undocumented -> resources/testskill/SKILL.md (add a row linking resources/testskill/SKILL.md)"
+        lines = output.splitlines()
+        assert len(lines) == 2
+        assert lines[0] == "test.md:1: broken-link -> nonexistent.md"
+        assert (
+            lines[1]
+            == "README.md: undocumented -> resources/testskill/SKILL.md (add a row linking resources/testskill/SKILL.md)"
+        )
+        # Stderr should have the count line
+        assert err_output == "\n2 finding(s)."
+        # Exit code should be 1
+        assert exit_code == 1
+
+        # Now test with a clean tree to ensure exit code 0 and no output
+        monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [])
+        monkeypatch.setattr("check_md_links.discover", lambda _: [])
+        # Remove the markdown file we created? We'll just override the tracked_markdown to return empty.
+        # Also, we need to ensure there are no markdown files. We'll not create any.
+        sys.stdout = io.StringIO()
+        sys.stderr = io.StringIO()
+        try:
+            exit_code = main([])
+        finally:
+            sys.stdout = old_stdout
+            sys.stderr = old_stderr
+        output = sys.stdout.getvalue().strip()
+        err_output = sys.stderr.getvalue().strip()
+        assert output == ""
+        assert err_output == ""
+        assert exit_code == 0

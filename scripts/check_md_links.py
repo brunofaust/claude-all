@@ -3,8 +3,35 @@
 
 Vendored files are exempt from the link check (kept byte-identical to upstream);
 their `local_only` sidecars stay checked. README links are the proxy for "documented".
+
+JSON output mode:
+    --json: emit a single JSON object to stdout with the following shape:
+    {
+        "pass": bool,  # True if no broken links and no unlinked resources
+        "counts": {
+            "markdown_files_scanned": int,
+            "links_resolved": int,
+            "resources_checked": int,
+            "files_skipped_as_vendored": int
+        },
+        "broken_links": [
+            {
+                "file": str,  # relative path of markdown file containing the broken link
+                "line": int,  # line number (1-indexed)
+                "raw_target": str,  # the link target as found in the markdown
+                "resolved_path": str  # the resolved path that did not exist (relative to repo root if possible, else absolute)
+            }
+        ],
+        "unlinked_resources": [
+            {
+                "resource": str  # relative path of the resource's SKILL.md (or agent.md) that is missing from README
+            }
+        ]
+    }
+    Diagnostics (if any) go to stderr. Exit codes are identical to non-JSON mode.
 """
 
+import argparse
 import json
 import re
 import subprocess
@@ -57,16 +84,27 @@ def tracked_markdown() -> list[Path]:
     return [ROOT / p for p in out.split("\0") if p]
 
 
-def check_links(registry: list[dict]) -> list[str]:
-    findings = []
+def check_links(registry: list[dict]):
+    """Return (broken_links, files_scanned, links_resolved, files_skipped_vendored) where:
+    - broken_links: list of dicts with keys: file, line, raw_target, resolved_path
+    - files_scanned: number of markdown files processed (after vendored filter and existence check)
+    - links_resolved: number of links considered (after skipping known prefixes and empty anchors)
+    - files_skipped_vendored: number of markdown files skipped due to being vendored
+    """
+    broken_links = []
+    files_scanned = 0
+    links_resolved = 0
+    files_skipped_vendored = 0
     for md in tracked_markdown():
         if is_vendored(md, registry):
+            files_skipped_vendored += 1
             continue
         if not md.exists():
             # `git ls-files` reflects the INDEX: a tracked file deleted from the
             # working tree but not yet re-staged (`git rm`/`git add`) still shows up
             # here. Nothing left to check its links against.
             continue
+        files_scanned += 1
         for line_no, line in strip_code_blocks(md.read_text()):
             for target in LINK.findall(CODE_SPAN.sub("", line)):
                 if target.startswith(SKIP_PREFIX):
@@ -74,33 +112,86 @@ def check_links(registry: list[dict]) -> list[str]:
                 bare = target.split("#", 1)[0]
                 if not bare:
                     continue  # pure anchor
+                links_resolved += 1
                 if not (md.parent / bare).resolve().exists():
-                    rel = md.relative_to(ROOT)
-                    findings.append(f"{rel}:{line_no}: broken-link -> {target}")
-    return findings
+                    rel_md = md.relative_to(ROOT)
+                    resolved = (md.parent / bare).resolve()
+                    # Try to make resolved path relative to ROOT if possible
+                    try:
+                        resolved_rel = resolved.relative_to(ROOT)
+                        resolved_str = str(resolved_rel)
+                    except ValueError:
+                        resolved_str = str(resolved)
+                    broken_links.append(
+                        {
+                            "file": str(rel_md),
+                            "line": line_no,
+                            "raw_target": target,
+                            "resolved_path": resolved_str,
+                        }
+                    )
+    return broken_links, files_scanned, links_resolved, files_skipped_vendored
 
 
-def check_readme_coverage() -> list[str]:
+def check_readme_coverage():
+    """Return (unlinked_resources, resources_checked) where:
+    - unlinked_resources: list of dicts with key: resource (relative path of resource's SKILL.md)
+    - resources_checked: number of resources discovered
+    """
     sys.path.insert(0, str(ROOT / "src"))
     from claude_all.cli import discover
 
     readme = (ROOT / "README.md").read_text()
-    return [
-        f"README.md: undocumented -> {item.kind}/{item.name} "
-        f"(add a row linking {item.src.relative_to(ROOT).as_posix()})"
-        for item in discover([])
-        if f"]({item.src.relative_to(ROOT).as_posix()})" not in readme
-    ]
+    items = discover([])
+    unlinked = []
+    for item in items:
+        if f"]({item.src.relative_to(ROOT).as_posix()})" not in readme:
+            unlinked.append({"resource": str(item.src.relative_to(ROOT))})
+    return unlinked, len(items)
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description="Check markdown links and README coverage.")
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit machine-readable JSON instead of human-readable text.",
+    )
+    args = parser.parse_args()
+
     registry = json.loads((ROOT / "vendored.json").read_text()).get("vendored", [])
-    findings = check_links(registry) + check_readme_coverage()
-    for finding in findings:
-        print(finding)
-    if findings:
-        print(f"\n{len(findings)} finding(s).", file=sys.stderr)
-        return 1
+    broken_links, files_scanned, links_resolved, files_skipped_vendored = check_links(registry)
+    unlinked_resources, resources_checked = check_readme_coverage()
+
+    findings_exist = bool(broken_links or unlinked_resources)
+
+    if args.json:
+        output = {
+            "pass": not findings_exist,
+            "counts": {
+                "markdown_files_scanned": files_scanned,
+                "links_resolved": links_resolved,
+                "resources_checked": resources_checked,
+                "files_skipped_as_vendored": files_skipped_vendored,
+            },
+            "broken_links": broken_links,
+            "unlinked_resources": unlinked_resources,
+        }
+        print(json.dumps(output))
+    else:
+        # Human-readable output (preserve existing format)
+        for bl in broken_links:
+            print(f"{bl['file']}:{bl['line']}: broken-link -> {bl['raw_target']}")
+        for ur in unlinked_resources:
+            # Reconstruct the original message: "README.md: undocumented -> {resource} (add a row linking {resource})"
+            # Note: the original message used the resource path (which is the path to the SKILL.md) and the same path in the hint.
+            print(
+                f"README.md: undocumented -> {ur['resource']} (add a row linking {ur['resource']})"
+            )
+        if findings_exist:
+            total_findings = len(broken_links) + len(unlinked_resources)
+            print(f"\n{total_findings} finding(s).", file=sys.stderr)
+            return 1
     return 0
 
 
