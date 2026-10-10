@@ -25,6 +25,7 @@ from check_md_links import (
     LINK,
     check_links,
     is_vendored,
+    main,
     strip_code_blocks,
 )
 from vendor_sync import clone_upstream
@@ -143,7 +144,7 @@ class TestCheckLinks:
         # tracked-but-deleted file must be skipped, not crash read_text()
         missing = tmp_path / "GONE.md"
         monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [missing])
-        broken_links, _, _, _, _, _ = check_links(registry=[])
+        broken_links, _, _, _ = check_links(registry=[])
         assert broken_links == []
 
 
@@ -233,7 +234,7 @@ class TestJsonOutput:
         try:
             with patch.object(sys, "argv", argv):
                 try:
-                    check_md_links.main()
+                    main()
                 except SystemExit as e:
                     exit_code = e.code
                 else:
@@ -248,7 +249,7 @@ class TestJsonOutput:
     @patch("check_md_links.check_links")
     @patch("check_md_links.check_readme_coverage")
     @patch("check_md_links.ROOT", Path("/dummy"))
-    def test_json_clean_tree(self, mock_root, mock_check_links, mock_check_readme_coverage):
+    def test_json_clean_tree(self, mock_check_links, mock_check_readme_coverage, mock_root):
         mock_check_links.return_value = (
             [],  # broken_links
             5,  # md_scanned
@@ -274,9 +275,8 @@ class TestJsonOutput:
     @patch("check_md_links.check_links")
     @patch("check_md_links.check_readme_coverage")
     @patch("check_md_links.ROOT", Path("/dummy"))
-    def test_json_with_broken_link(self, mock_root, mock_check_links, mock_check_readme_coverage):
+    def test_json_with_broken_link(self, mock_check_links, mock_check_readme_coverage, mock_root):
         # We'll create a broken link entry
-        broken_file = Path("/dummy") / "doc.md"
         mock_check_links.return_value = (
             [  # broken_links list of dicts
                 {
@@ -315,7 +315,7 @@ class TestJsonOutput:
     @patch("check_md_links.check_readme_coverage")
     @patch("check_md_links.ROOT", Path("/dummy"))
     def test_json_with_unlinked_resource(
-        self, mock_root, mock_check_links, mock_check_readme_coverage
+        self, mock_check_links, mock_check_readme_coverage, mock_root
     ):
         # We'll create an unlinked resource entry
         mock_check_links.return_value = (
@@ -354,7 +354,7 @@ class TestJsonOutput:
     @patch("check_md_links.check_readme_coverage")
     @patch("check_md_links.ROOT", Path("/dummy"))
     def test_default_output_unaffected(
-        self, mock_root, mock_check_links, mock_check_readme_coverage
+        self, mock_check_links, mock_check_readme_coverage, mock_root
     ):
         # Test that without --json, the output is as expected (human-readable)
         mock_check_links.return_value = (
