@@ -141,7 +141,8 @@ class TestCheckLinks:
         # tracked-but-deleted file must be skipped, not crash read_text()
         missing = tmp_path / "GONE.md"
         monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [missing])
-        assert check_links(registry=[]) == []
+        broken_links, _, _, _, _, _ = check_links(registry=[])
+        assert broken_links == []
 
 
 def test_non_vendored_routes_use_discoverable_skill_names() -> None:
@@ -218,3 +219,158 @@ def test_claude_hook_examples_use_timeout_seconds() -> None:
                 findings.append(f"{path.relative_to(ROOT)}: timeout={value}")
 
     assert findings == []
+
+
+class TestJsonOutput:
+    def run_main(self, argv):
+        """Helper to run main with given argv and return (exit_code, stdout, stderr)."""
+        import io
+        import sys
+        from unittest.mock import patch
+
+        old_stderr = sys.stderr
+        old_stdout = sys.stdout
+        sys.stderr = io.StringIO()
+        sys.stdout = io.StringIO()
+        try:
+            with patch.object(sys, "argv", argv):
+                try:
+                    check_md_links.main()
+                except SystemExit as e:
+                    exit_code = e.code
+                else:
+                    exit_code = 0
+            stdout = sys.stdout.getvalue()
+            stderr = sys.stderr.getvalue()
+            return exit_code, stdout, stderr
+        finally:
+            sys.stderr = old_stderr
+            sys.stdout = old_stdout
+
+    @patch("check_md_links.check_links")
+    @patch("check_md_links.ROOT", Path("/dummy"))
+    def test_json_clean_tree(self, mock_check_links):
+        mock_check_links.return_value = (
+            [],  # broken_links
+            [],  # unlinked_resources
+            5,  # scanned_files
+            10,  # resolved_links
+            3,  # resources_checks
+            2,  # skipped_vendored
+        )
+        exit_code, stdout, stderr = self.run_main(["check_md_links.py", "--json"])
+        assert exit_code == 0
+        data = json.loads(stdout)
+        assert data["pass"] is True
+        assert data["counts"] == {
+            "markdown_files_scanned": 5,
+            "links_resolved": 10,
+            "resources_checked": 3,
+            "files_skipped_as_vendored": 2,
+        }
+        assert data["broken_links"] == []
+        assert data["unlinked_resources"] == []
+        assert stderr == ""
+
+    @patch("check_md_links.check_links")
+    @patch("check_md_links.ROOT", Path("/dummy"))
+    def test_json_with_broken_link(self, mock_check_links):
+        # We'll create a broken link entry
+        broken_file = Path("/dummy") / "doc.md"
+        mock_check_links.return_value = (
+            [(broken_file, 42, "target.md", Path("/dummy") / "target.md")],  # broken_links
+            [],  # unlinked_resources
+            1,  # scanned_files
+            0,  # resolved_links
+            0,  # resources_checks
+            0,  # skipped_vendored
+        )
+        exit_code, stdout, stderr = self.run_main(["check_md_links.py", "--json"])
+        assert exit_code == 1
+        data = json.loads(stdout)
+        assert data["pass"] is False
+        assert data["counts"] == {
+            "markdown_files_scanned": 1,
+            "links_resolved": 0,
+            "resources_checked": 0,
+            "files_skipped_as_vendored": 0,
+        }
+        assert len(data["broken_links"]) == 1
+        bl = data["broken_links"][0]
+        assert bl["file"] == "doc.md"
+        assert bl["line"] == 42
+        assert bl["target"] == "target.md"
+        assert (
+            bl["resolved"] == "target.md"
+        )  # because ROOT is /dummy, and resolved is /dummy/target.md -> relative is target.md
+        assert data["unlinked_resources"] == []
+        assert stderr == ""
+
+    @patch("check_md_links.check_links")
+    @patch("check_md_links.ROOT", Path("/dummy"))
+    def test_json_with_unlinked_resource(self, mock_check_links):
+        # We'll create an unlinked resource entry
+        # The resource path is relative to ROOT, kind and name
+        mock_check_links.return_value = (
+            [],  # broken_links
+            [(Path("/dummy") / "src/skill/SKILL.md", "skill", "my-skill")],  # unlinked_resources
+            1,  # scanned_files
+            0,  # resolved_links
+            1,  # resources_checks
+            0,  # skipped_vendored
+        )
+        exit_code, stdout, stderr = self.run_main(["check_md_links.py", "--json"])
+        assert exit_code == 1
+        data = json.loads(stdout)
+        assert data["pass"] is False
+        assert data["counts"] == {
+            "markdown_files_scanned": 1,
+            "links_resolved": 0,
+            "resources_checked": 1,
+            "files_skipped_as_vendored": 0,
+        }
+        assert data["broken_links"] == []
+        assert len(data["unlinked_resources"]) == 1
+        ur = data["unlinked_resources"][0]
+        assert ur["path"] == "src/skill/SKILL.md"
+        assert ur["kind"] == "skill"
+        assert ur["name"] == "my-skill"
+        assert stderr == ""
+
+    @patch("check_md_links.check_links")
+    @patch("check_md_links.ROOT", Path("/dummy"))
+    def test_default_output_unaffected(self, mock_check_links):
+        # Test that without --json, the output is as expected (human-readable)
+        mock_check_links.return_value = (
+            [],  # broken_links
+            [],  # unlinked_resources
+            5,  # scanned_files
+            10,  # resolved_links
+            3,  # resources_checks
+            2,  # skipped_vendored
+        )
+        exit_code, stdout, stderr = self.run_main(["check_md_links.py"])
+        assert exit_code == 0
+        assert stdout == ""
+        # Expect a message to stderr about the counts
+        expected_stderr = "Scanned 5 markdown files, 10 links resolved, 3 resources checked, 2 files skipped as vendored.\n"
+        assert stderr == expected_stderr
+
+        # Now with a broken link and unlinked resource to ensure error output
+        mock_check_links.return_value = (
+            [(Path("/dummy") / "doc.md", 1, "target.md", Path("/dummy") / "target.md")],
+            [(Path("/dummy") / "src/skill/SKILL.md", "skill", "my-skill")],
+            1,
+            0,
+            1,
+            0,
+        )
+        exit_code, stdout, stderr = self.run_main(["check_md_links.py"])
+        assert exit_code == 1
+        assert stdout == ""
+        # Check stderr contains the expected lines
+        assert "Broken links:" in stderr
+        assert "  doc.md:1: target.md -> target.md" in stderr
+        assert "Unlinked resources:" in stderr
+        assert "  src/skill/SKILL.md (skill: my-skill)" in stderr
+        assert "Found 1 broken link(s) and 1 unlinked resource(s)" in stderr
