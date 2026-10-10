@@ -74,8 +74,10 @@ def test_shipped_instructions_declare_every_reference() -> None:
 
 def test_zero_discovery_fails(tmp_path: Path, monkeypatch) -> None:
     """When no manifests or instruction snippets are found, exit with code 2."""
-    # We want to simulate an empty src/claude_all directory (so that the glob finds nothing).
-    # Set SRC to tmp_path / "src", so that SRC / "claude_all" points to tmp_path / "src" / "claude_all"
+    # We want to simulate an empty src/claude_all directory
+    # (so that the glob finds nothing).
+    # Set SRC to tmp_path / "src", so that SRC / "claude_all"
+    # points to tmp_path / "src" / "claude_all"
     src_base = tmp_path / "src"
     src_base.mkdir(parents=True)
     src_claude_all = src_base / "claude_all"
@@ -104,7 +106,8 @@ def state_key(kind, name):
 def test_success_summary(tmp_path: Path, monkeypatch) -> None:
     """When there are files and no findings, print summary and exit 0."""
     # We want one manifest and one instruction snippet.
-    # Set SRC to tmp_path / "src", so that SRC / "claude_all" points to tmp_path / "src" / "claude_all"
+    # Set SRC to tmp_path / "src", so that SRC / "claude_all"
+    # points to tmp_path / "src" / "claude_all"
     src_base = tmp_path / "src"
     src_base.mkdir(parents=True)
     src_claude_all = src_base / "claude_all"

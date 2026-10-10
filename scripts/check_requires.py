@@ -108,15 +108,31 @@ def main() -> int:
 
     if total_units == 0:
         print(
-            "No files discovered for inspection. Manifest patterns '**/claude-all.json' and '**/*.claude-all.json' "
-            "under src/claude_all matched 0 files, and instruction snippet pattern '*/claude_md.md' "
+            "No files discovered for inspection. Manifest patterns "
+            "'**/claude-all.json' and '**/*.claude-all.json' under src/claude_all "
+            "matched 0 files, and instruction snippet pattern '*/claude_md.md' "
             "under src/claude_all/instructions matched 0 files.",
             file=sys.stderr,
         )
         return 2
 
+    # Calculate summary counts: manifests not under instructions, and snippets.
+    manifest_count_summary = 0
+    for manifest in sorted((SRC / "claude_all").rglob("claude-all.json")) + sorted(
+        (SRC / "claude_all").rglob("*.claude-all.json")
+    ):
+        try:
+            # Skip manifests under instructions directory
+            if str(manifest).startswith(str(INSTRUCTIONS_DIR) + "/"):
+                continue
+        except ValueError:
+            # Manifest is not under INSTRUCTIONS_DIR (e.g., if INSTRUCTIONS_DIR is not a parent)
+            pass
+        manifest_count_summary += 1
+
     print(
-        f"Inspected {manifest_count} manifest file(s) and {snippet_count} instruction snippet(s)."
+        f"Inspected {manifest_count_summary} manifest file(s) and "
+        f"{snippet_count} instruction snippet(s)."
     )
     return 0
 
