@@ -11,6 +11,9 @@ import importlib.util
 import json
 import sys
 from pathlib import Path
+from unittest.mock import patch
+
+import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SPEC = importlib.util.spec_from_file_location(
@@ -68,3 +71,49 @@ def test_shipped_instructions_declare_every_reference() -> None:
     known = check_requires.load_resource_keys()
 
     assert check_requires.find_undeclared_instruction_refs(known) == []
+
+
+def test_main_zero_discovery_fails(capsys: pytest.CaptureFixture) -> None:
+    """When no resources are discovered, main() exits with code 2 and prints error."""
+    with patch("check_requires.load_resource_keys", return_value=set()):
+        exit_code = check_requires.main()
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert captured.err.strip() == (
+        "No resources discovered by the installer's discovery "
+        "— check_requires.py inspected 0 units."
+    )
+    assert captured.out == ""
+
+
+def test_main_success_prints_inspected_count(capsys: pytest.CaptureFixture) -> None:
+    """When no findings, main() exits 0 and prints inspected count to stderr."""
+    with (
+        patch("check_requires.load_resource_keys", return_value={"a/b", "c/d"}),
+        patch("check_requires.find_violations", return_value=[]),
+        patch("check_requires.find_undeclared_instruction_refs", return_value=[]),
+    ):
+        exit_code = check_requires.main()
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    # The inspected count should be 2
+    assert captured.err.strip() == "inspected=2"
+    assert captured.out == ""
+
+
+def test_main_failure_behavior_unchanged(capsys: pytest.CaptureFixture) -> None:
+    """When findings exist, main() exits 1 and prints findings and summary."""
+    with (
+        patch("check_requires.load_resource_keys", return_value={"a/b"}),
+        patch("check_requires.find_violations", return_value=["some/path: error"]),
+        patch("check_requires.find_undeclared_instruction_refs", return_value=[]),
+    ):
+        exit_code = check_requires.main()
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert captured.out.strip() == "some/path: error"
+    # Check that the stderr contains the summary line
+    assert "requires finding(s)" in captured.err
+    assert "dependency manifest points at a resource" in captured.err
+    # Also, the inspected count should not be printed in the failure case
+    assert "inspected=" not in captured.err

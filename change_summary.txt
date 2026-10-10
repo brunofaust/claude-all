@@ -1,0 +1,16 @@
+## Change Summary
+
+### What was changed
+- scripts/check_requires.py: Modified to add zero-discovery failure handling and success summary line.
+- tests/test_check_requires.py: Added tests for the new behavior.
+
+### Implementation approach
+1. Added zero-discovery check in main() that exits with code 2 and prints an error message when no resources are discovered.
+2. Added success summary line "inspected=<count>" to stderr when validation passes.
+3. Preserved existing validation behavior and exit codes.
+4. Added comprehensive tests for zero-discovery, success, and failure scenarios.
+
+### Known limitations or follow-up work
+- Zero-discovery error message is hardcoded; if discovery mechanism changes, message may need update.
+- Success summary currently goes to stderr; could be changed to stdout if preferred.
+- Existing test for shipped instructions relies on actual installer discovery and may be environment-dependent.
