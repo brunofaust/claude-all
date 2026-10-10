@@ -9,11 +9,13 @@ Exit 0 = all resolve, 1 = dangling/malformed entry.
 from __future__ import annotations
 
 import json
+import os
 import re
 import sys
-from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+if "_TEST_REPO_ROOT" in os.environ:
+    REPO_ROOT = Path(os.environ["_TEST_REPO_ROOT"]).resolve()
 SRC = REPO_ROOT / "src"
 INSTRUCTIONS_DIR = SRC / "claude_all" / "instructions"
 CODE_SPAN = re.compile(r"`([^`\s]+)`")
@@ -83,6 +85,30 @@ def find_undeclared_instruction_refs(
 def main() -> int:
     """CLI entry point — print findings to stdout, exit 1 on any."""
     known = load_resource_keys()
+    # Gather manifest files and instruction snippet files for zero-discovery check
+    manifest_files = list(
+        sorted((SRC / "claude_all").rglob("claude-all.json"))
+        + sorted((SRC / "claude_all").rglob("*.claude-all.json"))
+    )
+    snippet_files = sorted(INSTRUCTIONS_DIR.glob("*/claude_md.md"))
+    total_files = len(manifest_files) + len(snippet_files)
+    if total_files == 0:
+        # Determine which pattern matched nothing to give a specific message
+        if not manifest_files:
+            print(
+                f"Error: no claude-all.json files found in {SRC / 'claude_all'} "
+                f"(checked for 'claude-all.json' and '*.claude-all.json')",
+                file=sys.stderr,
+            )
+            return 1
+        else:  # then snippet_files must be empty
+            print(
+                f"Error: no instruction snippet files found in {INSTRUCTIONS_DIR} "
+                f"(checked for '*/claude_md.md')",
+                file=sys.stderr,
+            )
+            return 1
+
     findings = find_violations(known) + find_undeclared_instruction_refs(known)
     for finding in findings:
         print(finding)
@@ -94,6 +120,8 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
+    # Success: no findings and at least one file inspected
+    print(f"files_inspected={total_files}")
     return 0
 
 
