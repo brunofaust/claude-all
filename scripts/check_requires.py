@@ -83,6 +83,14 @@ def find_undeclared_instruction_refs(
 def main() -> int:
     """CLI entry point — print findings to stdout, exit 1 on any."""
     known = load_resource_keys()
+    # Zero-discovery failure: if no resources are discovered, fail loudly.
+    if not known:
+        print(
+            "No resources discovered by the installer's discovery "
+            "— check_requires.py inspected 0 units.",
+            file=sys.stderr,
+        )
+        return 2
     findings = find_violations(known) + find_undeclared_instruction_refs(known)
     for finding in findings:
         print(finding)
@@ -94,6 +102,8 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
+    # Success: print a greppable summary line with the number of units inspected.
+    print(f"inspected={len(known)}", file=sys.stderr)
     return 0
 
 

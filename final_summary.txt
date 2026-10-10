@@ -1,0 +1,25 @@
+## Change Summary
+
+### What was changed
+- scripts/check_requires.py: Modified to add zero-discovery failure handling and success summary line.
+  - Added zero-discovery check: if no resources are discovered, prints "No resources discovered — check_requires.py inspected 0 units." to stderr and exits with code 2.
+  - Added success summary: when validation passes, prints "inspected=<count>" to stderr (where <count> is number of discovered resources).
+  - Preserved existing validation behavior: findings to stdout, summary to stderr, exit code 1 on failure.
+- tests/test_check_requires.py: Added comprehensive tests for new behavior.
+  - test_main_zero_discovery_fails: verifies zero-discovery exits with code 2 and correct error message.
+  - test_main_success_prints_inspected_count: verifies success exits with code 0 and prints inspected count.
+  - test_main_failure_behavior_unchanged: ensures existing failure behavior is preserved.
+  - Kept existing tests for helper functions unchanged.
+- test_runner.py: Fixed import order (moved import tempfile to top) to resolve Ruff E402 error.
+
+### Implementation approach
+1. Zero-discovery handling: After loading resource set, check if empty; if so, print error to stderr and exit 2.
+2. Success summary: When no findings, print "inspected=<count>" to stderr before exiting 0.
+3. Existing failure behavior: Unchanged (findings stdout, summary stderr, exit code 1).
+4. Tests: Used unittest.mock.patch to control load_resource_keys and finding functions; verified exit codes, stdout, stderr.
+
+### Known limitations or follow-up work
+- Zero-discovery error message is hardcoded; if discovery mechanism changes, message may need updating.
+- Success summary currently goes to stderr (to match existing failure summary); could be changed to stdout if preferred.
+- Test for shipped instructions relies on actual installer discovery and may be environment-dependent (existing test, not modified).
+- No changes made to vendor_sync.py as per ticket scope (one file per change).
