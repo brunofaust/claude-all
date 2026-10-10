@@ -150,7 +150,10 @@ def _check_readme_coverage_internal() -> tuple[list[dict], dict]:
 
 
 def format_unlinked_resource(unlinked_resource: dict) -> str:
-    return f"README.md: undocumented -> {unlinked_resource['kind']}/{unlinked_resource['name']} (add a row linking {unlinked_resource['src']})"
+    return (
+        f"README.md: undocumented -> {unlinked_resource['kind']}/{unlinked_resource['name']}"
+        f" (add a row linking {unlinked_resource['src']})"
+    )
 
 
 def check_readme_coverage() -> list[str]:

@@ -234,12 +234,6 @@ def test_json_output_clean_tree(
         "builtins.open", lambda *args, **kwargs: mock_open_vendored(vendored_data, *args, **kwargs)
     )
 
-    # Mock git ls-files to return only README.md
-    def mock_tracked_markdown():
-        return [tmp_path / "README.md"]
-
-    monkeypatch.setattr("check_md_links.tracked_markdown", mock_tracked_markdown)
-
     # Mock discover to return no resources
     class MockItem:
         def __init__(self, kind: str, name: str, src: Path) -> None:
@@ -250,7 +244,19 @@ def test_json_output_clean_tree(
     def mock_discover(_args: list) -> list:
         return []
 
-    monkeypatch.setattr("check_md_links.cli.discover", mock_discover)
+    # Mock git ls-files to return only README.md
+    def mock_tracked_markdown():
+        return [tmp_path / "README.md"]
+
+    monkeypatch.setattr("check_md_links.tracked_markdown", mock_tracked_markdown)
+
+    # Mock _check_readme_coverage_internal to return no resources
+    def mock_check_readme_coverage_internal(_registry: list[dict]) -> tuple[list[dict], dict]:
+        return ([], {"resources_checked": 0})
+
+    monkeypatch.setattr(
+        "check_md_links._check_readme_coverage_internal", mock_check_readme_coverage_internal
+    )
 
     # Test --json output
     import sys
@@ -307,17 +313,29 @@ def test_json_output_with_broken_link(
         "builtins.open", lambda *args, **kwargs: mock_open_vendored(vendored_data, *args, **kwargs)
     )
 
+    # Mock discover to return no resources
+    class MockItem:
+        def __init__(self, kind: str, name: str, src: Path) -> None:
+            self.kind = kind
+            self.name = name
+            self.src = src
+
+    def mock_discover(_args: list) -> list:
+        return []
+
     # Mock git ls-files to return both markdown files
     def mock_tracked_markdown():
         return [tmp_path / "README.md", tmp_path / "other.md"]
 
     monkeypatch.setattr("check_md_links.tracked_markdown", mock_tracked_markdown)
 
-    # Mock discover to return no resources
-    def mock_discover(_args: list) -> list:
-        return []
+    # Mock _check_readme_coverage_internal to return no resources
+    def mock_check_readme_coverage_internal(_registry: list[dict]) -> tuple[list[dict], dict]:
+        return ([], {"resources_checked": 0})
 
-    monkeypatch.setattr("check_md_links.cli.discover", mock_discover)
+    monkeypatch.setattr(
+        "check_md_links._check_readme_coverage_internal", mock_check_readme_coverage_internal
+    )
 
     # Test --json output
     import sys
@@ -377,13 +395,7 @@ def test_json_output_with_unlinked_resource(
         "builtins.open", lambda *args, **kwargs: mock_open_vendored(vendored_data, *args, **kwargs)
     )
 
-    # Mock git ls-files to return only README.md
-    def mock_tracked_markdown():
-        return [tmp_path / "README.md"]
-
-    monkeypatch.setattr("check_md_links.tracked_markdown", mock_tracked_markdown)
-
-    # Mock discover to return a resource that's not in README
+    # Mock discover to return no resources
     class MockItem:
         def __init__(self, kind: str, name: str, src: Path) -> None:
             self.kind = kind
@@ -391,10 +403,24 @@ def test_json_output_with_unlinked_resource(
             self.src = src
 
     def mock_discover(_args: list) -> list:
-        # Return a resource with a src that won't be found in README
-        return [MockItem("skill", "test-skill", tmp_path / "src" / "test-skill" / "SKILL.md")]
+        return []
 
-    monkeypatch.setattr("check_md_links.cli.discover", mock_discover)
+    # Mock git ls-files to return only README.md
+    def mock_tracked_markdown():
+        return [tmp_path / "README.md"]
+
+    monkeypatch.setattr("check_md_links.tracked_markdown", mock_tracked_markdown)
+
+    # Mock _check_readme_coverage_internal to return an unlinked resource
+    def mock_check_readme_coverage_internal(_registry: list[dict]) -> tuple[list[dict], dict]:
+        return (
+            [{"src": "src/test-skill/SKILL.md", "kind": "skill", "name": "test-skill"}],
+            {"resources_checked": 1},
+        )
+
+    monkeypatch.setattr(
+        "check_md_links._check_readme_coverage_internal", mock_check_readme_coverage_internal
+    )
 
     # Test --json output
     import sys
