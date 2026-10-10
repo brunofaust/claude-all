@@ -156,17 +156,14 @@ def main(args: list[str] | None = None) -> int:
         action="store_true",
         help="Emit machine-readable JSON instead of human-readable text.",
     )
-    if args is None:
-        args = parser.parse_args()
-    else:
-        args = parser.parse_args(args)
+    parsed_args = parser.parse_args() if args is None else parser.parse_args(args)
 
     registry = json.loads((ROOT / "vendored.json").read_text()).get("vendored", [])
     broken_links, files_scanned, links_resolved, files_skipped_vendored = check_links(registry)
     unlinked_resources, resources_checked = check_readme_coverage()
     findings_exist = bool(broken_links or unlinked_resources)
 
-    if args.json:
+    if parsed_args.json:
         output = {
             "pass": not findings_exist,
             "counts": {
