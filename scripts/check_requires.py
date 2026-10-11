@@ -13,8 +13,7 @@ import re
 import sys
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-SRC = REPO_ROOT / "src"
+SRC = Path(__file__).resolve().parent.parent / "src"
 INSTRUCTIONS_DIR = SRC / "claude_all" / "instructions"
 CODE_SPAN = re.compile(r"`([^`\s]+)`")
 
@@ -32,7 +31,8 @@ def find_violations(known: set[str]) -> list[str]:
     for manifest in sorted((SRC / "claude_all").rglob("claude-all.json")) + sorted(
         (SRC / "claude_all").rglob("*.claude-all.json")
     ):
-        rel = manifest.relative_to(REPO_ROOT)
+        base = SRC.parent
+        rel = manifest.relative_to(base)
         try:
             config = json.loads(manifest.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError) as exc:
@@ -81,7 +81,23 @@ def find_undeclared_instruction_refs(
 
 
 def main() -> int:
-    """CLI entry point — print findings to stdout, exit 1 on any."""
+    """Check requires: validates resource dependencies.
+    Prints inspected unit count on success, exits 1 on any findings or if no resources.
+    """
+    # Count manifests and snippets
+    manifests = list((SRC / "claude_all").rglob("claude-all.json")) + list(
+        (SRC / "claude_all").rglob("*.claude-all.json")
+    )
+    snippets = list(INSTRUCTIONS_DIR.glob("*/claude_md.md"))
+    units = len(manifests) + len(snippets)
+    if units == 0:
+        print(
+            "Error: no resources discovered — patterns '**/claude-all.json', "
+            "'*/*.claude-all.json', and '*/claude_md.md' matched nothing.",
+            file=sys.stderr,
+        )
+        return 1
+
     known = load_resource_keys()
     findings = find_violations(known) + find_undeclared_instruction_refs(known)
     for finding in findings:
@@ -94,6 +110,7 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
+    print(f"Inspected {units} units")
     return 0
 
 
