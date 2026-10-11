@@ -5,6 +5,7 @@ Also checks that resources named by an instruction snippet are in its `requires`
 Targets are resolved via the installer's own `discover()`, never re-derived here.
 Exit 0 = all resolve, 1 = dangling/malformed entry.
 """
+# Gate for checking dependency resolution.
 
 from __future__ import annotations
 
