@@ -1,3 +1,14 @@
+import json
+import sys
+from pathlib import Path
+
+import pytest
+
+repo_root = Path(__file__).parent.parent
+sys.path.insert(0, str(repo_root / "scripts"))
+sys.path.insert(0, str(repo_root / "src"))
+
+
 class TestJsonMode:
     def _setup_git_repo(self, tmp_path: Path) -> Path:
         """Initialize a git repo in tmp_path and return the repo path."""
@@ -28,7 +39,6 @@ class TestJsonMode:
 
     def test_json_clean_tree(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """JSON mode on a clean tree should report pass: true and zero counts."""
-        import json
         from io import StringIO
 
         repo = self._setup_git_repo(tmp_path)
@@ -53,8 +63,10 @@ class TestJsonMode:
         old_argv = sys.argv
         old_stdout = sys.stdout
         old_stderr = sys.stderr
-        sys.stdout = StringIO()
-        sys.stderr = StringIO()
+        stdout_capture = StringIO()
+        stderr_capture = StringIO()
+        sys.stdout = stdout_capture
+        sys.stderr = stderr_capture
         try:
             sys.argv = ["check_md_links", "--json"]
             from check_md_links import main
@@ -64,8 +76,9 @@ class TestJsonMode:
             sys.argv = old_argv
             sys.stdout = old_stdout
             sys.stderr = old_stderr
-        output = sys.stdout.getvalue()
-        error = sys.stderr.getvalue()
+        output = stdout_capture.getvalue()
+        # stderr should be empty in JSON mode
+        assert stderr_capture.getvalue() == ""
 
         assert exit_code == 0
         data = json.loads(output)
@@ -79,7 +92,6 @@ class TestJsonMode:
 
     def test_json_with_broken_link(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """JSON mode with a broken link should report pass: false and the broken link."""
-        import json
         from io import StringIO
 
         repo = self._setup_git_repo(tmp_path)
@@ -96,8 +108,10 @@ class TestJsonMode:
         old_argv = sys.argv
         old_stdout = sys.stdout
         old_stderr = sys.stderr
-        sys.stdout = StringIO()
-        sys.stderr = StringIO()
+        stdout_capture = StringIO()
+        stderr_capture = StringIO()
+        sys.stdout = stdout_capture
+        sys.stderr = stderr_capture
         try:
             sys.argv = ["check_md_links", "--json"]
             from check_md_links import main
@@ -107,8 +121,9 @@ class TestJsonMode:
             sys.argv = old_argv
             sys.stdout = old_stdout
             sys.stderr = old_stderr
-        output = sys.stdout.getvalue()
-        error = sys.stderr.getvalue()
+        output = stdout_capture.getvalue()
+        # stderr should be empty in JSON mode
+        assert stderr_capture.getvalue() == ""
 
         assert exit_code == 1
         data = json.loads(output)
@@ -129,7 +144,6 @@ class TestJsonMode:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """JSON mode with an unlinked resource should report pass: false and the resource."""
-        import json
         from io import StringIO
 
         repo = self._setup_git_repo(tmp_path)
@@ -153,8 +167,10 @@ class TestJsonMode:
         old_argv = sys.argv
         old_stdout = sys.stdout
         old_stderr = sys.stderr
-        sys.stdout = StringIO()
-        sys.stderr = StringIO()
+        stdout_capture = StringIO()
+        stderr_capture = StringIO()
+        sys.stdout = stdout_capture
+        sys.stderr = stderr_capture
         try:
             sys.argv = ["check_md_links", "--json"]
             from check_md_links import main
@@ -164,8 +180,9 @@ class TestJsonMode:
             sys.argv = old_argv
             sys.stdout = old_stdout
             sys.stderr = old_stderr
-        output = sys.stdout.getvalue()
-        error = sys.stderr.getvalue()
+        output = stdout_capture.getvalue()
+        # stderr should be empty in JSON mode
+        assert stderr_capture.getvalue() == ""
 
         assert exit_code == 1
         data = json.loads(output)
@@ -199,8 +216,10 @@ class TestJsonMode:
         old_argv = sys.argv
         old_stdout = sys.stdout
         old_stderr = sys.stderr
-        sys.stdout = StringIO()
-        sys.stderr = StringIO()
+        stdout_capture = StringIO()
+        stderr_capture = StringIO()
+        sys.stdout = stdout_capture
+        sys.stderr = stderr_capture
         try:
             sys.argv = ["check_md_links"]
             from check_md_links import main
@@ -210,8 +229,8 @@ class TestJsonMode:
             sys.argv = old_argv
             sys.stdout = old_stdout
             sys.stderr = old_stderr
-        output = sys.stdout.getvalue()
-        error = sys.stderr.getvalue()
+        output = stdout_capture.getvalue()
+        error = stderr_capture.getvalue()
 
         assert exit_code == 1
         assert "test.md:1: broken-link -> ./nonexistent.md" in output
@@ -221,8 +240,10 @@ class TestJsonMode:
         old_argv = sys.argv
         old_stdout = sys.stdout
         old_stderr = sys.stderr
-        sys.stdout = StringIO()
-        sys.stderr = StringIO()
+        stdout_capture = StringIO()
+        stderr_capture = StringIO()
+        sys.stdout = stdout_capture
+        sys.stderr = stderr_capture
         try:
             sys.argv = ["check_md_links", "--json"]
             from check_md_links import main
@@ -232,8 +253,8 @@ class TestJsonMode:
             sys.argv = old_argv
             sys.stdout = old_stdout
             sys.stderr = old_stderr
-        output = sys.stdout.getvalue()
-        error = sys.stderr.getvalue()
+        output = stdout_capture.getvalue()
+        error = stderr_capture.getvalue()
 
         assert exit_code == 1
         # stderr should be empty in JSON mode
