@@ -31,12 +31,19 @@ Without --json, output and exit codes are unchanged from today.
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+# Determine repository root
+# Allow override via CLAUDE_ALL_ROOT environment variable for testing
+root_env = os.environ.get("CLAUDE_ALL_ROOT")
+if root_env:
+    ROOT = Path(root_env).resolve()
+else:
+    ROOT = Path(__file__).resolve().parent.parent
 
 # [label](target) — skip images, absolute URLs, anchors and mailto. A leading `/` is
 # a site-absolute URL (the SEO skill's llms.txt examples), never a repo path.
