@@ -13,8 +13,7 @@ import re
 import sys
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-SRC = REPO_ROOT / "src"
+SRC = Path(__file__).resolve().parent.parent / "src"
 INSTRUCTIONS_DIR = SRC / "claude_all" / "instructions"
 CODE_SPAN = re.compile(r"`([^`\s]+)`")
 
@@ -32,7 +31,8 @@ def find_violations(known: set[str]) -> list[str]:
     for manifest in sorted((SRC / "claude_all").rglob("claude-all.json")) + sorted(
         (SRC / "claude_all").rglob("*.claude-all.json")
     ):
-        rel = manifest.relative_to(REPO_ROOT)
+        base = SRC.parent
+        rel = manifest.relative_to(base)
         try:
             config = json.loads(manifest.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError) as exc:
