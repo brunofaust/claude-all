@@ -218,3 +218,256 @@ def test_claude_hook_examples_use_timeout_seconds() -> None:
                 findings.append(f"{path.relative_to(ROOT)}: timeout={value}")
 
     assert findings == []
+
+
+def test_json_clean_tree(monkeypatch):
+    """--json output on a clean tree."""
+    monkeypatch.setattr(
+        "check_md_links._check_links_and_collect",
+        lambda registry: (
+            [],
+            {"markdown_files_scanned": 0, "links_resolved": 0, "files_skipped_as_vendored": 0},
+            [],
+        ),
+    )
+    monkeypatch.setattr(
+        "check_md_links._check_readme_coverage_and_collect",
+        lambda: ([], {"resources_checked": 0}, []),
+    )
+    monkeypatch.setattr("check_md_links.json.loads", lambda x: {"vendored": []})
+    import io
+    import json
+    import sys
+
+    from check_md_links import main
+
+    monkeypatch.setattr("sys.argv", ["check_md_links.py", "--json"])
+
+    old_stdout = sys.stdout
+    old_stderr = sys.stderr
+    sys.stdout = io.StringIO()
+    sys.stderr = io.StringIO()
+    try:
+        exit_code = main()
+        output = sys.stdout.getvalue()
+        error_output = sys.stderr.getvalue()
+    finally:
+        sys.stdout = old_stdout
+        sys.stderr = old_stderr
+
+    result = json.loads(output)
+
+    assert result["passed"]
+    assert result["counts"] == {
+        "markdown_files_scanned": 0,
+        "links_resolved": 0,
+        "resources_checked": 0,
+        "files_skipped_as_vendored": 0,
+    }
+    assert result["broken_links"] == []
+    assert result["unlinked_resources"] == []
+    assert exit_code == 0
+    # No output to stderr in JSON mode
+    assert error_output == ""
+
+
+def test_json_broken_link(monkeypatch):
+    """--json output with a broken link."""
+    monkeypatch.setattr(
+        "check_md_links._check_links_and_collect",
+        lambda registry: (
+            ["relative/path/to/file.md:10: broken-link -> target"],
+            {"markdown_files_scanned": 1, "links_resolved": 5, "files_skipped_as_vendored": 0},
+            [
+                {
+                    "file": "relative/path/to/file.md",
+                    "line": 10,
+                    "raw_link_target": "target",
+                    "resolved_path": "/absolute/path/that/does/not/exist",
+                }
+            ],
+        ),
+    )
+    monkeypatch.setattr(
+        "check_md_links._check_readme_coverage_and_collect",
+        lambda: ([], {"resources_checked": 0}, []),
+    )
+    monkeypatch.setattr("check_md_links.json.loads", lambda x: {"vendored": []})
+    import io
+    import json
+    import sys
+
+    from check_md_links import main
+
+    monkeypatch.setattr("sys.argv", ["check_md_links.py", "--json"])
+
+    old_stdout = sys.stdout
+    old_stderr = sys.stderr
+    sys.stdout = io.StringIO()
+    sys.stderr = io.StringIO()
+    try:
+        exit_code = main()
+        output = sys.stdout.getvalue()
+        error_output = sys.stderr.getvalue()
+    finally:
+        sys.stdout = old_stdout
+        sys.stderr = old_stderr
+
+    result = json.loads(output)
+
+    assert not result["passed"]
+    assert result["counts"] == {
+        "markdown_files_scanned": 1,
+        "links_resolved": 5,
+        "resources_checked": 0,
+        "files_skipped_as_vendored": 0,
+    }
+    assert len(result["broken_links"]) == 1
+    bl = result["broken_links"][0]
+    assert bl["file"] == "relative/path/to/file.md"
+    assert bl["line"] == 10
+    assert bl["raw_link_target"] == "target"
+    assert bl["resolved_path"] == "/absolute/path/that/does/not/exist"
+    assert result["unlinked_resources"] == []
+    assert exit_code == 1
+    # No output to stderr in JSON mode
+    assert error_output == ""
+
+
+def test_json_unlinked_resource(monkeypatch):
+    """--json output with an unlinked resource."""
+    monkeypatch.setattr(
+        "check_md_links._check_links_and_collect",
+        lambda registry: (
+            [],
+            {"markdown_files_scanned": 0, "links_resolved": 0, "files_skipped_as_vendored": 0},
+            [],
+        ),
+    )
+    monkeypatch.setattr(
+        "check_md_links._check_readme_coverage_and_collect",
+        lambda: (
+            [
+                "README.md: undocumented -> skill/my-skill "
+                "(add a row linking skill/my-skill/SKILL.md)"
+            ],
+            {"resources_checked": 1},
+            [{"path": "skill/my-skill/SKILL.md"}],
+        ),
+    )
+    monkeypatch.setattr("check_md_links.json.loads", lambda x: {"vendored": []})
+    import io
+    import json
+    import sys
+
+    from check_md_links import main
+
+    monkeypatch.setattr("sys.argv", ["check_md_links.py", "--json"])
+
+    old_stdout = sys.stdout
+    old_stderr = sys.stderr
+    sys.stdout = io.StringIO()
+    sys.stderr = io.StringIO()
+    try:
+        exit_code = main()
+        output = sys.stdout.getvalue()
+        error_output = sys.stderr.getvalue()
+    finally:
+        sys.stdout = old_stdout
+        sys.stderr = old_stderr
+
+    result = json.loads(output)
+
+    assert not result["passed"]
+    assert result["counts"] == {
+        "markdown_files_scanned": 0,
+        "links_resolved": 0,
+        "resources_checked": 1,
+        "files_skipped_as_vendored": 0,
+    }
+    assert result["broken_links"] == []
+    assert len(result["unlinked_resources"]) == 1
+    assert result["unlinked_resources"][0]["path"] == "skill/my-skill/SKILL.md"
+    assert exit_code == 1
+    # No output to stderr in JSON mode
+    assert error_output == ""
+
+
+def test_default_output_unaffected(monkeypatch):
+    """Default (non-JSON) output is unchanged."""
+    # Case with findings
+    monkeypatch.setattr(
+        "check_md_links._check_links_and_collect",
+        lambda registry: (
+            ["file1.md:5: broken-link -> target1", "file2.md:10: broken-link -> target2"],
+            {"markdown_files_scanned": 2, "links_resolved": 10, "files_skipped_as_vendored": 0},
+            [],
+        ),
+    )
+    monkeypatch.setattr(
+        "check_md_links._check_readme_coverage_and_collect",
+        lambda: (
+            [
+                "README.md: undocumented -> skill/a (add a row linking skill/a/SKILL.md)",
+                "README.md: undocumented -> skill/b (add a row linking skill/b/SKILL.md)",
+            ],
+            {"resources_checked": 2},
+            [],
+        ),
+    )
+    monkeypatch.setattr("check_md_links.json.loads", lambda x: {"vendored": []})
+    import io
+    import sys
+
+    from check_md_links import main
+
+    monkeypatch.setattr("sys.argv", ["check_md_links.py"])
+
+    old_stdout = sys.stdout
+    old_stderr = sys.stderr
+    sys.stdout = io.StringIO()
+    sys.stderr = io.StringIO()
+    try:
+        exit_code = main()
+        output = sys.stdout.getvalue()
+        error_output = sys.stderr.getvalue()
+    finally:
+        sys.stdout = old_stdout
+        sys.stderr = old_stderr
+
+    expected_output = (
+        "file1.md:5: broken-link -> target1\n"
+        "file2.md:10: broken-link -> target2\n"
+        "README.md: undocumented -> skill/a (add a row linking skill/a/SKILL.md)\n"
+        "README.md: undocumented -> skill/b (add a row linking skill/b/SKILL.md)\n"
+    )
+    assert output == expected_output
+    assert "4 finding(s)." in error_output
+    assert exit_code == 1
+
+    # Case with no findings
+    monkeypatch.setattr(
+        "check_md_links._check_links_and_collect",
+        lambda registry: (
+            [],
+            {"markdown_files_scanned": 0, "links_resolved": 0, "files_skipped_as_vendored": 0},
+            [],
+        ),
+    )
+    monkeypatch.setattr(
+        "check_md_links._check_readme_coverage_and_collect",
+        lambda: ([], {"resources_checked": 0}, []),
+    )
+    monkeypatch.setattr("sys.argv", ["check_md_links.py"])
+    sys.stdout = io.StringIO()
+    sys.stderr = io.StringIO()
+    try:
+        exit_code = main()
+        output = sys.stdout.getvalue()
+        error_output = sys.stderr.getvalue()
+    finally:
+        sys.stdout = old_stdout
+        sys.stderr = old_stderr
+    assert output == ""
+    assert error_output == ""
+    assert exit_code == 0
