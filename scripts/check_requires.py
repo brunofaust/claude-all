@@ -83,10 +83,75 @@ def find_undeclared_instruction_refs(
 def main() -> int:
     """CLI entry point — print findings to stdout, exit 1 on any."""
     known = load_resource_keys()
-    findings = find_violations(known) + find_undeclared_instruction_refs(known)
-    for finding in findings:
-        print(finding)
+    keys_by_name: dict[str, set[str]] = {}
+    for key in known:
+        keys_by_name.setdefault(key.split("/", 1)[1], set()).add(key)
+
+    # Define patterns for the message
+    manifest_patterns = ["**/claude-all.json", "**/*.claude-all.json"]
+    instruction_snippet_pattern = "*/claude_md.md"
+
+    # Collect manifest files (avoid duplicates)
+    manifest_files_set: set[Path] = set()
+    manifest_files_set.update((SRC / "claude_all").rglob("claude-all.json"))
+    manifest_files_set.update((SRC / "claude_all").rglob("*.claude-all.json"))
+    manifest_files: list[Path] = sorted(manifest_files_set)
+
+    # Collect instruction snippet files
+    instruction_snippets = sorted(INSTRUCTIONS_DIR.glob("*/claude_md.md"))
+
+    total_files = len(manifest_files) + len(instruction_snippets)
+    if total_files == 0:
+        msg = (
+            f"Zero-discovery: manifest patterns {manifest_patterns} "
+            f"and instruction snippet pattern '{instruction_snippet_pattern}' "
+            f"matched no files."
+        )
+        print(msg, file=sys.stderr)
+        return 1
+
+    findings: list[str] = []
+    for manifest in manifest_files:
+        rel = manifest.relative_to(REPO_ROOT)
+        try:
+            config = json.loads(manifest.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError) as exc:
+            findings.append(f"{rel}: not valid JSON — {exc}")
+            continue
+        requires = config.get("requires", [])
+        if not isinstance(requires, list):
+            findings.append(f"{rel}: `requires` must be a list of 'kind/name' strings")
+            continue
+        for dep in requires:
+            if not isinstance(dep, str):
+                findings.append(f"{rel}: non-string dependency {dep!r}")
+            elif dep not in known:
+                findings.append(
+                    f"{rel}: requires '{dep}' — no such resource (renamed/deleted? "
+                    "a built-in like /code-review does not belong in requires)"
+                )
+
+    for snippet in instruction_snippets:
+        manifest = snippet.parent / "claude-all.json"
+        declared: set[str] = set()
+        if manifest.exists():
+            try:
+                declared = set(json.loads(manifest.read_text(encoding="utf-8")).get("requires", []))
+            except (json.JSONDecodeError, OSError, TypeError):
+                declared = set()
+        own = f"instructions/{snippet.parent.name}"
+        rel = snippet.relative_to(INSTRUCTIONS_DIR.parent)
+        for token in sorted(set(CODE_SPAN.findall(snippet.read_text(encoding="utf-8")))):
+            candidates = keys_by_name.get(token, set()) - {own}
+            if candidates and not candidates & declared:
+                findings.append(
+                    f"{rel}: names `{token}` but its claude-all.json does not require "
+                    + " or ".join(sorted(candidates))
+                )
+
     if findings:
+        for finding in findings:
+            print(finding)
         print(
             f"\n{len(findings)} requires finding(s) — a dependency manifest points at a "
             "resource the installer cannot discover, or an instruction names one it "
@@ -94,6 +159,7 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
+    print(f"Inspected {total_files} units")
     return 0
 
 
