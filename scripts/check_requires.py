@@ -87,7 +87,7 @@ def find_undeclared_instruction_refs(
 
 def main() -> int:
     """CLI entry point — print findings to stdout, exit 1 on any.
-    On zero-discovery, print error to stderr and exit 1.
+    On zero-discovery (no manifests or no snippets), print error to stderr and exit 1.
     On success, print inspection count to stdout and exit 0.
     """
     known = load_resource_keys()
@@ -96,7 +96,8 @@ def main() -> int:
     findings = violations + undeclared
     total_inspected = count_manifests + count_snippets
 
-    if total_inspected == 0:
+    # Zero-discovery check: fail if either manifests or snippets are none
+    if count_manifests == 0 or count_snippets == 0:
         patterns = []
         if count_manifests == 0:
             patterns.append(f"'claude-all.json' and '*.claude-all.json' under {SRC / 'claude_all'}")
