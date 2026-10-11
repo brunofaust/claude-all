@@ -11,6 +11,7 @@ import importlib.util
 import json
 import sys
 from pathlib import Path
+from unittest.mock import patch
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SPEC = importlib.util.spec_from_file_location(
@@ -68,3 +69,59 @@ def test_shipped_instructions_declare_every_reference() -> None:
     known = check_requires.load_resource_keys()
 
     assert check_requires.find_undeclared_instruction_refs(known) == []
+
+
+def test_success_normal_case(tmp_path: Path, capsys) -> None:
+    """A normal success case should exit 0 and print inspected count."""
+    # Create a simple valid resource
+    skill_dir = tmp_path / "src" / "claude_all" / "skills" / "test" / "test-skill"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "claude-all.json").write_text('{"requires": []}', encoding="utf-8")
+
+    # Temporarily adjust the REPO_ROOT for this test
+    with patch.object(check_requires, "REPO_ROOT", tmp_path):
+        with patch.object(check_requires, "SRC", tmp_path / "src"):
+            exit_code = check_requires.main()
+
+    assert exit_code == 0
+    captured = capsys.readouterr()
+    assert "inspected=1 resources" in captured.out
+
+
+def test_zero_discovery_fails(tmp_path, capsys) -> None:
+    """A zero-discovery run should exit 2 with an error message."""
+    # Create an empty src directory so discover finds nothing
+    empty_src = tmp_path / "src"
+    empty_src.mkdir()
+
+    # Temporarily adjust the paths for this test
+    with patch.object(check_requires, "REPO_ROOT", tmp_path):
+        with patch.object(check_requires, "SRC", empty_src):
+            exit_code = check_requires.main()
+
+    assert exit_code == 2
+    captured = capsys.readouterr()
+    assert "error: no resources discovered" in captured.err
+    # Should not print the inspected line on failure
+    assert "inspected=" not in captured.out
+
+
+def test_existing_failure_still_fails(tmp_path, capsys) -> None:
+    """An existing genuine failure should still exit 1 with findings."""
+    # Create a resource with a bad requires entry
+    skill_dir = tmp_path / "src" / "claude_all" / "skills" / "test" / "test-skill"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "claude-all.json").write_text(
+        '{"requires": ["nonexistent/resource"]}', encoding="utf-8"
+    )
+
+    # Temporarily adjust the REPO_SRC for this test
+    with patch.object(check_requires, "REPO_ROOT", tmp_path):
+        with patch.object(check_requires, "SRC", tmp_path / "src"):
+            exit_code = check_requires.main()
+
+    assert exit_code == 1
+    captured = capsys.readouterr()
+    assert "requires 'nonexistent/resource' — no such resource" in captured.out
+    # Should not print the inspected line when there are findings
+    assert "inspected=" not in captured.out
