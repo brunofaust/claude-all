@@ -249,10 +249,8 @@ def test_json_clean_tree(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Non
     import check_md_links
 
     monkeypatch.setattr(check_md_links, "ROOT", repo)
-    # Also, we need to mock the vendored.json path.
-    monkeypatch.setattr(check_md_links, "vendored.json", repo / "vendored.json")
     # For discover, we need to mock it to return an empty list.
-    monkeypatch.setattr("check_md_links.discover", lambda _: [])
+    monkeypatch.setattr(check_md_links, "discover", lambda _: [])
     # Run the script with --json.
     from check_md_links import main
 
@@ -288,8 +286,7 @@ def test_json_broken_link(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> No
     import check_md_links
 
     monkeypatch.setattr(check_md_links, "ROOT", repo)
-    monkeypatch.setattr(check_md_links, "vendored.json", repo / "vendored.json")
-    monkeypatch.setattr("check_md_links.discover", lambda _: [])
+    monkeypatch.setattr(check_md_links, "discover", lambda _: [])
     from check_md_links import main
 
     stdout = io.StringIO()
@@ -332,7 +329,6 @@ def test_json_unlinked_resource(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     import check_md_links
 
     monkeypatch.setattr(check_md_links, "ROOT", repo)
-    monkeypatch.setattr(check_md_links, "vendored.json", repo / "vendored.json")
 
     # We need to mock the discover function to return our skill.
     # We'll create a mock item.
@@ -345,7 +341,7 @@ def test_json_unlinked_resource(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     def discover(_):
         return [Item("skill", "myskill", skill_dir)]
 
-    monkeypatch.setattr("check_md_links.discover", discover)
+    monkeypatch.setattr(check_md_links, "discover", discover)
     from check_md_links import main
 
     stdout = io.StringIO()
@@ -383,7 +379,6 @@ def test_json_default_output_unaffected(tmp_path: Path, monkeypatch: pytest.Monk
     import check_md_links
 
     monkeypatch.setattr(check_md_links, "ROOT", repo)
-    monkeypatch.setattr(check_md_links, "vendored.json", repo / "vendored.json")
 
     def discover(_):
         class Item:
@@ -394,7 +389,7 @@ def test_json_default_output_unaffected(tmp_path: Path, monkeypatch: pytest.Monk
 
         return [Item("skill", "myskill", skill_dir)]
 
-    monkeypatch.setattr("check_md_links.discover", discover)
+    monkeypatch.setattr(check_md_links, "discover", discover)
     from check_md_links import main
 
     # Test without --json.

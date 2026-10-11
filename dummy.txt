@@ -1,0 +1,15 @@
+## Change Summary
+
+### What was changed
+- Modified `scripts/check_md_links.py` to change the `main` function to accept an optional `argv` parameter (defaulting to None) to improve testability without altering the command-line interface.
+- Modified `tests/test_md_links.py` to remove erroneous monkeypatch attempts to set a non-existent attribute `vendored.json` on the `check_md_links` module. The tests now correctly manipulate the filesystem by setting the module's `ROOT` to a temporary repository and creating a `vendored.json` file there.
+
+### Implementation approach
+The changes fix the test failures by:
+1. Making the `main` function in `check_md_links.py` accept an optional argument list for parsing, allowing tests to invoke it with `["--json"]` or `[]` while preserving the original behavior when called without arguments (using `sys.argv[1:]`).
+2. Removing incorrect monkeypatch calls in the tests that tried to set `check_md_links.vendored.json` (which does not exist). Instead, the tests now properly set the module's `ROOT` to a temporary git repository and create a `vendored.json` file in that repository, which the module reads from the filesystem as intended.
+3. The JSON output mode was already implemented in `check_md_links.py`; these changes only fix the tests to work with that implementation.
+
+### Known limitations or follow-up work
+- The changes are focused on fixing the test suite; the functional implementation of the `--json` flag remains unchanged and was already correct.
+- No further modifications are needed to satisfy the ticket requirements.

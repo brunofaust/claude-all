@@ -170,10 +170,12 @@ def check_readme_coverage() -> list[str]:
     ]
 
 
-def main() -> int:
+def main(argv=None) -> int:
+    if argv is None:
+        argv = sys.argv[1:]
     parser = argparse.ArgumentParser()
     parser.add_argument("--json", action="store_true")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     try:
         registry = json.loads((ROOT / "vendored.json").read_text()).get("vendored", [])
