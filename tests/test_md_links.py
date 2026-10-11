@@ -294,125 +294,126 @@ class TestReadmeCoverageStructured:
 
 class TestJsonMode:
     def test_json_clean_tree(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        # Set up a temporary environment with no findings
-        # We'll create a simple markdown file with no broken links
-        md_file = tmp_path / "test.md"
-        md_file.write_text(
-            "See [working link](http://example.com) for details."
-        )  # absolute URL, skipped
-        # Monkeypatch tracked_markdown to return this file
-        monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [md_file])
-        # Empty vendored registry
-        monkeypatch.setattr(
-            "check_md_links.json.loads",
-            lambda _: {"vendored": []},
-        )
-        # Mock cli.discover to return no resources
-        monkeypatch.setattr("claude_all.cli.discover", lambda _: [])
-        # Ensure README links the resource (but there are none, so it's vacuously true)
-        # We'll temporarily replace the README with a minimal one
-        readme_path = ROOT / "README.md"
-        original_readme = readme_path.read_text()
-        try:
-            readme_path.write_text("# Readme\n")
-            # Run the script with --json
-            # We need to capture stdout and stderr
-            import io
-            import sys
-
-            from check_md_links import main
-
-            old_stdin = sys.stdin
-            old_stdout = sys.stdout
-            old_stderr = sys.stderr
-            stdin_capture = io.StringIO()
-            stdout_capture = io.StringIO()
-            stderr_capture = io.StringIO()
-            sys.stdin = stdin_capture
-            sys.stdout = stdout_capture
-            sys.stderr = stderr_capture
+        # We'll create a temporary directory under the repository root
+        with tempfile.TemporaryDirectory(dir=ROOT) as tmp_dir:
+            md_file = Path(tmp_dir) / "test.md"
+            md_file.write_text(
+                "See [working link](http://example.com) for details."
+            )  # absolute URL, skipped
+            # Monkeypatch tracked_markdown to return this file
+            monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [md_file])
+            # Empty vendored registry
+            monkeypatch.setattr(
+                "check_md_links.json.loads",
+                lambda _: {"vendored": []},
+            )
+            # Mock cli.discover to return no resources
+            monkeypatch.setattr("claude_all.cli.discover", lambda _: [])
+            # Ensure README links the resource (but there are none, so it's vacuously true)
+            # We'll temporarily replace the README with a minimal one
+            readme_path = ROOT / "README.md"
+            original_readme = readme_path.read_text()
             try:
-                # Simulate command line argument
-                test_argv = ["check_md_links.py", "--json"]
-                monkeypatch.setattr("sys.argv", test_argv)
-                exit_code = main()
+                readme_path.write_text("# Readme\n")
+                # Run the script with --json
+                # We need to capture stdout and stderr
+                import io
+                import sys
+
+                from check_md_links import main
+
+                old_stdin = sys.stdin
+                old_stdout = sys.stdout
+                old_stderr = sys.stderr
+                stdin_capture = io.StringIO()
+                stdout_capture = io.StringIO()
+                stderr_capture = io.StringIO()
+                sys.stdin = stdin_capture
+                sys.stdout = stdout_capture
+                sys.stderr = stderr_capture
+                try:
+                    # Simulate command line argument
+                    test_argv = ["check_md_links.py", "--json"]
+                    monkeypatch.setattr("sys.argv", test_argv)
+                    exit_code = main()
+                finally:
+                    sys.stdin = old_stdin
+                    sys.stdout = old_stdout
+                    sys.stderr = old_stderr
+                output = stdout_capture.getvalue()
+                error_output = stderr_capture.getvalue()
+                # Parse JSON
+                data = json.loads(output)
+                assert data["passed"] is True
+                assert data["counts"]["markdown_files_scanned"] == 1
+                assert (
+                    data["counts"]["links_resolved"] == 0
+                )  # because the link was absolute and skipped
+                assert data["counts"]["resources_checked"] == 0
+                assert data["counts"]["files_skipped_as_vendored"] == 0
+                assert data["broken_links"] == []
+                assert data["unlinked_resources"] == []
+                assert exit_code == 0
+                # No output to stderr
+                assert error_output == ""
             finally:
-                sys.stdin = old_stdin
-                sys.stdout = old_stdout
-                sys.stderr = old_stderr
-            output = stdout_capture.getvalue()
-            error_output = stderr_capture.getvalue()
-            # Parse JSON
-            data = json.loads(output)
-            assert data["passed"] is True
-            assert data["counts"]["markdown_files_scanned"] == 1
-            assert (
-                data["counts"]["links_resolved"] == 0
-            )  # because the link was absolute and skipped
-            assert data["counts"]["resources_checked"] == 0
-            assert data["counts"]["files_skipped_as_vendored"] == 0
-            assert data["broken_links"] == []
-            assert data["unlinked_resources"] == []
-            assert exit_code == 0
-            # No output to stderr
-            assert error_output == ""
-        finally:
-            readme_path.write_text(original_readme)
+                readme_path.write_text(original_readme)
 
     def test_json_with_broken_link(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         # Create a markdown file with a broken relative link
-        md_file = tmp_path / "test.md"
-        md_file.write_text("See [broken link](missing.md) for details.")
-        monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [md_file])
-        monkeypatch.setattr(
-            "check_md_links.json.loads",
-            lambda _: {"vendored": []},
-        )
-        monkeypatch.setattr("claude_all.cli.discover", lambda _: [])
-        readme_path = ROOT / "README.md"
-        original_readme = readme_path.read_text()
-        try:
-            readme_path.write_text("# Readme\n")
-            import io
-
-            from check_md_links import main
-
-            old_stdin = sys.stdin
-            old_stdout = sys.stdout
-            old_stderr = sys.stderr
-            stdin_capture = io.StringIO()
-            stdout_capture = io.StringIO()
-            stderr_capture = io.StringIO()
-            sys.stdin = stdin_capture
-            sys.stdout = stdout_capture
-            sys.stderr = stderr_capture
+        with tempfile.TemporaryDirectory(dir=ROOT) as tmp_dir:
+            md_file = Path(tmp_dir) / "test.md"
+            md_file.write_text("See [broken link](missing.md) for details.")
+            monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [md_file])
+            monkeypatch.setattr(
+                "check_md_links.json.loads",
+                lambda _: {"vendored": []},
+            )
+            monkeypatch.setattr("claude_all.cli.discover", lambda _: [])
+            readme_path = ROOT / "README.md"
+            original_readme = readme_path.read_text()
             try:
-                test_argv = ["check_md_links.py", "--json"]
-                monkeypatch.setattr("sys.argv", test_argv)
-                exit_code = main()
+                readme_path.write_text("# Readme\n")
+                import io
+
+                from check_md_links import main
+
+                old_stdin = sys.stdin
+                old_stdout = sys.stdout
+                old_stderr = sys.stderr
+                stdin_capture = io.StringIO()
+                stdout_capture = io.StringIO()
+                stderr_capture = io.StringIO()
+                sys.stdin = stdin_capture
+                sys.stdout = stdout_capture
+                sys.stderr = stderr_capture
+                try:
+                    test_argv = ["check_md_links.py", "--json"]
+                    monkeypatch.setattr("sys.argv", test_argv)
+                    exit_code = main()
+                finally:
+                    sys.stdin = old_stdin
+                    sys.stdout = old_stdout
+                    sys.stderr = old_stderr
+                output = stdout_capture.getvalue()
+                error_output = stderr_capture.getvalue()
+                data = json.loads(output)
+                assert data["passed"] is False
+                assert data["counts"]["markdown_files_scanned"] == 1
+                assert data["counts"]["links_resolved"] == 1
+                assert data["counts"]["resources_checked"] == 0
+                assert data["counts"]["files_skipped_as_vendored"] == 0
+                assert len(data["broken_links"]) == 1
+                bl = data["broken_links"][0]
+                assert bl["file"] == str(md_file.relative_to(ROOT))
+                assert bl["target"] == "missing.md"
+                assert bl["resolved_path"] == str((md_file.parent / "missing.md").resolve())
+                assert data["unlinked_resources"] == []
+                assert exit_code == 1
+                # No stderr output in JSON mode
+                assert error_output == ""
             finally:
-                sys.stdin = old_stdin
-                sys.stdout = old_stdout
-                sys.stderr = old_stderr
-            output = stdout_capture.getvalue()
-            error_output = stderr_capture.getvalue()
-            data = json.loads(output)
-            assert data["passed"] is False
-            assert data["counts"]["markdown_files_scanned"] == 1
-            assert data["counts"]["links_resolved"] == 1
-            assert data["counts"]["resources_checked"] == 0
-            assert data["counts"]["files_skipped_as_vendored"] == 0
-            assert len(data["broken_links"]) == 1
-            bl = data["broken_links"][0]
-            assert bl["file"] == str(md_file.relative_to(ROOT))
-            assert bl["target"] == "missing.md"
-            assert bl["resolved_path"] == str((md_file.parent / "missing.md").resolve())
-            assert data["unlinked_resources"] == []
-            assert exit_code == 1
-            # No stderr output in JSON mode
-            assert error_output == ""
-        finally:
-            readme_path.write_text(original_readme)
+                readme_path.write_text(original_readme)
 
     def test_json_with_unlinked_resource(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -431,7 +432,7 @@ class TestJsonMode:
                 self.kind = kind
                 self.name = name
 
-        fake_src = Path("src/fake/skill/SKILL.md")
+        fake_src = ROOT / "src/fake/skill/SKILL.md"
         fake_resource = FakeResource(fake_src, "skill", "fake")
 
         def fake_discover(_):
@@ -474,7 +475,7 @@ class TestJsonMode:
             assert data["counts"]["files_skipped_as_vendored"] == 0
             assert data["broken_links"] == []
             assert len(data["unlinked_resources"]) == 1
-            assert data["unlinked_resources"][0]["path"] == str(fake_src)
+            assert data["unlinked_resources"][0]["path"] == str(fake_src.relative_to(ROOT))
             assert exit_code == 1
             assert error_output == ""
         finally:
@@ -485,42 +486,43 @@ class TestJsonMode:
     ) -> None:
         # Ensure that without --json, the output and exit code are unchanged
         # We'll test with a broken link and compare the output to the expected human-readable format
-        md_file = tmp_path / "test.md"
-        md_file.write_text("See [broken link](missing.md) for details.")
-        monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [md_file])
-        monkeypatch.setattr(
-            "check_md_links.json.loads",
-            lambda _: {"vendored": []},
-        )
-        monkeypatch.setattr("claude_all.cli.discover", lambda _: [])
-        readme_path = ROOT / "README.md"
-        original_readme = readme_path.read_text()
-        try:
-            readme_path.write_text("# Readme\n")
-            import io
-
-            from check_md_links import main
-
-            old_stdin, old_stdout, old_stderr = sys.stdin, sys.stdout, sys.stderr
-            sys.stdin = io.StringIO()
-            sys.stdout = io.StringIO()
-            sys.stderr = io.StringIO()
-            output = ""
-            error_output = ""
+        with tempfile.TemporaryDirectory(dir=ROOT) as tmp_dir:
+            md_file = Path(tmp_dir) / "test.md"
+            md_file.write_text("See [broken link](missing.md) for details.")
+            monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [md_file])
+            monkeypatch.setattr(
+                "check_md_links.json.loads",
+                lambda _: {"vendored": []},
+            )
+            monkeypatch.setattr("claude_all.cli.discover", lambda _: [])
+            readme_path = ROOT / "README.md"
+            original_readme = readme_path.read_text()
             try:
-                test_argv = ["check_md_links.py"]  # no --json
-                monkeypatch.setattr("sys.argv", test_argv)
-                exit_code = main()
-                output = sys.stdout.getvalue()
-                error_output = sys.stderr.getvalue()
+                readme_path.write_text("# Readme\n")
+                import io
+
+                from check_md_links import main
+
+                old_stdin, old_stdout, old_stderr = sys.stdin, sys.stdout, sys.stderr
+                sys.stdin = io.StringIO()
+                sys.stdout = io.StringIO()
+                sys.stderr = io.StringIO()
+                output = ""
+                error_output = ""
+                try:
+                    test_argv = ["check_md_links.py"]  # no --json
+                    monkeypatch.setattr("sys.argv", test_argv)
+                    exit_code = main()
+                    output = sys.stdout.getvalue()
+                    error_output = sys.stderr.getvalue()
+                finally:
+                    sys.stdin, sys.stdout, sys.stderr = old_stdin, old_stdout, old_stderr
+                # Expected human-readable output
+                rel_path = md_file.relative_to(ROOT)
+                expected_output = f"{rel_path}:1: broken-link -> missing.md\n"
+                assert output == expected_output
+                # Stderr should contain the count line
+                assert "1 finding(s)." in error_output
+                assert exit_code == 1
             finally:
-                sys.stdin, sys.stdout, sys.stderr = old_stdin, old_stdout, old_stderr
-            # Expected human-readable output
-            rel_path = md_file.relative_to(ROOT)
-            expected_output = f"{rel_path}:1: broken-link -> missing.md\n"
-            assert output == expected_output
-            # Stderr should contain the count line
-            assert "1 finding(s)." in error_output
-            assert exit_code == 1
-        finally:
-            readme_path.write_text(original_readme)
+                readme_path.write_text(original_readme)
