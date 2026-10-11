@@ -44,6 +44,18 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
+# Import discover from claude_all.cli for use in check_readme_coverage_structured
+# and to allow mocking in tests.
+sys.path.insert(0, str(ROOT / "src"))
+try:
+    from claude_all.cli import discover
+except ImportError:
+    # Define a dummy discover that raises an informative error.
+    def discover(_):
+        raise RuntimeError("claude_all.cli.discover could not be imported")
+finally:
+    sys.path.pop(0)
+
 # [label](target) — skip images, absolute URLs, anchors and mailto. A leading `/` is
 # a site-absolute URL (the SEO skill's llms.txt examples), never a repo path.
 LINK = re.compile(r"(?<!!)\[[^\]]*\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
@@ -141,13 +153,10 @@ def check_readme_coverage_structured() -> tuple[list[dict], int]:
     """Return (unlinked_resources, resources_checked).
     Each unlinked resource is a dict with keys: path, kind, name.
     """
-    sys.path.insert(0, str(ROOT / "src"))
-    from claude_all.cli import discover
-
-    readme = (ROOT / "README.md").read_text()
     resources = discover([])
     resources_checked = len(resources)
     unlinked_resources = []
+    readme = (ROOT / "README.md").read_text()
     for item in resources:
         if f"]({item.src.relative_to(ROOT).as_posix()})" not in readme:
             unlinked_resources.append(

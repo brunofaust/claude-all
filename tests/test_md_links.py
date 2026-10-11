@@ -261,7 +261,7 @@ def test_json_clean_tree(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Non
         with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
             result = main(["--json"])
     except SystemExit as e:
-        result = e.code
+        result = e.code if isinstance(e.code, int) else 1
     # Parse the JSON output.
     data = json.loads(stdout.getvalue())
     assert data["pass"] is True
@@ -295,7 +295,7 @@ def test_json_broken_link(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> No
         with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
             result = main(["--json"])
     except SystemExit as e:
-        result = e.code
+        result = e.code if isinstance(e.code, int) else 1
     data = json.loads(stdout.getvalue())
     assert data["pass"] is False
     assert data["markdown_files_scanned"] == 1
@@ -350,7 +350,7 @@ def test_json_unlinked_resource(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
         with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
             result = main(["--json"])
     except SystemExit as e:
-        result = e.code
+        result = e.code if isinstance(e.code, int) else 1
     data = json.loads(stdout.getvalue())
     assert data["pass"] is False
     assert data["markdown_files_scanned"] == 1  # foo.md
@@ -399,7 +399,7 @@ def test_json_default_output_unaffected(tmp_path: Path, monkeypatch: pytest.Monk
         with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
             result = main([])
     except SystemExit as e:
-        result = e.code
+        result = e.code if isinstance(e.code, int) else 1
     out_without_json = stdout.getvalue()
     err_without_json = stderr.getvalue()
     # Test with --json to get the structured data.
@@ -409,7 +409,7 @@ def test_json_default_output_unaffected(tmp_path: Path, monkeypatch: pytest.Monk
         with contextlib.redirect_stdout(stdout_json), contextlib.redirect_stderr(stderr_json):
             result_json = main(["--json"])
     except SystemExit as e:
-        result_json = e.code
+        result_json = e.code if isinstance(e.code, int) else 1
     # The exit codes should be the same.
     assert result == result_json
     # Without --json, we expect two lines:
