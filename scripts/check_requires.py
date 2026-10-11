@@ -81,9 +81,8 @@ def find_undeclared_instruction_refs(
 
 
 def main() -> int:
-    """CLI entry point — print findings to stdout, exit 1 on any.
-    On success, prints how many units were inspected.
-    Fails if no manifests or instruction snippets are found.
+    """Check requires: validates resource dependencies.
+    Prints inspected unit count on success, exits 1 on any findings or if no resources.
     """
     # Count manifests and snippets
     manifests = list((SRC / "claude_all").rglob("claude-all.json")) + list(
