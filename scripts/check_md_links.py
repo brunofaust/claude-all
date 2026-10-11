@@ -37,6 +37,14 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+try:
+    sys.path.insert(0, str(ROOT / "src"))
+    from claude_all.cli import discover
+except Exception:
+
+    def discover(_):
+        return []
+
 
 # [label](target) — skip images, absolute URLs, anchors and mailto. A leading `/` is
 # a site-absolute URL (the SEO skill's llms.txt examples), never a repo path.
@@ -131,9 +139,6 @@ def check_readme_coverage() -> tuple[list[dict], int]:
         unlinked_resources: list of dicts with keys: kind, name, path
         resources_checked: total number of resources discovered
     """
-    sys.path.insert(0, str(ROOT / "src"))
-    from claude_all.cli import discover
-
     readme = (ROOT / "README.md").read_text()
     items = discover([])
     unlinked = []
@@ -149,12 +154,12 @@ def check_readme_coverage() -> tuple[list[dict], int]:
     return unlinked, len(items)
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--json", action="store_true", help="Output JSON instead of human-readable text"
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     output_json = args.json
 
     registry = json.loads((ROOT / "vendored.json").read_text()).get("vendored", [])
