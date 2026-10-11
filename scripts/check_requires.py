@@ -100,8 +100,15 @@ def main() -> int:
     # Collect instruction snippet files
     instruction_snippets = sorted(INSTRUCTIONS_DIR.glob("*/claude_md.md"))
 
-    total_files = len(manifest_files) + len(instruction_snippets)
-    if total_files == 0:
+    # Compute the set of directories that contain at least one manifest or instruction snippet
+    inspected_dirs: set[Path] = set()
+    for manifest in manifest_files:
+        inspected_dirs.add(manifest.parent)
+    for snippet in instruction_snippets:
+        inspected_dirs.add(snippet.parent)
+
+    total_units = len(inspected_dirs)
+    if total_units == 0:
         msg = (
             f"Zero-discovery: manifest patterns {manifest_patterns} "
             f"and instruction snippet pattern '{instruction_snippet_pattern}' "
@@ -159,7 +166,7 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
-    print(f"Inspected {total_files} units")
+    print(f"Inspected {total_units} units")
     return 0
 
 
