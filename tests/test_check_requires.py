@@ -86,6 +86,7 @@ def test_main_zero_discovery_manifests(tmp_path, monkeypatch, capsys):
     # Monkeypatch the module's paths
     monkeypatch.setattr(check_requires, "SRC", src_dir)
     monkeypatch.setattr(check_requires, "INSTRUCTIONS_DIR", instructions_dir)
+    monkeypatch.setattr(check_requires, "REPO_ROOT", tmp_path)
     # Mock load_resource_keys to return an empty set (or any set; it doesn't affect file discovery)
     monkeypatch.setattr(check_requires, "load_resource_keys", lambda: set())
 
@@ -122,6 +123,7 @@ def test_main_zero_discovery_snippets(tmp_path, monkeypatch, capsys):
     # Monkeypatch the module's paths
     monkeypatch.setattr(check_requires, "SRC", src_dir)
     monkeypatch.setattr(check_requires, "INSTRUCTIONS_DIR", instructions_dir)
+    monkeypatch.setattr(check_requires, "REPO_ROOT", tmp_path)
     # Mock load_resource_keys to return the resource we created
     known_set = {"skills/test-skill"}
     monkeypatch.setattr(check_requires, "load_resource_keys", lambda: known_set)
@@ -163,6 +165,7 @@ def test_main_success(tmp_path, monkeypatch, capsys):
     # Monkeypatch the module's paths
     monkeypatch.setattr(check_requires, "SRC", src_dir)
     monkeypatch.setattr(check_requires, "INSTRUCTIONS_DIR", instructions_dir)
+    monkeypatch.setattr(check_requires, "REPO_ROOT", tmp_path)
     # Mock load_resource_keys to return the resources we created
     known_set = {"skills/test-skill", "instructions/test-snippet"}
     monkeypatch.setattr(check_requires, "load_resource_keys", lambda: known_set)
