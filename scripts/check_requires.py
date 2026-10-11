@@ -92,24 +92,48 @@ def main() -> int:
     snippet_count = len(sorted((INSTRUCTIONS_DIR).glob("*/claude_md.md")))
     total_discovered = manifest_count + snippet_count
 
-    # Hard failure on zero discovery
-    if total_discovered == 0:
+    findings = find_violations(known) + find_undeclared_instruction_refs(known)
+
+    # Zero discovery due to missing manifests (unconditional)
+    if manifest_count == 0:
         patterns = []
         if manifest_count == 0:
             patterns.append("'claude-all.json' and '*.claude-all.json' manifests")
         if snippet_count == 0:
             patterns.append("'*/*/claude_md.md' instruction snippets")
         pattern_desc = " and ".join(patterns)
+        print("scanned=0", file=sys.stderr)
         print(f"ERROR: Zero discovery — no files matched {pattern_desc}", file=sys.stderr)
         return 2
 
-    # Report inspection count (denominator)
-    print(f"scanned={total_discovered}", file=sys.stderr)
+    # At this point, manifest_count > 0
+    if snippet_count == 0:
+        if findings:
+            # Validation errors present: treat as validation failure
+            print(f"scanned={total_discovered}", file=sys.stderr)
+            for finding in findings:
+                print(finding)
+            print(
+                f"\n{len(findings)} requires finding(s) — a dependency manifest points at a "
+                "resource the installer cannot discover, or an instruction names one it "
+                "does not require.",
+                file=sys.stderr,
+            )
+            return 1
+        else:
+            # No validation errors, but missing snippets: zero-discovery
+            print("scanned=0", file=sys.stderr)
+            print(
+                "ERROR: Zero discovery — no files matched '*/*/claude_md.md' instruction snippets",
+                file=sys.stderr,
+            )
+            return 2
 
-    findings = find_violations(known) + find_undeclared_instruction_refs(known)
-    for finding in findings:
-        print(finding)
+    # Both manifest_count > 0 and snippet_count > 0
     if findings:
+        print(f"scanned={total_discovered}", file=sys.stderr)
+        for finding in findings:
+            print(finding)
         print(
             f"\n{len(findings)} requires finding(s) — a dependency manifest points at a "
             "resource the installer cannot discover, or an instruction names one it "
@@ -117,6 +141,9 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
+
+    # Success: both manifests and snippets present, no errors
+    print(f"scanned={total_discovered}", file=sys.stderr)
     return 0
 
 
