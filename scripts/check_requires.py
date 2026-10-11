@@ -83,6 +83,29 @@ def find_undeclared_instruction_refs(
 def main() -> int:
     """CLI entry point — print findings to stdout, exit 1 on any."""
     known = load_resource_keys()
+
+    # Count discovered files for zero-discovery detection
+    manifest_count = len(
+        sorted((SRC / "claude_all").rglob("claude-all.json"))
+        + sorted((SRC / "claude_all").rglob("*.claude-all.json"))
+    )
+    snippet_count = len(sorted((INSTRUCTIONS_DIR).glob("*/claude_md.md")))
+    total_discovered = manifest_count + snippet_count
+
+    # Hard failure on zero discovery
+    if total_discovered == 0:
+        patterns = []
+        if manifest_count == 0:
+            patterns.append("'claude-all.json' and '*.claude-all.json' manifests")
+        if snippet_count == 0:
+            patterns.append("'*/*/claude_md.md' instruction snippets")
+        pattern_desc = " and ".join(patterns)
+        print(f"ERROR: Zero discovery — no files matched {pattern_desc}", file=sys.stderr)
+        return 2
+
+    # Report inspection count (denominator)
+    print(f"scanned={total_discovered}", file=sys.stderr)
+
     findings = find_violations(known) + find_undeclared_instruction_refs(known)
     for finding in findings:
         print(finding)
