@@ -219,3 +219,249 @@ def test_claude_hook_examples_use_timeout_seconds() -> None:
                 findings.append(f"{path.relative_to(ROOT)}: timeout={value}")
 
     assert findings == []
+
+
+def test_json_clean_tree(monkeypatch, capsys):
+    """--json on a clean tree returns passed: true and appropriate counts."""
+    import json
+
+    from check_md_links import main
+
+    # Mock the functions that do the heavy lifting
+    def mock_check_links(registry):
+        return {
+            "broken_links": [],
+            "scanned_markdown": 5,
+            "links_resolved": 10,
+            "vendored_skipped": 2,
+        }
+
+    def mock_check_readme_coverage():
+        return {
+            "unlinked_resources": [],
+            "resources_checked": 3,
+        }
+
+    monkeypatch.setattr("check_md_links.check_links", mock_check_links)
+    monkeypatch.setattr("check_md_links.check_readme_coverage", mock_check_readme_coverage)
+    # Mock the vendored.json read to avoid file access
+    monkeypatch.setattr(
+        "pathlib.Path.read_text",
+        lambda self: (
+            '{"vendored": []}'
+            if self.name == "vendored.json"
+            else __import__("builtins").Path.read_text(self)
+        ),
+    )
+    # Set argv to simulate --json
+    monkeypatch.setattr("sys.argv", ["check_md_links.py", "--json"])
+    # Call main
+    exit_code = main()
+    # Capture stdout and stderr
+    captured = capsys.readouterr()
+    # Parse JSON output
+    output = json.loads(captured.out)
+    # Assertions
+    assert exit_code == 0
+    assert output["passed"] is True
+    assert output["markdown_files_scanned"] == 5
+    assert output["links_resolved"] == 10
+    assert output["resources_checked"] == 3
+    assert output["files_skipped_as_vendored"] == 2
+    assert output["broken_links"] == []
+    assert output["unlinked_resources"] == []
+    assert captured.err == ""
+
+
+def test_json_broken_link(monkeypatch, capsys):
+    """--json with a broken link returns passed: false and the broken link in output."""
+    import json
+
+    from check_md_links import main
+
+    def mock_check_links(registry):
+        return {
+            "broken_links": [
+                {
+                    "file": "docs/README.md",
+                    "line": 42,
+                    "target": "getting-started.md",
+                    "resolved_path": "/absolute/path/to/docs/getting-started.md",
+                }
+            ],
+            "scanned_markdown": 1,
+            "links_resolved": 1,
+            "vendored_skipped": 0,
+        }
+
+    def mock_check_readme_coverage():
+        return {
+            "unlinked_resources": [],
+            "resources_checked": 0,
+        }
+
+    monkeypatch.setattr("check_md_links.check_links", mock_check_links)
+    monkeypatch.setattr("check_md_links.check_readme_coverage", mock_check_readme_coverage)
+    monkeypatch.setattr(
+        "pathlib.Path.read_text",
+        lambda self: (
+            '{"vendored": []}'
+            if self.name == "vendored.json"
+            else __import__("builtins").Path.read_text(self)
+        ),
+    )
+    monkeypatch.setattr("sys.argv", ["check_md_links.py", "--json"])
+    exit_code = main()
+    captured = capsys.readouterr()
+    output = json.loads(captured.out)
+    assert exit_code == 1  # because there is a broken link
+    assert output["passed"] is False
+    assert output["markdown_files_scanned"] == 1
+    assert output["links_resolved"] == 1
+    assert output["resources_checked"] == 0
+    assert output["files_skipped_as_vendored"] == 0
+    assert len(output["broken_links"]) == 1
+    bl = output["broken_links"][0]
+    assert bl["file"] == "docs/README.md"
+    assert bl["line"] == 42
+    assert bl["target"] == "getting-started.md"
+    assert bl["resolved_path"] == "/absolute/path/to/docs/getting-started.md"
+    assert output["unlinked_resources"] == []
+    assert captured.err == ""
+
+
+def test_json_unlinked_resource(monkeypatch, capsys):
+    """--json with an unlinked resource returns passed: false and the resource in output."""
+    import json
+
+    from check_md_links import main
+
+    def mock_check_links(registry):
+        return {
+            "broken_links": [],
+            "scanned_markdown": 0,
+            "links_resolved": 0,
+            "vendored_skipped": 0,
+        }
+
+    def mock_check_readme_coverage():
+        return {
+            "unlinked_resources": [
+                {
+                    "kind": "skill",
+                    "name": "test-skill",
+                    "src": "src/skills/test-skill/SKILL.md",
+                }
+            ],
+            "resources_checked": 1,
+        }
+
+    monkeypatch.setattr("check_md_links.check_links", mock_check_links)
+    monkeypatch.setattr("check_md_links.check_readme_coverage", mock_check_readme_coverage)
+    monkeypatch.setattr(
+        "pathlib.Path.read_text",
+        lambda self: (
+            '{"vendored": []}'
+            if self.name == "vendored.json"
+            else __import__("builtins").Path.read_text(self)
+        ),
+    )
+    monkeypatch.setattr("sys.argv", ["check_md_links.py", "--json"])
+    exit_code = main()
+    captured = capsys.readouterr()
+    output = json.loads(captured.out)
+    assert exit_code == 1  # because there is an unlinked resource
+    assert output["passed"] is False
+    assert output["markdown_files_scanned"] == 0
+    assert output["links_resolved"] == 0
+    assert output["resources_checked"] == 1
+    assert output["files_skipped_as_vendored"] == 0
+    assert output["broken_links"] == []
+    assert len(output["unlinked_resources"]) == 1
+    ur = output["unlinked_resources"][0]
+    assert ur["kind"] == "skill"
+    assert ur["name"] == "test-skill"
+    assert ur["src"] == "src/skills/test-skill/SKILL.md"
+    assert captured.err == ""
+
+
+def test_non_json_output_unaffected(monkeypatch, capsys):
+    """Without --json, output is human-readable and exit codes match JSON mode."""
+    import json
+
+    from check_md_links import main
+
+    # First, get the JSON mode output and exit code for a known state
+    def mock_check_links(registry):
+        return {
+            "broken_links": [
+                {
+                    "file": "docs/README.md",
+                    "line": 42,
+                    "target": "getting-started.md",
+                    "resolved_path": "/absolute/path/to/docs/getting-started.md",
+                }
+            ],
+            "scanned_markdown": 1,
+            "links_resolved": 1,
+            "vendored_skipped": 0,
+        }
+
+    def mock_check_readme_coverage():
+        return {
+            "unlinked_resources": [
+                {
+                    "kind": "skill",
+                    "name": "test-skill",
+                    "src": "src/skills/test-skill/SKILL.md",
+                }
+            ],
+            "resources_checked": 1,
+        }
+
+    monkeypatch.setattr("check_md_links.check_links", mock_check_links)
+    monkeypatch.setattr("check_md_links.check_readme_coverage", mock_check_readme_coverage)
+    monkeypatch.setattr(
+        "pathlib.Path.read_text",
+        lambda self: (
+            '{"vendored": []}'
+            if self.name == "vendored.json"
+            else __import__("builtins").Path.read_text(self)
+        ),
+    )
+
+    # Test JSON mode
+    monkeypatch.setattr("sys.argv", ["check_md_links.py", "--json"])
+    exit_code_json = main()
+    captured_json = capsys.readouterr()
+    json_output = json.loads(captured_json.out)
+
+    # Test non-JSON mode
+    monkeypatch.setattr("sys.argv", ["check_md_links.py"])
+    exit_code_plain = main()
+    captured_plain = capsys.readouterr()
+
+    # Exit codes should be the same
+    assert exit_code_json == exit_code_plain
+    # In this case, both should be 1 because we have one broken link and one unlinked resource
+    assert exit_code_json == 1
+    assert exit_code_plain == 1
+
+    # Non-JSON output should contain the human-readable strings
+    out = captured_plain.out
+    assert "docs/README.md:42: broken-link -> getting-started.md" in out
+    assert (
+        "README.md: undocumented -> skill/test-skill (add a row linking "
+        "src/skills/test-skill/SKILL.md)" in out
+    )
+    # Also, the stderr line about findings count
+    assert "\n2 finding(s)." in captured_plain.err
+
+    # JSON mode output should be parseable and have the same counts
+    assert json_output["passed"] is False
+    assert json_output["markdown_files_scanned"] == 1
+    assert json_output["links_resolved"] == 1
+    assert json_output["resources_checked"] == 1
+    assert json_output["files_skipped_as_vendored"] == 0
+    assert len(json_output["broken_links"]) == 1
+    assert len(json_output["unlinked_resources"]) == 1

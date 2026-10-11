@@ -1,35 +1,17 @@
 #!/usr/bin/env python3
 """Gate: relative markdown links resolve and every resource is linked from the README.
 
-Vendored files are exempt from the link check (kept byte-identical to upstream);
-their `local_only` sidecars stay checked. README links are the proxy for "documented".
+Vendored files are exempt from the link check. With --json, outputs a machine-readable
+report; otherwise, human-readable findings.
 
-The script can output a machine-readable JSON report when invoked with `--json`.
-The JSON object contains:
-{
-    "passed": bool,  # True if no broken links and all resources are linked
-    "markdown_files_scanned": int,  # number of Markdown files inspected (non-vendored and existing)
-    "links_resolved": int,  # number of relative links checked in those files
-    "resources_checked": int,  # number of resources discovered by `claude_all.cli.discover`
-    "files_skipped_as_vendored": int,  # number of Markdown files skipped due to vendored exemption
-    "broken_links": [  # each object represents a broken relative link
-        {
-            "file": str,  # path of the Markdown file containing the link, relative to repo root
-            "line": int,  # line number (1-indexed) of the link
-            "target": str,  # the raw link target (without fragment or query)
-            "resolved_path": str  # the absolute path that was checked and did not exist
-        }
-    ],
-    "unlinked_resources": [  # each object represents a resource not linked from the README
-        {
-            "kind": str,  # e.g., "skill", "agent"
-            "name": str,  # resource name as declared in its SKILL.md/agent.md frontmatter
-            "src": str  # path to the resource's source file, relative to repo root
-        }
-    ]
-}
-Without `--json`, the script outputs a human-readable list of findings (one per line)
-and exits with a non-zero status if any findings are found.
+JSON output contains:
+- passed: bool
+- markdown_files_scanned: int
+- links_resolved: int
+- resources_checked: int
+- files_skipped_as_vendored: int
+- broken_links: list of objects with file, line, target, resolved_path
+- unlinked_resources: list of objects with kind, name, src
 """
 
 import argparse
@@ -168,21 +150,25 @@ def main() -> int:
             "unlinked_resources": coverage_data["unlinked_resources"],
         }
         print(json.dumps(output))
+        result = 0 if passed else 1
     else:
         # Human-readable output: same as before
         for bl in links_data["broken_links"]:
             print(f"{bl['file']}:{bl['line']}: broken-link -> {bl['target']}")
         for ul in coverage_data["unlinked_resources"]:
             print(
-                f"README.md: undocumented -> {ul['kind']}/{ul['name']} (add a row linking {ul['src']})"
+                f"README.md: undocumented -> {ul['kind']}/{ul['name']}"
+                f" (add a row linking {ul['src']})"
             )
         if not passed:
             total_findings = len(links_data["broken_links"]) + len(
                 coverage_data["unlinked_resources"]
             )
             print(f"\n{total_findings} finding(s).", file=sys.stderr)
-            return 1
-        return 0
+            result = 1
+        else:
+            result = 0
+    return result
 
 
 if __name__ == "__main__":
