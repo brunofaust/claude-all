@@ -235,6 +235,12 @@ def test_json_output_clean_tree(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     # Create a markdown file with no links
     (repo / "test.md").write_text("No links here.")
 
+    # Copy the script into the temporary repository's scripts directory
+    script_src = ROOT / "scripts" / "check_md_links.py"
+    script_dst = repo / "scripts" / "check_md_links.py"
+    script_dst.parent.mkdir(exist_ok=True)
+    script_dst.write_text(script_src.read_text())
+
     # Mock git ls-files to return our markdown file
     def mock_tracked_markdown() -> list[Path]:
         return [repo / "test.md"]
@@ -256,7 +262,7 @@ def test_json_output_clean_tree(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     import subprocess
 
     result = subprocess.run(
-        [sys.executable, str(repo / "check_md_links.py"), "--json"],
+        [sys.executable, str(repo / "scripts" / "check_md_links.py"), "--json"],
         cwd=repo,
         capture_output=True,
         text=True,
@@ -281,6 +287,12 @@ def test_json_output_with_broken_link(tmp_path: Path, monkeypatch: pytest.Monkey
     # Create a markdown file with a broken link
     (repo / "test.md").write_text("See [broken](missing.md) for details.")
 
+    # Copy the script into the temporary repository's scripts directory
+    script_src = ROOT / "scripts" / "check_md_links.py"
+    script_dst = repo / "scripts" / "check_md_links.py"
+    script_dst.parent.mkdir(exist_ok=True)
+    script_dst.write_text(script_src.read_text())
+
     def mock_tracked_markdown() -> list[Path]:
         return [repo / "test.md"]
 
@@ -294,7 +306,7 @@ def test_json_output_with_broken_link(tmp_path: Path, monkeypatch: pytest.Monkey
     import subprocess
 
     result = subprocess.run(
-        [sys.executable, str(repo / "check_md_links.py"), "--json"],
+        [sys.executable, str(repo / "scripts" / "check_md_links.py"), "--json"],
         cwd=repo,
         capture_output=True,
         text=True,
@@ -328,6 +340,12 @@ def test_json_output_with_unlinked_resource(
     # Create the resource file
     (repo / "resource.txt").write_text("")
 
+    # Copy the script into the temporary repository's scripts directory
+    script_src = ROOT / "scripts" / "check_md_links.py"
+    script_dst = repo / "scripts" / "check_md_links.py"
+    script_dst.parent.mkdir(exist_ok=True)
+    script_dst.write_text(script_src.read_text())
+
     def mock_tracked_markdown() -> list[Path]:
         return []  # no markdown files to scan
 
@@ -346,7 +364,7 @@ def test_json_output_with_unlinked_resource(
     import subprocess
 
     result = subprocess.run(
-        [sys.executable, str(repo / "check_md_links.py"), "--json"],
+        [sys.executable, str(repo / "scripts" / "check_md_links.py"), "--json"],
         cwd=repo,
         capture_output=True,
         text=True,
@@ -375,6 +393,12 @@ def test_json_output_does_not_affect_default_output(
     # Create a markdown file with a broken link
     (repo / "test.md").write_text("See [broken](missing.md) for details.")
 
+    # Copy the script into the temporary repository's scripts directory
+    script_src = ROOT / "scripts" / "check_md_links.py"
+    script_dst = repo / "scripts" / "check_md_links.py"
+    script_dst.parent.mkdir(exist_ok=True)
+    script_dst.write_text(script_src.read_text())
+
     def mock_tracked_markdown() -> list[Path]:
         return [repo / "test.md"]
 
@@ -389,7 +413,7 @@ def test_json_output_does_not_affect_default_output(
 
     # Run without --json
     result = subprocess.run(
-        [sys.executable, str(repo / "check_md_links.py")],
+        [sys.executable, str(repo / "scripts" / "check_md_links.py")],
         cwd=repo,
         capture_output=True,
         text=True,
@@ -401,7 +425,7 @@ def test_json_output_does_not_affect_default_output(
 
     # Run with --json should output only JSON to stdout
     result_json = subprocess.run(
-        [sys.executable, str(repo / "check_md_links.py"), "--json"],
+        [sys.executable, str(repo / "scripts" / "check_md_links.py"), "--json"],
         cwd=repo,
         capture_output=True,
         text=True,
