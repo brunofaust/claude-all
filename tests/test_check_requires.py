@@ -12,6 +12,8 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SPEC = importlib.util.spec_from_file_location(
     "check_requires", REPO_ROOT / "scripts" / "check_requires.py"
@@ -68,3 +70,71 @@ def test_shipped_instructions_declare_every_reference() -> None:
     known = check_requires.load_resource_keys()
 
     assert check_requires.find_undeclared_instruction_refs(known) == []
+
+
+def test_normal_success(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    """When there are files to check and no findings, exits 0 and prints inspection count."""
+    src = tmp_path / "src"
+    claude_all = src / "claude_all"
+    claude_all.mkdir(parents=True)
+    (claude_all / "claude-all.json").write_text('{"requires": []}', encoding="utf-8")
+    # No instructions directory.
+
+    monkeypatch.setattr("check_requires.SRC", src)
+    monkeypatch.setattr("check_requires.INSTRUCTIONS_DIR", claude_all / "instructions")
+    monkeypatch.setattr("check_requires.load_resource_keys", lambda: set())
+
+    exit_code = check_requires.main()
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert captured.err == ""
+    assert "Inspected 1 units" in captured.out
+
+
+def test_zero_discovery_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    """When there are no files to check, the script exits 2 and prints an error message."""
+    src = tmp_path / "src"
+    claude_all = src / "claude_all"
+    claude_all.mkdir(parents=True)
+    # Leave claude_all empty.
+    instructions_dir = claude_all / "instructions"
+    # We leave it non-existent.
+
+    monkeypatch.setattr("check_requires.SRC", src)
+    monkeypatch.setattr("check_requires.INSTRUCTIONS_DIR", instructions_dir)
+    monkeypatch.setattr("check_requires.load_resource_keys", lambda: set())
+
+    exit_code = check_requires.main()
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert "Error: no files found" in captured.err
+    assert "**/claude-all.json" in captured.err
+    assert "'*/claude_md.md'" in captured.err
+
+
+def test_genuine_failure_still_failing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    """When there is a genuine validation error, the script exits 1 and prints the error."""
+    src = tmp_path / "src"
+    claude_all = src / "claude_all"
+    claude_all.mkdir(parents=True)
+    # Create a manifest that requires a non-existent resource.
+    (claude_all / "claude-all.json").write_text('{"requires": ["non/existent"]}', encoding="utf-8")
+    # No instructions.
+
+    monkeypatch.setattr("check_requires.SRC", src)
+    monkeypatch.setattr("check_requires.INSTRUCTIONS_DIR", claude_all / "instructions")
+    # We do not mock load_resource_keys because we want it to discover the resources.
+    # However, we have not created any agents, skills, etc., so the known set will be empty.
+
+    exit_code = check_requires.main()
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert "requires 'non/existent' — no such resource" in captured.out
+    # The summary line should not be printed because there are findings.
+    assert "Inspected" not in captured.out
