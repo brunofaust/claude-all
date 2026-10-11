@@ -83,6 +83,23 @@ def find_undeclared_instruction_refs(
 def main() -> int:
     """CLI entry point — print findings to stdout, exit 1 on any."""
     known = load_resource_keys()
+    manifest_files = list((SRC / "claude_all").rglob("claude-all.json")) + list(
+        (SRC / "claude_all").rglob("*.claude-all.json")
+    )
+    instruction_snippets = list(INSTRUCTIONS_DIR.glob("*/claude_md.md"))
+    total_units = len(manifest_files) + len(instruction_snippets)
+    if total_units == 0:
+        manifest_pattern1 = "src/claude_all/**/claude-all.json"
+        manifest_pattern2 = "src/claude_all/**/*.claude-all.json"
+        instruction_pattern = "src/claude_all/instructions/*/claude_md.md"
+        print(
+            f"Error: No files to inspect. "
+            f"Looked for manifest files in '{manifest_pattern1}' and '{manifest_pattern2}', "
+            f"and instruction snippets in '{instruction_pattern}'.",
+            file=sys.stderr,
+        )
+        return 1
+
     findings = find_violations(known) + find_undeclared_instruction_refs(known)
     for finding in findings:
         print(finding)
@@ -94,6 +111,7 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
+    print(f"Inspected {total_units} units")
     return 0
 
 
