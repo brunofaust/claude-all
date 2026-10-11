@@ -87,7 +87,8 @@ Read the matching file BEFORE deep work in that area. Each is a focused referenc
 | Pre-PR verification — 6-phase gate with formal PASS/FAIL report (lint → types → tests → coverage → security → diff)                                                                            | [`verification-loop` skill](../../generic/verification-loop/SKILL.md)                                   |
 | Project folder layout — `domain/features/integrations/aws_resources/api/db`, per-resource files, `import-linter` contracts                                                                     | [`references/project-structure.md`](references/project-structure.md)                                    |
 | Enforcement matrix — every rule → ruff code / `skill_enforcer.py` rule / prek hook / GH Action                                                                                                 | [`references/enforcement.md`](references/enforcement.md)                                                |
-| Reference hook config — a complete, commented `prek.toml` wiring every gate above (repo hygiene + Python toolchain + this skill's `checkers/`). Copy it to your repo root **and rename it to `prek.toml`** | [`prek.toml.example`](prek.toml.example)                                                                |
+ 
+| Writing CPU-bound parallel code with free-threading mode (Python 3.14+) — when to use, pros and cons, implementation, and dependency checks | [`references/free-threading.md`](references/free-threading.md) |
 
 ## Naming conventions
 
