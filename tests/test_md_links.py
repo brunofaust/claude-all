@@ -17,6 +17,7 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from check_md_links import (
     CODE_SPAN,
@@ -249,7 +250,7 @@ def test_json_output_clean_tree(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     def mock_discover(_):
         return [MockItem()]
 
-    monkeypatch.setattr("check_md_links.cli.discover", mock_discover)
+    monkeypatch.setattr("claude_all.cli.discover", mock_discover)
 
     # Run the script in JSON mode
     import subprocess
@@ -288,7 +289,7 @@ def test_json_output_with_broken_link(tmp_path: Path, monkeypatch: pytest.Monkey
     def mock_discover(_):
         return []
 
-    monkeypatch.setattr("check_md_links.cli.discover", mock_discover)
+    monkeypatch.setattr("claude_all.cli.discover", mock_discover)
 
     import subprocess
 
@@ -340,7 +341,7 @@ def test_json_output_with_unlinked_resource(
     def mock_discover(_):
         return [MockItem()]
 
-    monkeypatch.setattr("check_md_links.cli.discover", mock_discover)
+    monkeypatch.setattr("claude_all.cli.discover", mock_discover)
 
     import subprocess
 
@@ -382,7 +383,7 @@ def test_json_output_does_not_affect_default_output(
     def mock_discover(_):
         return []
 
-    monkeypatch.setattr("check_md_links.cli.discover", mock_discover)
+    monkeypatch.setattr("claude_all.cli.discover", mock_discover)
 
     import subprocess
 
