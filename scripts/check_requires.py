@@ -32,7 +32,7 @@ def find_violations(known: set[str]) -> list[str]:
     for manifest in sorted((SRC / "claude_all").rglob("claude-all.json")) + sorted(
         (SRC / "claude_all").rglob("*.claude-all.json")
     ):
-        rel = manifest.relative_to(REPO_ROOT)
+        rel = manifest.relative_to(SRC.parent)
         try:
             config = json.loads(manifest.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError) as exc:
@@ -69,7 +69,7 @@ def find_undeclared_instruction_refs(
             except (json.JSONDecodeError, OSError, TypeError):
                 declared = set()
         own = f"instructions/{snippet.parent.name}"
-        rel = snippet.relative_to(instructions_dir.parent)
+        rel = snippet.relative_to(SRC.parent)
         for token in sorted(set(CODE_SPAN.findall(snippet.read_text(encoding="utf-8")))):
             candidates = keys_by_name.get(token, set()) - {own}
             if candidates and not candidates & declared:
