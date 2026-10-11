@@ -74,14 +74,21 @@ def test_shipped_instructions_declare_every_reference() -> None:
 def test_success_normal_case(tmp_path: Path, capsys) -> None:
     """A normal success case should exit 0 and print inspected count."""
     # Create a simple valid resource
+    # We need to set up the temporary directory to have:
+    #   tmp_path/src/claude_all/skills/test/test-skill/{SKILL.md, claude-all.json}
     skill_dir = tmp_path / "src" / "claude_all" / "skills" / "test" / "test-skill"
     skill_dir.mkdir(parents=True)
     (skill_dir / "claude-all.json").write_text('{"requires": []}', encoding="utf-8")
+    (skill_dir / "SKILL.md").write_text("# Test skill\n", encoding="utf-8")
+    # Also create an empty __init__.py to make claude_all a package
+    (tmp_path / "src" / "claude_all" / "__init__.py").touch()
 
     # Temporarily adjust the REPO_ROOT for this test
-    with patch.object(check_requires, "REPO_ROOT", tmp_path):
-        with patch.object(check_requires, "SRC", tmp_path / "src"):
-            exit_code = check_requires.main()
+    with (
+        patch.object(check_requires, "REPO_ROOT", tmp_path),
+        patch.object(check_requires, "SRC", tmp_path / "src"),
+    ):
+        exit_code = check_requires.main()
 
     assert exit_code == 0
     captured = capsys.readouterr()
@@ -90,14 +97,20 @@ def test_success_normal_case(tmp_path: Path, capsys) -> None:
 
 def test_zero_discovery_fails(tmp_path, capsys) -> None:
     """A zero-discovery run should exit 2 with an error message."""
-    # Create an empty src directory so discover finds nothing
+    # Create an empty src directory but with an empty claude_all package
+    # so that the import succeeds but discover finds nothing.
     empty_src = tmp_path / "src"
     empty_src.mkdir()
+    # Create an empty claude_all directory so that the package can be imported
+    (empty_src / "claude_all").mkdir()
+    (empty_src / "claude_all" / "__init__.py").touch()
 
     # Temporarily adjust the paths for this test
-    with patch.object(check_requires, "REPO_ROOT", tmp_path):
-        with patch.object(check_requires, "SRC", empty_src):
-            exit_code = check_requires.main()
+    with (
+        patch.object(check_requires, "REPO_ROOT", tmp_path),
+        patch.object(check_requires, "SRC", empty_src),
+    ):
+        exit_code = check_requires.main()
 
     assert exit_code == 2
     captured = capsys.readouterr()
@@ -116,9 +129,11 @@ def test_existing_failure_still_fails(tmp_path, capsys) -> None:
     )
 
     # Temporarily adjust the REPO_SRC for this test
-    with patch.object(check_requires, "REPO_ROOT", tmp_path):
-        with patch.object(check_requires, "SRC", tmp_path / "src"):
-            exit_code = check_requires.main()
+    with (
+        patch.object(check_requires, "REPO_ROOT", tmp_path),
+        patch.object(check_requires, "SRC", tmp_path / "src"),
+    ):
+        exit_code = check_requires.main()
 
     assert exit_code == 1
     captured = capsys.readouterr()
