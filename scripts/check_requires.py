@@ -83,9 +83,21 @@ def find_undeclared_instruction_refs(
 def main() -> int:
     """CLI entry point — print findings to stdout, exit 1 on any."""
     known = load_resource_keys()
+    discovery_count = len(known)
     findings = find_violations(known) + find_undeclared_instruction_refs(known)
+
+    # If no resources were discovered and no findings, fail because we examined nothing.
+    if discovery_count == 0 and not findings:
+        print(
+            "0 resources matched the discovery pattern — a dependency manifest that references no resources is unsafe.",
+            file=sys.stderr,
+        )
+        return 1
+
+    # Print any findings
     for finding in findings:
         print(finding)
+
     if findings:
         print(
             f"\n{len(findings)} requires finding(s) — a dependency manifest points at a "
@@ -94,6 +106,9 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
+
+    # Success case: no findings and we inspected at least one resource.
+    print(f"Inspected {discovery_count} resources")
     return 0
 
 
