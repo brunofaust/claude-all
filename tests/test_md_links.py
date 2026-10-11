@@ -141,7 +141,8 @@ class TestCheckLinks:
         # tracked-but-deleted file must be skipped, not crash read_text()
         missing = tmp_path / "GONE.md"
         monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [missing])
-        assert check_links(registry=[]) == []
+        broken_links, _, _, _ = check_links(registry=[])
+        assert broken_links == []
 
 
 def test_non_vendored_routes_use_discoverable_skill_names() -> None:
@@ -218,3 +219,216 @@ def test_claude_hook_examples_use_timeout_seconds() -> None:
                 findings.append(f"{path.relative_to(ROOT)}: timeout={value}")
 
     assert findings == []
+
+
+class TestJsonMode:
+    def _setup_git_repo(self, tmp_path: Path) -> Path:
+        """Initialize a git repo in tmp_path and return the repo path."""
+        repo = tmp_path
+        (repo / ".git").mkdir()
+        (repo / ".git" / "config").write_text("[core]\n")
+        # Initialize an empty repo by running git init
+        import subprocess
+
+        subprocess.run(
+            ["git", "init"],
+            cwd=repo,
+            check=True,
+            capture_output=True,
+        )
+        # Set user info for commits
+        subprocess.run(
+            ["git", "config", "user.name", "Test"],
+            cwd=repo,
+            check=True,
+        )
+        subprocess.run(
+            ["git", "config", "user.email", "test@example.com"],
+            cwd=repo,
+            check=True,
+        )
+        return repo
+
+    def test_json_clean_tree(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """JSON mode on a clean tree should report pass: true and zero counts."""
+        import json
+        import subprocess
+
+        repo = self._setup_git_repo(tmp_path)
+        # Create a vendored.json with empty vendored list
+        vendored: dict[str, list] = {"vendored": []}
+        (repo / "vendored.json").write_text(json.dumps(vendored))
+        # Create a README.md
+        (repo / "README.md").write_text("# README\n")
+        # Create a Markdown file with a valid link (to itself? but we'll avoid self-link)
+        # Instead, we create a linked resource and link to it.
+        # We'll create a dummy resource file and link to it from the README.
+        # But for the link check, we need a Markdown file with a link that resolves.
+        # Let's create a Markdown file with a link to a file that exists.
+        md_file = repo / "test.md"
+        md_file.write_text(
+            "See [link](./test.md)\n"
+        )  # self-link, but note: we strip anchor and check existence -> exists
+        # However, note: the link is to itself, which exists -> not broken.
+        # We also need to have the resource linked from README for the resource check.
+        # We'll create a dummy resource and link to it in README.
+        resource_file = repo / "resource.txt"
+        resource_file.write_text("dummy")
+
+        # We need to mock discover to return this resource.
+        # We'll mock claude_all.cli.discover to return a list with a dummy item.
+        class dummy_item:
+            kind = "resource"
+            name = "resource"
+            src = resource_file
+
+        monkeypatch.setattr("claude_all.cli.discover", lambda _: [dummy_item()])
+        # Now, we need to set the tracked_markdown to return our markdown file.
+        monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [md_file])
+        # Also, we need to set the vendored.json path for the check_md_links module.
+        # We'll monkeypatch the ROOT in check_md_links to be our repo.
+        monkeypatch.setattr("check_md_links.ROOT", repo)
+        # Run the script with --json and capture output
+        result = subprocess.run(
+            [sys.executable, "-m", "check_md_links", "--json"],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0
+        data = json.loads(result.stdout)
+        assert data["pass"] is True
+        assert data["counts"]["markdown_files_scanned"] == 1
+        assert data["counts"]["links_resolved"] == 1  # one link in the markdown file
+        assert data["counts"]["resources_checked"] == 1
+        assert data["counts"]["files_skipped_as_vendored"] == 0
+        assert data["broken_links"] == []
+        assert data["unlinked_resources"] == []
+
+    def test_json_with_broken_link(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """JSON mode with a broken link should report pass: false and the broken link."""
+        import json
+        import subprocess
+
+        repo = self._setup_git_repo(tmp_path)
+        vendored: dict[str, list] = {"vendored": []}
+        (repo / "vendored.json").write_text(json.dumps(vendored))
+        (repo / "README.md").write_text("# README\n")
+        # Create a Markdown file with a broken link
+        md_file = repo / "test.md"
+        md_file.write_text("See [link](./nonexistent.md)\n")
+        # No resources to keep it simple
+        monkeypatch.setattr("claude_all.cli.discover", lambda: [])
+        monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [md_file])
+        monkeypatch.setattr("check_md_links.ROOT", repo)
+        result = subprocess.run(
+            [sys.executable, "-m", "check_md_links", "--json"],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 1  # because there is a broken link
+        data = json.loads(result.stdout)
+        assert data["pass"] is False
+        assert data["counts"]["markdown_files_scanned"] == 1
+        assert data["counts"]["links_resolved"] == 1
+        assert data["counts"]["resources_checked"] == 0
+        assert data["counts"]["files_skipped_as_vendored"] == 0
+        assert len(data["broken_links"]) == 1
+        broken = data["broken_links"][0]
+        assert broken["containing_file"] == "test.md"
+        assert broken["raw_link_target"] == "./nonexistent.md"
+        # resolved_path should be the absolute path to nonexistent.md
+        assert broken["resolved_path"] == str((repo / "nonexistent.md").resolve())
+        assert data["unlinked_resources"] == []
+
+    def test_json_with_unlinked_resource(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """JSON mode with an unlinked resource should report pass: false and the resource."""
+        import json
+        import subprocess
+
+        repo = self._setup_git_repo(tmp_path)
+        vendored: dict[str, list] = {"vendored": []}
+        (repo / "vendored.json").write_text(json.dumps(vendored))
+        (repo / "README.md").write_text("# README\n")
+        # Create a Markdown file with no links (to avoid link findings)
+        md_file = repo / "test.md"
+        md_file.write_text("No links here.\n")
+        # Create a resource file
+        resource_file = repo / "resource.txt"
+        resource_file.write_text("dummy")
+
+        # Mock discover to return this resource, but not link it in README
+        class dummy_item:
+            kind = "resource"
+            name = "resource"
+            src = resource_file
+
+        monkeypatch.setattr("claude_all.cli.discover", lambda _: [dummy_item()])
+        monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [md_file])
+        monkeypatch.setattr("check_md_links.ROOT", repo)
+        result = subprocess.run(
+            [sys.executable, "-m", "check_md_links", "--json"],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 1  # because there is an unlinked resource
+        data = json.loads(result.stdout)
+        assert data["pass"] is False
+        assert data["counts"]["markdown_files_scanned"] == 1
+        assert data["counts"]["links_resolved"] == 0
+        assert data["counts"]["resources_checked"] == 1
+        assert data["counts"]["files_skipped_as_vendored"] == 0
+        assert data["broken_links"] == []
+        assert len(data["unlinked_resources"]) == 1
+        assert data["unlinked_resources"][0] == "resource.txt"
+
+    def test_json_default_output_unaffected(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Ensure that without --json, the output is unchanged from before."""
+        import subprocess
+
+        repo = self._setup_git_repo(tmp_path)
+        vendored: dict[str, list] = {"vendored": []}
+        (repo / "vendored.json").write_text(json.dumps(vendored))
+        (repo / "README.md").write_text("# README\n")
+        # Create a Markdown file with a broken link
+        md_file = repo / "test.md"
+        md_file.write_text("See [link](./nonexistent.md)\n")
+        # No resources
+        monkeypatch.setattr("claude_all.cli.discover", lambda: [])
+        monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [md_file])
+        monkeypatch.setattr("check_md_links.ROOT", repo)
+        # Run without --json
+        result = subprocess.run(
+            [sys.executable, "-m", "check_md_links"],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+        )
+        # Should output the finding to stdout and the count line to stderr
+        assert result.returncode == 1
+        assert "test.md:1: broken-link -> ./nonexistent.md" in result.stdout
+        assert "1 finding(s)." in result.stderr
+        # Now run with --json and check that the JSON output is valid and the stdout is only JSON
+        result_json = subprocess.run(
+            [sys.executable, "-m", "check_md_links", "--json"],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+        )
+        assert result_json.returncode == 1
+        # stdout should be valid JSON
+        try:
+            data = json.loads(result_json.stdout)
+        except json.JSONDecodeError:
+            raise AssertionError("JSON output is not valid JSON") from None
+        # stderr should be empty in JSON mode (we decided not to output the finding count line)
+        assert result_json.stderr == ""
+        # The JSON should indicate a failure and the broken link
+        assert data["pass"] is False
+        assert len(data["broken_links"]) == 1
