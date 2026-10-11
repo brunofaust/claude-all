@@ -69,7 +69,11 @@ def find_undeclared_instruction_refs(
             except (json.JSONDecodeError, OSError, TypeError):
                 declared = set()
         own = f"instructions/{snippet.parent.name}"
-        rel = snippet.relative_to(SRC.parent)
+        try:
+            rel = str(snippet.relative_to(SRC.parent))
+        except ValueError:
+            # Fallback for when the snippet is not under SRC.parent (e.g., in tests)
+            rel = snippet.name
         for token in sorted(set(CODE_SPAN.findall(snippet.read_text(encoding="utf-8")))):
             candidates = keys_by_name.get(token, set()) - {own}
             if candidates and not candidates & declared:
