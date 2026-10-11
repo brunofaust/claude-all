@@ -131,7 +131,7 @@ def test_zero_discovery_manifests_only(tmp_path: Path, capsys: pytest.CaptureFix
     instructions_dir = tmp_path / "src" / "claude_all" / "instructions" / "test"
     instructions_dir.mkdir(parents=True)
     (instructions_dir / "claude_md.md").write_text("See `test-skill`\n")
-    (instructions_dir / "claude-all.json").write_text('{"requires": ["skills/test-skill"]}')
+    # Do not create a manifest for the snippet to ensure zero manifest discovery
 
     # Point to our test directory
     original_repo_root = check_requires.REPO_ROOT
