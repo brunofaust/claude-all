@@ -68,3 +68,67 @@ def test_shipped_instructions_declare_every_reference() -> None:
     known = check_requires.load_resource_keys()
 
     assert check_requires.find_undeclared_instruction_refs(known) == []
+
+
+def test_zero_discovery_fails(monkeypatch, tmp_path, capsys):
+    """Zero-discovery run fails with a clear message."""
+    # Set up empty directories for manifests and snippets
+    tmp_src = tmp_path / "src"
+    tmp_src_claude_all = tmp_src / "claude_all"
+    tmp_src_claude_all.mkdir(parents=True)
+    tmp_instructions = tmp_path / "src" / "claude_all" / "instructions"
+    tmp_instructions.mkdir(parents=True)
+    # Monkeypatch the module's constants
+    monkeypatch.setattr(check_requires, "SRC", tmp_src)
+    monkeypatch.setattr(check_requires, "INSTRUCTIONS_DIR", tmp_instructions)
+    # Monkeypatch load_resource_keys to avoid ImportError and provide known resources
+    monkeypatch.setattr(
+        check_requires,
+        "load_resource_keys",
+        lambda: {"skills/foo-skill", "agents/bar-agent", "instructions/demo"},
+    )
+    # Run main
+    exit_code = check_requires.main()
+    # Expect failure
+    assert exit_code == 1
+    # Check stderr for error message
+    captured = capsys.readouterr()
+    assert "Error: no resources discovered" in captured.err
+    assert "**/claude-all.json" in captured.err
+    assert "'*/*.claude-all.json'" in captured.err
+    assert "*/claude_md.md" in captured.err
+
+
+def test_success_prints_summary(monkeypatch, tmp_path, capsys):
+    """Successful run prints inspected count summary."""
+    # Set up temporary directory with one manifest and one snippet
+    tmp_src = tmp_path / "src"
+    tmp_src_claude_all = tmp_src / "claude_all"
+    tmp_src_claude_all.mkdir(parents=True)
+    # Create a manifest
+    manifest = tmp_src_claude_all / "test.claude-all.json"
+    manifest.write_text('{"requires": ["skills/foo-skill"]}', encoding="utf-8")
+    # Create instructions directory and a snippet
+    tmp_instructions = tmp_path / "src" / "claude_all" / "instructions"
+    tmp_instructions.mkdir(parents=True)
+    snippet_dir = tmp_instructions / "test"
+    snippet_dir.mkdir()
+    (snippet_dir / "claude_md.md").write_text("See `skills/foo-skill`\n", encoding="utf-8")
+    # Monkeypatch
+    monkeypatch.setattr(check_requires, "SRC", tmp_src)
+    monkeypatch.setattr(check_requires, "INSTRUCTIONS_DIR", tmp_instructions)
+    # Provide load_resource_keys that includes the referenced skill
+    monkeypatch.setattr(
+        check_requires,
+        "load_resource_keys",
+        lambda: {"skills/foo-skill"},
+    )
+    # Run main
+    exit_code = check_requires.main()
+    # Expect success
+    assert exit_code == 0
+    captured = capsys.readouterr()
+    # Check stdout for summary line
+    assert "Inspected 2 units" in captured.out  # 1 manifest + 1 snippet
+    # Ensure no findings output
+    assert captured.err == ""
