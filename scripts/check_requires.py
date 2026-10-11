@@ -27,11 +27,14 @@ def load_resource_keys() -> set[str]:
     return {state_key(it.kind, it.name) for it in discover([])}
 
 
-def find_violations(known: set[str]) -> list[str]:
+def find_violations(known: set[str]) -> tuple[list[str], int]:
     findings: list[str] = []
-    for manifest in sorted((SRC / "claude_all").rglob("claude-all.json")) + sorted(
-        (SRC / "claude_all").rglob("*.claude-all.json")
-    ):
+    manifests = list(
+        sorted((SRC / "claude_all").rglob("claude-all.json"))
+        + sorted((SRC / "claude_all").rglob("*.claude-all.json"))
+    )
+    count = len(manifests)
+    for manifest in manifests:
         rel = manifest.relative_to(REPO_ROOT)
         try:
             config = json.loads(manifest.read_text(encoding="utf-8"))
@@ -50,17 +53,19 @@ def find_violations(known: set[str]) -> list[str]:
                     f"{rel}: requires '{dep}' — no such resource (renamed/deleted? "
                     "a built-in like /code-review does not belong in requires)"
                 )
-    return findings
+    return findings, count
 
 
 def find_undeclared_instruction_refs(
     known: set[str], instructions_dir: Path = INSTRUCTIONS_DIR
-) -> list[str]:
+) -> tuple[list[str], int]:
     keys_by_name: dict[str, set[str]] = {}
     for key in known:
         keys_by_name.setdefault(key.split("/", 1)[1], set()).add(key)
     findings: list[str] = []
-    for snippet in sorted(instructions_dir.glob("*/claude_md.md")):
+    snippets = sorted(instructions_dir.glob("*/claude_md.md"))
+    count = len(snippets)
+    for snippet in snippets:
         manifest = snippet.parent / "claude-all.json"
         declared: set[str] = set()
         if manifest.exists():
@@ -77,16 +82,33 @@ def find_undeclared_instruction_refs(
                     f"{rel}: names `{token}` but its claude-all.json does not require "
                     + " or ".join(sorted(candidates))
                 )
-    return findings
+    return findings, count
 
 
 def main() -> int:
-    """CLI entry point — print findings to stdout, exit 1 on any."""
+    """CLI entry point — print findings to stdout, exit 1 on any.
+    On zero-discovery, print error to stderr and exit 1.
+    On success, print inspection count to stdout and exit 0.
+    """
     known = load_resource_keys()
-    findings = find_violations(known) + find_undeclared_instruction_refs(known)
-    for finding in findings:
-        print(finding)
+    violations, count_manifests = find_violations(known)
+    undeclared, count_snippets = find_undeclared_instruction_refs(known)
+    findings = violations + undeclared
+    total_inspected = count_manifests + count_snippets
+
+    if total_inspected == 0:
+        patterns = []
+        if count_manifests == 0:
+            patterns.append(f"'claude-all.json' and '*.claude-all.json' under {SRC / 'claude_all'}")
+        if count_snippets == 0:
+            patterns.append(f"'*/claude_md.md' under {INSTRUCTIONS_DIR}")
+        msg = "No files discovered: " + "; ".join(patterns)
+        print(msg, file=sys.stderr)
+        return 1
+
     if findings:
+        for finding in findings:
+            print(finding)
         print(
             f"\n{len(findings)} requires finding(s) — a dependency manifest points at a "
             "resource the installer cannot discover, or an instruction names one it "
@@ -94,6 +116,8 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
+
+    print(f"inspected {total_inspected} units")
     return 0
 
 
