@@ -110,7 +110,8 @@ def check_readme_coverage() -> list[str]:
 
 def check_links_structured(registry: list[dict]) -> tuple[list[dict], int, int, int]:
     """Return (broken_links, files_scanned, links_resolved, files_skipped_vendored)
-    where each broken_link is a dict with keys: file (str, relative to root), line (int), target (str), resolved_path (str, absolute)
+    where each broken_link is a dict with keys:
+    file (str, relative to root), line (int), target (str), resolved_path (str, absolute)
     """
     broken_links = []
     files_scanned = 0

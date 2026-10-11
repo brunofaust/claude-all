@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import re
 import sys
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -225,38 +226,40 @@ def test_claude_hook_examples_use_timeout_seconds() -> None:
 class TestCheckLinksStructured:
     def test_broken_link_returned(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         # Create a markdown file with a broken link
-        md_file = tmp_path / "test.md"
-        md_file.write_text("See [broken link](missing.md) for details.")
-        # Make sure it's tracked by git (we'll monkeypatch tracked_markdown)
-        monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [md_file])
-        # Empty vendored registry
-        registry: list[dict] = []
-        broken_links, files_scanned, links_resolved, files_skipped_vendored = (
-            check_links_structured(registry)
-        )
-        assert files_scanned == 1
-        assert links_resolved == 1
-        assert files_skipped_vendored == 0
-        assert len(broken_links) == 1
-        bl = broken_links[0]
-        assert bl["file"] == str(md_file.relative_to(ROOT))
-        assert bl["target"] == "missing.md"
-        # resolved_path should be the absolute path that was checked
-        assert bl["resolved_path"] == str((md_file.parent / "missing.md").resolve())
+        with tempfile.TemporaryDirectory(dir=ROOT) as tmp_dir:
+            md_file = Path(tmp_dir) / "test.md"
+            md_file.write_text("See [broken link](missing.md) for details.")
+            # Make sure it's tracked by git (we'll monkeypatch tracked_markdown)
+            monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [md_file])
+            # Empty vendored registry
+            registry: list[dict] = []
+            broken_links, files_scanned, links_resolved, files_skipped_vendored = (
+                check_links_structured(registry)
+            )
+            assert files_scanned == 1
+            assert links_resolved == 1
+            assert files_skipped_vendored == 0
+            assert len(broken_links) == 1
+            bl = broken_links[0]
+            assert bl["file"] == str(md_file.relative_to(ROOT))
+            assert bl["target"] == "missing.md"
+            # resolved_path should be the absolute path that was checked
+            assert bl["resolved_path"] == str((md_file.parent / "missing.md").resolve())
 
     def test_vendored_file_skipped(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        md_file = tmp_path / "vendored.md"
-        md_file.write_text("Some link [here](http://example.com).")
-        # Make it vendored
-        registry = [{"path": str(md_file.parent.relative_to(ROOT)), "vendor_mode": "dir"}]
-        monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [md_file])
-        broken_links, files_scanned, links_resolved, files_skipped_vendored = (
-            check_links_structured(registry)
-        )
-        assert files_scanned == 0
-        assert links_resolved == 0
-        assert files_skipped_vendored == 1
-        assert broken_links == []
+        with tempfile.TemporaryDirectory(dir=ROOT) as tmp_dir:
+            md_file = Path(tmp_dir) / "vendored.md"
+            md_file.write_text("Some link [here](http://example.com).")
+            # Make it vendored
+            registry = [{"path": str(md_file.parent.relative_to(ROOT)), "vendor_mode": "dir"}]
+            monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [md_file])
+            broken_links, files_scanned, links_resolved, files_skipped_vendored = (
+                check_links_structured(registry)
+            )
+            assert files_scanned == 0
+            assert links_resolved == 0
+            assert files_skipped_vendored == 1
+            assert broken_links == []
 
 
 class TestReadmeCoverageStructured:
@@ -274,7 +277,7 @@ class TestReadmeCoverageStructured:
         def fake_discover(_):
             return [fake_resource]
 
-        monkeypatch.setattr("check_md_links.cli.discover", fake_discover)
+        monkeypatch.setattr("claude_all.cli.discover", fake_discover)
         # README does not contain the link
         readme_path = ROOT / "README.md"
         original_readme = readme_path.read_text()
@@ -305,7 +308,7 @@ class TestJsonMode:
             lambda _: {"vendored": []},
         )
         # Mock cli.discover to return no resources
-        monkeypatch.setattr("check_md_links.cli.discover", lambda _: [])
+        monkeypatch.setattr("claude_all.cli.discover", lambda _: [])
         # Ensure README links the resource (but there are none, so it's vacuously true)
         # We'll temporarily replace the README with a minimal one
         readme_path = ROOT / "README.md"
@@ -365,7 +368,7 @@ class TestJsonMode:
             "check_md_links.json.loads",
             lambda _: {"vendored": []},
         )
-        monkeypatch.setattr("check_md_links.cli.discover", lambda _: [])
+        monkeypatch.setattr("claude_all.cli.discover", lambda _: [])
         readme_path = ROOT / "README.md"
         original_readme = readme_path.read_text()
         try:
@@ -434,7 +437,7 @@ class TestJsonMode:
         def fake_discover(_):
             return [fake_resource]
 
-        monkeypatch.setattr("check_md_links.cli.discover", fake_discover)
+        monkeypatch.setattr("claude_all.cli.discover", fake_discover)
         readme_path = ROOT / "README.md"
         original_readme = readme_path.read_text()
         try:
@@ -489,7 +492,7 @@ class TestJsonMode:
             "check_md_links.json.loads",
             lambda _: {"vendored": []},
         )
-        monkeypatch.setattr("check_md_links.cli.discover", lambda _: [])
+        monkeypatch.setattr("claude_all.cli.discover", lambda _: [])
         readme_path = ROOT / "README.md"
         original_readme = readme_path.read_text()
         try:
@@ -502,14 +505,16 @@ class TestJsonMode:
             sys.stdin = io.StringIO()
             sys.stdout = io.StringIO()
             sys.stderr = io.StringIO()
+            output = ""
+            error_output = ""
             try:
                 test_argv = ["check_md_links.py"]  # no --json
                 monkeypatch.setattr("sys.argv", test_argv)
                 exit_code = main()
+                output = sys.stdout.getvalue()
+                error_output = sys.stderr.getvalue()
             finally:
                 sys.stdin, sys.stdout, sys.stderr = old_stdin, old_stdout, old_stderr
-            output = sys.stdout.getvalue()
-            error_output = sys.stderr.getvalue()
             # Expected human-readable output
             rel_path = md_file.relative_to(ROOT)
             expected_output = f"{rel_path}:1: broken-link -> missing.md\n"
