@@ -76,7 +76,7 @@ async def process_data(items):
             for item in items
         ]
         cpu_results = [f.result() for f in cpu_futures]
-    
+
     # I/O-bound or C-extension work: use run_in_thread
     io_tasks = [
         run_in_thread(blocking_io_operation, result)
@@ -120,7 +120,7 @@ def is_free_threadingSupported():
 1. **Data types**: Ensure all arguments and return values are picklable or shareable types.
    - Shareable: `str`, `bytes`, `int`, `float`, `bool`, `None`, `tuple`, `memoryview`
    - Everything else must be picklable (passes `pickle.dumps()` / `pickle.loads()`).
-2. **C extensions**: 
+2. **C extensions**:
    - Must release the GIL during blocking operations (many already do).
    - Should not rely on process-global state that isn't shared across interpreters.
    - Test by running the extension in a subinterpreter context.
