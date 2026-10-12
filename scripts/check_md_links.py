@@ -14,14 +14,14 @@ JSON output mode (--json):
         "files_skipped_vendored": integer
     },
     "broken_links": [
-        {
-            "file": string,   // path relative to repo root
-            "line": integer,  // line number in the markdown file
-            "target": string, // the link target as found in the markdown
-            "resolved_path": string // absolute path that was checked and did not exist
-        }
-    ],
-    "unlinked_resources": [ string ]   // paths relative to repo root of resources not found in README
+    {
+        "file": string,   // path relative to repo root
+        "line": integer,  // line number in the markdown file
+        "target": string, // the link target as found in the markdown
+        "resolved_path": string // absolute path that was checked and did not exist
+    }
+],
+    "unlinked_resources": [ string ]   // paths relative to repo root
 }
 """
 
