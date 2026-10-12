@@ -260,6 +260,20 @@ class TestJsonOutput:
 
         monkeypatch.setattr(check_md_links, "ROOT", tmp_path)
 
+        # Monkeypatch the discover function to return our resource
+        import claude_all.cli
+
+        class Item:
+            def __init__(self, kind, name, src):
+                self.kind = kind
+                self.name = name
+                self.src = src
+
+        def mock_discover(_):
+            return [Item("skill", "resource", resource_dir / "SKILL.md")]
+
+        monkeypatch.setattr(claude_all.cli, "discover", mock_discover)
+
         # Run the script with --json
         import contextlib
         import io
@@ -324,6 +338,14 @@ class TestJsonOutput:
 
         monkeypatch.setattr(check_md_links, "ROOT", tmp_path)
 
+        # Monkeypatch the discover function to return an empty list (no resources)
+        import claude_all.cli
+
+        def mock_discover(_):
+            return []
+
+        monkeypatch.setattr(claude_all.cli, "discover", mock_discover)
+
         # Run the script with --json
         import contextlib
         import io
@@ -387,87 +409,24 @@ class TestJsonOutput:
         resource_dir.mkdir()
         (resource_dir / "SKILL.md").write_text("# Resource\n")
 
-        # We need to make the resource discoverable. We'll monkeypatch the discover function.
-        # Instead, we can create a minimal claude_all.cli module? That's complex.
-        # Alternatively, we can monkeypatch the discover function in
-        # check_md_links to return our resource.
-        # Let's do that.
+        # Monkeypatch the discover function to return our resource (which is unlinked)
+        import claude_all.cli
 
-        # Create a simple object that mimics the discovered item
         class Item:
             def __init__(self, kind, name, src):
                 self.kind = kind
                 self.name = name
                 self.src = src
 
-        # We'll monkeypatch the discover function to return
-        # [Item("skill", "resource", Path("resource/SKILL.md"))]
+        def mock_discover(_):
+            return [Item("skill", "resource", resource_dir / "SKILL.md")]
+
+        monkeypatch.setattr(claude_all.cli, "discover", mock_discover)
+
+        # Monkeypatch the ROOT in the check_md_links module to be our tmp_path
         import check_md_links
 
         monkeypatch.setattr(check_md_links, "ROOT", tmp_path)
-
-        # We need to monkeypatch the import inside run_checks_structured and check_readme_coverage.
-        # Since they do `from claude_all.cli import discover`, we can monkeypatch
-        # `claude_all.cli.discover`
-        # but we don't have that module.
-        # Instead, we can monkeypatch the function in the check_md_links module
-        # after the import? It's tricky.
-
-        # Let's change approach:
-        # we'll create a temporary claude_all package structure? Too heavy.
-
-        # Instead, we'll test the unlinked resource by
-        # using the actual discover function but setting up
-        # a skill that is discoverable. We can do that by adding a skill to the src/claude_all/
-        # skills directory
-        # in our tmp_path? That's also heavy.
-
-        # Given the complexity,
-        # and since the ticket says to keep changes minimal, we might rely on the fact
-        # that the existing test for README coverage already works.
-        # We can test the JSON output by checking
-        # that the unlinked_resources array contains the expected path
-        # when we know there is an unlinked resource.
-
-        # We'll use the same setup as the existing test for README
-        # coverage but in a temporary directory.
-
-        # Let's create a minimal skill that is discoverable by the actual cli.discover.
-        # We need to create the structure: src/claude_all/skills/<category>/<name>/SKILL.md
-        # and a claude_all.json in the skill?
-        # Actually, the discover function looks for SKILL.md files.
-
-        # From the code in check_readme_coverage, it uses
-        # `discover([])` which returns a list of items
-        # that have kind, name, and src.
-
-        # We can create a temporary claude_all package in our tmp_path and then adjust the sys.path
-        # so that the import finds our temporary package.
-
-        # Let's do:
-
-        # Create: tmp_path/src/claude_all/skills/generic/testskill/SKILL.md
-        skill_dir = tmp_path / "src" / "claude_all" / "skills" / "generic" / "testskill"
-        skill_dir.mkdir(parents=True)
-        (skill_dir / "SKILL.md").write_text(
-            """name: testskill
-description: A test skill
-"""
-        )
-
-        # We also need a claude_all.json? The discover function in cli.py might require it.
-        # Looking at the actual cli.py (not in our scope)
-        # but we can assume it just walks for SKILL.md.
-        # To be safe, let's create a minimal claude_all.json in the skill directory.
-        (skill_dir / "claude_all.json").write_text("{}")
-
-        # Now we need to make the src directory importable. We'll add it to sys.path.
-        sys.path.insert(0, str(tmp_path / "src"))
-
-        # Now, when discover is called, it should find our skill.
-
-        # Create a README.md that does NOT link to the resource
-        (tmp_path / "README.md").write_text("# README\n")
 
         # Create a markdown file (to have something scanned)
         (tmp_path / "doc.md").write_text("Hello")
@@ -475,9 +434,6 @@ description: A test skill
         # Track the files with git
         subprocess.run(["git", "add", "."], check=True, capture_output=True)
         subprocess.run(["git", "commit", "-m", "initial"], check=True, capture_output=True)
-
-        # Monkeypatch the ROOT in the check_md_links module to be our tmp_path
-        monkeypatch.setattr(check_md_links, "ROOT", tmp_path)
 
         # Run the script with --json
         import contextlib
@@ -508,7 +464,8 @@ description: A test skill
         assert data["broken_links"] == []
         assert len(data["unlinked_resources"]) == 1
         unlinked = data["unlinked_resources"][0]
-        assert unlinked["path"] == "src/claude_all/skills/generic/testskill/SKILL.md"
+        # The path should be relative to the tmp_path (which is the mocked ROOT)
+        assert unlinked["path"] == "resource/SKILL.md"
         assert result == 1  # exit code
 
     def test_default_output_unaffected(
@@ -542,6 +499,14 @@ description: A test skill
         import check_md_links
 
         monkeypatch.setattr(check_md_links, "ROOT", tmp_path)
+
+        # Monkeypatch the discover function to return an empty list (to avoid extra findings)
+        import claude_all.cli
+
+        def mock_discover(_):
+            return []
+
+        monkeypatch.setattr(claude_all.cli, "discover", mock_discover)
 
         # Test without --json
         import contextlib
