@@ -184,12 +184,12 @@ def main() -> int:
         }
         # Output only JSON to stdout, nothing else
         print(json.dumps(result))
+        return 1 if len(findings) > 0 else 0
     else:
         for finding in findings:
             print(finding)
         if findings:
-            if not args.json:
-                print(f"\n{len(findings)} finding(s).", file=sys.stderr)
+            print(f"\n{len(findings)} finding(s).", file=sys.stderr)
             return 1
     return 0
 
