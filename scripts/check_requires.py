@@ -83,10 +83,16 @@ def find_undeclared_instruction_refs(
 def main() -> int:
     """CLI entry point — print findings to stdout, exit 1 on any."""
     known = load_resource_keys()
+    if not known:
+        print(
+            "Error: zero resources discovered — the installer's discovery returned nothing.",
+            file=sys.stderr,
+        )
+        return 1
     findings = find_violations(known) + find_undeclared_instruction_refs(known)
-    for finding in findings:
-        print(finding)
     if findings:
+        for finding in findings:
+            print(finding)
         print(
             f"\n{len(findings)} requires finding(s) — a dependency manifest points at a "
             "resource the installer cannot discover, or an instruction names one it "
@@ -94,6 +100,7 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
+    print(f"Inspected {len(known)} resources")
     return 0
 
 
