@@ -61,6 +61,8 @@ def find_undeclared_instruction_refs(
 ) -> list[str]:
     if snippets is None:
         snippets = (INSTRUCTIONS_DIR).glob("*/claude_md.md")
+    elif isinstance(snippets, Path):
+        snippets = snippets.glob("*/claude_md.md") if snippets.is_dir() else [snippets]
     keys_by_name: dict[str, set[str]] = {}
     for key in known:
         keys_by_name.setdefault(key.split("/", 1)[1], set()).add(key)
