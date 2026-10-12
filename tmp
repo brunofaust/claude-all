@@ -1,0 +1,22 @@
+## Change Summary
+
+### What was changed
+- Modified `tests/test_check_requires.py` to fix Ruff errors (SIM117 and E501) by replacing nested `with` statements with a single `with` statement using line continuation.
+- Added four new test functions to `tests/test_check_requires.py` to verify the main function's behavior:
+  1. `test_main_success`: ensures a successful run prints the inspected count and exits 0.
+  2. `test_main_zero_discovery_manifest`: ensures zero manifest files causes a failure with a clear message.
+  3. `test_main_zero_discovery_instruction`: ensures zero instruction files causes a failure with a clear message.
+  4. `test_main_failure`: ensures a genuine failure (dangling reference) still fails and prints the finding.
+- No changes were made to `scripts/check_requires.py` as it already meets the requirements.
+
+### Implementation approach
+The existing `scripts/check_requires.py` already:
+  - Prints a single greppable summary line on success: "Inspected {total_units} units".
+  - Fails on zero-discovery (when either manifest files or instruction files are empty) with a clear message naming the pattern(s) that matched nothing.
+  - Exits with appropriate codes (0 for success, 1 for failure).
+  - Preserves existing validation behavior and failure messages.
+Therefore, no modifications were needed to the script itself. The test file was updated to fix linting issues and add comprehensive test coverage for the main function's success, zero-discovery, and failure cases.
+
+### Known limitations or follow-up work
+- The zero-discovery check fails if either manifest files or instruction files are empty, which means the gate considers it a failure if either of its two checks has nothing to examine. This aligns with the ticket's requirement that a gate that examined nothing must never exit 0.
+- The companion script `scripts/vendor_sync.py` was inspected and does not exhibit the same zero-discovery issue because it does not rely on glob discovery for its main function (it reads a fixed `vendored.json` file). No changes were made to this file.
