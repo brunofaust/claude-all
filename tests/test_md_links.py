@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -219,3 +220,281 @@ def test_claude_hook_examples_use_timeout_seconds() -> None:
                 findings.append(f"{path.relative_to(ROOT)}: timeout={value}")
 
     assert findings == []
+
+
+def test_json_output_clean_tree(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # Set up a temporary git repository
+    monkeypatch.chdir(tmp_path)
+    subprocess.run(["git", "init"], check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.name", "Test"], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "config", "user.email", "test@example.com"], check=True, capture_output=True
+    )
+
+    # Create vendored.json
+    vendored = {
+        "vendored": [
+            {
+                "path": "vendored_dir",
+                "vendor_mode": "dir",
+            }
+        ]
+    }
+    (tmp_path / "vendored.json").write_text(json.dumps(vendored))
+
+    # Create README.md
+    readme_content = """# Test
+[resource](resource.txt)
+"""
+    (tmp_path / "README.md").write_text(readme_content)
+
+    # Create a resource file that is linked in the README
+    (tmp_path / "resource.txt").write_text("dummy")
+
+    # Create a markdown file outside vendored
+    md1 = tmp_path / "page1.md"
+    md1.write_text("See [resource](resource.txt) for more.")
+
+    # Create a markdown file inside vendored (should be skipped)
+    vendored_dir = tmp_path / "vendored_dir"
+    vendored_dir.mkdir()
+    md2 = vendored_dir / "page2.md"
+    md2.write_text(
+        "See [nonexistent](foo.md)"
+    )  # broken link, but should be skipped because vendored
+
+    # Track the markdown files with git
+    subprocess.run(["git", "add", "page1.md"], check=True, capture_output=True)
+    subprocess.run(["git", "add", "vendored_dir/page2.md"], check=True, capture_output=True)
+    subprocess.run(["git", "commit", "-m", "initial"], check=True, capture_output=True)
+
+    # Copy the script to the temporary directory
+    script_src = Path(__file__).resolve().parent.parent / "scripts" / "check_md_links.py"
+    script_dest = tmp_path / "check_md_links.py"
+    script_dest.write_text(script_src.read_text())
+
+    # Create the cli.py for discover
+    cli_dir = tmp_path / "src" / "claude_all"
+    cli_dir.mkdir(parents=True)
+    (cli_dir / "cli.py").write_text(
+        """
+def discover(args):
+    from pathlib import Path
+    class Resource:
+        def __init__(self, src):
+            self.src = src
+            self.kind = "file"
+            self.name = "resource"
+    return [Resource(Path("resource.txt"))]
+""".strip()
+    )
+
+    # Run without --json
+    result_nojson = subprocess.run(
+        [sys.executable, str(tmp_path / "check_md_links.py")],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+    )
+    # Run with --json
+    result_json = subprocess.run(
+        [sys.executable, str(tmp_path / "check_md_links.py"), "--json"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+    )
+    # Exit codes should be the same
+    assert result_nojson.returncode == result_json.returncode
+    # In clean tree, both should be 0
+    assert result_nojson.returncode == 0
+    assert result_json.returncode == 0
+    # Check non-json output: should be empty (no findings)
+    assert result_nojson.stdout.strip() == ""
+    assert result_nojson.stderr.strip() == ""
+    # Check json output
+    data = json.loads(result_json.stdout)
+    assert data["passed"] is True
+    assert (
+        data["counts"]["markdown_files_scanned"] == 1
+    )  # only page1.md, page2.md is vendored and skipped
+    assert data["counts"]["links_resolved"] == 1  # the link in page1.md
+    assert data["counts"]["resources_checked"] == 1  # one resource from discover
+    assert data["counts"]["files_skipped_vendored"] == 1  # the vendored_dir
+    assert data["broken_links"] == []
+    assert data["unlinked_resources"] == []  # because the resource is linked in README
+    assert result_json.stderr.strip() == ""  # no findings, so no message to stderr
+
+
+def test_json_output_broken_link(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # Set up a temporary git repository
+    monkeypatch.chdir(tmp_path)
+    subprocess.run(["git", "init"], check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.name", "Test"], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "config", "user.email", "test@example.com"], check=True, capture_output=True
+    )
+
+    # Create vendored.json (empty vendored list for simplicity)
+    vendored = {"vendored": []}
+    (tmp_path / "vendored.json").write_text(json.dumps(vendored))
+
+    # Create README.md
+    readme_content = "# Test\n[resource](resource.txt)\n"
+    (tmp_path / "README.md").write_text(readme_content)
+
+    # Create the resource file
+    (tmp_path / "resource.txt").write_text("dummy")
+
+    # Create a markdown file with a broken link
+    md1 = tmp_path / "page1.md"
+    md1.write_text("See [broken](nonexistent.md) for more.")
+
+    # Track the markdown file
+    subprocess.run(["git", "add", "page1.md"], check=True, capture_output=True)
+    subprocess.run(["git", "commit", "-m", "initial"], check=True, capture_output=True)
+
+    # Copy the script to the temporary directory
+    script_src = Path(__file__).resolve().parent.parent / "scripts" / "check_md_links.py"
+    script_dest = tmp_path / "check_md_links.py"
+    script_dest.write_text(script_src.read_text())
+
+    # Create the cli.py for discover
+    cli_dir = tmp_path / "src" / "claude_all"
+    cli_dir.mkdir(parents=True)
+    (cli_dir / "cli.py").write_text(
+        """
+def discover(args):
+    from pathlib import Path
+    class Resource:
+        def __init__(self, src):
+            self.src = src
+            self.kind = "file"
+            self.name = "resource"
+    return [Resource(Path("resource.txt"))]
+""".strip()
+    )
+
+    # Run without --json
+    result_nojson = subprocess.run(
+        [sys.executable, str(tmp_path / "check_md_links.py")],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+    )
+    # Run with --json
+    result_json = subprocess.run(
+        [sys.executable, str(tmp_path / "check_md_links.py"), "--json"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+    )
+    # Exit codes should be the same
+    assert result_nojson.returncode == result_json.returncode
+    # Both should be 1 because of the broken link
+    assert result_nojson.returncode == 1
+    assert result_json.returncode == 1
+    # Check non-json output: should contain the human-readable finding
+    assert "page1.md:1: broken-link -> broken" in result_nojson.stdout
+    assert "1 finding(s)." in result_nojson.stderr
+    # Check json output
+    data = json.loads(result_json.stdout)
+    assert data["passed"] is False
+    assert data["counts"]["markdown_files_scanned"] == 1
+    assert data["counts"]["links_resolved"] == 1
+    assert data["counts"]["resources_checked"] == 1
+    assert data["counts"]["files_skipped_vendored"] == 0
+    assert len(data["broken_links"]) == 1
+    broken = data["broken_links"][0]
+    assert broken["file"] == "page1.md"
+    assert broken["target"] == "broken"
+    assert broken["resolved_path"] == str((tmp_path / "nonexistent.md").resolve())
+    assert broken["line"] == 1
+    assert data["unlinked_resources"] == []
+    # Check stderr: should have the finding count
+    assert "1 finding(s)." in result_json.stderr
+
+
+def test_json_output_unlinked_resource(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # Set up a temporary git repository
+    monkeypatch.chdir(tmp_path)
+    subprocess.run(["git", "init"], check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.name", "Test"], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "config", "user.email", "test@example.com"], check=True, capture_output=True
+    )
+
+    # Create vendored.json (empty)
+    vendored = {"vendored": []}
+    (tmp_path / "vendored.json").write_text(json.dumps(vendored))
+
+    # Create README.md with no link to the resource
+    (tmp_path / "README.md").write_text("# Test\nNo link here.\n")
+
+    # Create the resource file (so it exists, but not linked in README)
+    resource_file = tmp_path / "resource.txt"
+    resource_file.write_text("dummy")
+
+    # Create a markdown file (no broken links)
+    md1 = tmp_path / "page1.md"
+    md1.write_text(
+        "See [existing](resource.txt) for more."
+    )  # this links to resource.txt, but note: the README coverage check is about resources from discover, not about markdown links.
+
+    # Track the markdown file
+    subprocess.run(["git", "add", "page1.md"], check=True, capture_output=True)
+    subprocess.run(["git", "commit", "-m", "initial"], check=True, capture_output=True)
+
+    # Copy the script to the temporary directory
+    script_src = Path(__file__).resolve().parent.parent / "scripts" / "check_md_links.py"
+    script_dest = tmp_path / "check_md_links.py"
+    script_dest.write_text(script_src.read_text())
+
+    # Create the cli.py for discover: return a resource that is not linked in the README
+    cli_dir = tmp_path / "src" / "claude_all"
+    cli_dir.mkdir(parents=True)
+    (cli_dir / "cli.py").write_text(
+        """
+def discover(args):
+    from pathlib import Path
+    class Resource:
+        def __init__(self, src):
+            self.src = src
+            self.kind = "file"
+            self.name = "resource"
+    return [Resource(Path("resource.txt"))]
+""".strip()
+    )
+
+    # Run without --json
+    result_nojson = subprocess.run(
+        [sys.executable, str(tmp_path / "check_md_links.py")],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+    )
+    # Run with --json
+    result_json = subprocess.run(
+        [sys.executable, str(tmp_path / "check_md_links.py"), "--json"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+    )
+    # Exit codes should be the same
+    assert result_nojson.returncode == result_json.returncode
+    # Both should be 1 because of the unlinked resource
+    assert result_nojson.returncode == 1
+    assert result_json.returncode == 1
+    # Check non-json output: should contain the human-readable finding
+    assert "README.md: undocumented -> file/resource" in result_nojson.stdout
+    assert "1 finding(s)." in result_nojson.stderr
+    # Check json output
+    data = json.loads(result_json.stdout)
+    assert data["passed"] is False
+    assert data["counts"]["markdown_files_scanned"] == 1
+    assert data["counts"]["links_resolved"] == 1  # the link in the markdown file to resource.txt
+    assert data["counts"]["resources_checked"] == 1
+    assert data["counts"]["files_skipped_vendored"] == 0
+    assert data["broken_links"] == []
+    assert data["unlinked_resources"] == ["resource.txt"]  # relative to ROOT
+    # Check stderr: should have the finding count
+    assert "1 finding(s)." in result_json.stderr
