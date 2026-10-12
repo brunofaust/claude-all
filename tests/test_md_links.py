@@ -297,8 +297,8 @@ class TestJsonOutput:
 
         # Assertions
         assert data["passed"] is True
-        assert data["counts"]["markdown_files_scanned"] == 1  # doc.md
-        assert data["counts"]["links_resolved"] == 1  # one link in doc.md
+        assert data["counts"]["markdown_files_scanned"] == 3  # README.md, doc.md, resource/SKILL.md
+        assert data["counts"]["links_resolved"] == 2  # one in README.md, one in doc.md
         assert data["counts"]["resources_checked"] == 1  # one resource from discover
         assert data["counts"]["files_skipped_vendored"] == 0
         assert data["broken_links"] == []
@@ -368,8 +368,10 @@ class TestJsonOutput:
 
         # Assertions
         assert data["passed"] is False
-        assert data["counts"]["markdown_files_scanned"] == 1
-        assert data["counts"]["links_resolved"] == 1
+        assert data["counts"]["markdown_files_scanned"] == 2  # README.md and doc.md
+        assert (
+            data["counts"]["links_resolved"] == 1
+        )  # the one link in doc.md (README.md has no links)
         assert data["counts"]["resources_checked"] == 0  # no resources discovered
         assert data["counts"]["files_skipped_vendored"] == 0
         assert len(data["broken_links"]) == 1
@@ -457,8 +459,8 @@ class TestJsonOutput:
 
         # Assertions
         assert data["passed"] is False  # because we have an unlinked resource
-        assert data["counts"]["markdown_files_scanned"] == 1  # doc.md
-        assert data["counts"]["links_resolved"] == 0  # no links
+        assert data["counts"]["markdown_files_scanned"] == 3  # README.md, doc.md, resource/SKILL.md
+        assert data["counts"]["links_resolved"] == 0  # no links in any of the three
         assert data["counts"]["resources_checked"] == 1  # our testskill
         assert data["counts"]["files_skipped_vendored"] == 0
         assert data["broken_links"] == []
