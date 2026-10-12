@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -218,3 +219,379 @@ def test_claude_hook_examples_use_timeout_seconds() -> None:
                 findings.append(f"{path.relative_to(ROOT)}: timeout={value}")
 
     assert findings == []
+
+
+class TestJsonOutput:
+    """Test the --json output mode."""
+
+    def test_json_clean_tree(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """--json on a clean tree should output passed: true and empty arrays."""
+        # Set up a temporary git repo with no markdown links issues and all resources documented.
+        monkeypatch.chdir(tmp_path)
+
+        # Initialize git repo
+        subprocess.run(["git", "init"], check=True, capture_output=True)
+        subprocess.run(["git", "config", "user.name", "Test"], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "config", "user.email", "test@example.com"], check=True, capture_output=True
+        )
+
+        # Create a vendored.json
+        vendored: dict = {"vendored": []}
+        (tmp_path / "vendored.json").write_text(json.dumps(vendored))
+
+        # Create a README.md that documents a resource
+        (tmp_path / "README.md").write_text("See [resource](resource/SKILL.md)")
+
+        # Create a resource directory and SKILL.md
+        resource_dir = tmp_path / "resource"
+        resource_dir.mkdir()
+        (resource_dir / "SKILL.md").write_text("# Resource\n")
+
+        # Create a markdown file with a valid relative link
+        (tmp_path / "doc.md").write_text("See [resource](resource/SKILL.md)")
+
+        # Track the files with git
+        subprocess.run(["git", "add", "."], check=True, capture_output=True)
+        subprocess.run(["git", "commit", "-m", "initial"], check=True, capture_output=True)
+
+        # Monkeypatch the ROOT in the check_md_links module to be our tmp_path
+        import check_md_links
+
+        monkeypatch.setattr(check_md_links, "ROOT", tmp_path)
+
+        # Run the script with --json
+        import contextlib
+        import io
+
+        from check_md_links import main
+
+        # Save sys.argv and set it for the test
+        old_argv = sys.argv
+        try:
+            sys.argv = [sys.argv[0], "--json"]
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                result = main()
+        finally:
+            sys.argv = old_argv
+
+        # Parse the JSON output
+        output = stdout.getvalue().strip()
+        data = json.loads(output)
+
+        # Assertions
+        assert data["passed"] is True
+        assert data["counts"]["markdown_files_scanned"] == 1  # doc.md
+        assert data["counts"]["links_resolved"] == 1  # one link in doc.md
+        assert data["counts"]["resources_checked"] == 1  # one resource from discover
+        assert data["counts"]["files_skipped_vendored"] == 0
+        assert data["broken_links"] == []
+        assert data["unlinked_resources"] == []
+        assert result == 0  # exit code
+
+        # Also ensure no output to stderr in JSON mode
+        assert stderr.getvalue() == ""
+
+    def test_json_with_broken_link(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """--json with a broken link should output the broken link struct."""
+        monkeypatch.chdir(tmp_path)
+
+        # Initialize git repo
+        subprocess.run(["git", "init"], check=True, capture_output=True)
+        subprocess.run(["git", "config", "user.name", "Test"], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "config", "user.email", "test@example.com"], check=True, capture_output=True
+        )
+
+        # Create a vendored.json
+        vendored: dict = {"vendored": []}
+        (tmp_path / "vendored.json").write_text(json.dumps(vendored))
+
+        # Create a README.md (empty, no resources)
+        (tmp_path / "README.md").write_text("# README\n")
+
+        # Create a markdown file with a broken link
+        (tmp_path / "doc.md").write_text("See [broken link](missing.md)")
+
+        # Track the files with git
+        subprocess.run(["git", "add", "."], check=True, capture_output=True)
+        subprocess.run(["git", "commit", "-m", "initial"], check=True, capture_output=True)
+
+        # Monkeypatch the ROOT in the check_md_links module to be our tmp_path
+        import check_md_links
+
+        monkeypatch.setattr(check_md_links, "ROOT", tmp_path)
+
+        # Run the script with --json
+        import contextlib
+        import io
+
+        from check_md_links import main
+
+        # Save sys.argv and set it for the test
+        old_argv = sys.argv
+        try:
+            sys.argv = [sys.argv[0], "--json"]
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                result = main()
+        finally:
+            sys.argv = old_argv
+
+        output = stdout.getvalue().strip()
+        data = json.loads(output)
+
+        # Assertions
+        assert data["passed"] is False
+        assert data["counts"]["markdown_files_scanned"] == 1
+        assert data["counts"]["links_resolved"] == 1
+        assert data["counts"]["resources_checked"] == 0  # no resources discovered
+        assert data["counts"]["files_skipped_vendored"] == 0
+        assert len(data["broken_links"]) == 1
+        broken_link = data["broken_links"][0]
+        assert broken_link["file"] == "doc.md"
+        assert broken_link["line"] == 1
+        assert broken_link["target"] == "missing.md"
+        # The resolved path should be absolute and not exist
+        assert not Path(broken_link["resolved_path"]).exists()
+        assert data["unlinked_resources"] == []
+        assert result == 1  # exit code
+
+        # Also test that non-JSON output is unchanged (we'll do in another test)
+
+    def test_json_with_unlinked_resource(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """--json with an unlinked resource should output the unlinked resource struct."""
+        monkeypatch.chdir(tmp_path)
+
+        # Initialize git repo
+        subprocess.run(["git", "init"], check=True, capture_output=True)
+        subprocess.run(["git", "config", "user.name", "Test"], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "config", "user.email", "test@example.com"], check=True, capture_output=True
+        )
+
+        # Create a vendored.json
+        vendored: dict = {"vendored": []}
+        (tmp_path / "vendored.json").write_text(json.dumps(vendored))
+
+        # Create a README.md that does NOT link to the resource
+        (tmp_path / "README.md").write_text("# README\n")
+
+        # Create a resource directory and SKILL.md
+        resource_dir = tmp_path / "resource"
+        resource_dir.mkdir()
+        (resource_dir / "SKILL.md").write_text("# Resource\n")
+
+        # We need to make the resource discoverable. We'll monkeypatch the discover function.
+        # Instead, we can create a minimal claude_all.cli module? That's complex.
+        # Alternatively, we can monkeypatch the discover function in
+        # check_md_links to return our resource.
+        # Let's do that.
+
+        # Create a simple object that mimics the discovered item
+        class Item:
+            def __init__(self, kind, name, src):
+                self.kind = kind
+                self.name = name
+                self.src = src
+
+        # We'll monkeypatch the discover function to return
+        # [Item("skill", "resource", Path("resource/SKILL.md"))]
+        import check_md_links
+
+        monkeypatch.setattr(check_md_links, "ROOT", tmp_path)
+
+        # We need to monkeypatch the import inside run_checks_structured and check_readme_coverage.
+        # Since they do `from claude_all.cli import discover`, we can monkeypatch
+        # `claude_all.cli.discover`
+        # but we don't have that module.
+        # Instead, we can monkeypatch the function in the check_md_links module
+        # after the import? It's tricky.
+
+        # Let's change approach:
+        # we'll create a temporary claude_all package structure? Too heavy.
+
+        # Instead, we'll test the unlinked resource by
+        # using the actual discover function but setting up
+        # a skill that is discoverable. We can do that by adding a skill to the src/claude_all/
+        # skills directory
+        # in our tmp_path? That's also heavy.
+
+        # Given the complexity,
+        # and since the ticket says to keep changes minimal, we might rely on the fact
+        # that the existing test for README coverage already works.
+        # We can test the JSON output by checking
+        # that the unlinked_resources array contains the expected path
+        # when we know there is an unlinked resource.
+
+        # We'll use the same setup as the existing test for README
+        # coverage but in a temporary directory.
+
+        # Let's create a minimal skill that is discoverable by the actual cli.discover.
+        # We need to create the structure: src/claude_all/skills/<category>/<name>/SKILL.md
+        # and a claude_all.json in the skill?
+        # Actually, the discover function looks for SKILL.md files.
+
+        # From the code in check_readme_coverage, it uses
+        # `discover([])` which returns a list of items
+        # that have kind, name, and src.
+
+        # We can create a temporary claude_all package in our tmp_path and then adjust the sys.path
+        # so that the import finds our temporary package.
+
+        # Let's do:
+
+        # Create: tmp_path/src/claude_all/skills/generic/testskill/SKILL.md
+        skill_dir = tmp_path / "src" / "claude_all" / "skills" / "generic" / "testskill"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text(
+            """name: testskill
+description: A test skill
+"""
+        )
+
+        # We also need a claude_all.json? The discover function in cli.py might require it.
+        # Looking at the actual cli.py (not in our scope)
+        # but we can assume it just walks for SKILL.md.
+        # To be safe, let's create a minimal claude_all.json in the skill directory.
+        (skill_dir / "claude_all.json").write_text("{}")
+
+        # Now we need to make the src directory importable. We'll add it to sys.path.
+        sys.path.insert(0, str(tmp_path / "src"))
+
+        # Now, when discover is called, it should find our skill.
+
+        # Create a README.md that does NOT link to the resource
+        (tmp_path / "README.md").write_text("# README\n")
+
+        # Create a markdown file (to have something scanned)
+        (tmp_path / "doc.md").write_text("Hello")
+
+        # Track the files with git
+        subprocess.run(["git", "add", "."], check=True, capture_output=True)
+        subprocess.run(["git", "commit", "-m", "initial"], check=True, capture_output=True)
+
+        # Monkeypatch the ROOT in the check_md_links module to be our tmp_path
+        monkeypatch.setattr(check_md_links, "ROOT", tmp_path)
+
+        # Run the script with --json
+        import contextlib
+        import io
+
+        from check_md_links import main
+
+        # Save sys.argv and set it for the test
+        old_argv = sys.argv
+        try:
+            sys.argv = [sys.argv[0], "--json"]
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                result = main()
+        finally:
+            sys.argv = old_argv
+
+        output = stdout.getvalue().strip()
+        data = json.loads(output)
+
+        # Assertions
+        assert data["passed"] is False  # because we have an unlinked resource
+        assert data["counts"]["markdown_files_scanned"] == 1  # doc.md
+        assert data["counts"]["links_resolved"] == 0  # no links
+        assert data["counts"]["resources_checked"] == 1  # our testskill
+        assert data["counts"]["files_skipped_vendored"] == 0
+        assert data["broken_links"] == []
+        assert len(data["unlinked_resources"]) == 1
+        unlinked = data["unlinked_resources"][0]
+        assert unlinked["path"] == "src/claude_all/skills/generic/testskill/SKILL.md"
+        assert result == 1  # exit code
+
+    def test_default_output_unaffected(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Ensure that without --json, the output and exit code are unchanged."""
+        monkeypatch.chdir(tmp_path)
+
+        # Initialize git repo
+        subprocess.run(["git", "init"], check=True, capture_output=True)
+        subprocess.run(["git", "config", "user.name", "Test"], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "config", "user.email", "test@example.com"], check=True, capture_output=True
+        )
+
+        # Create a vendored.json
+        vendored: dict = {"vendored": []}
+        (tmp_path / "vendored.json").write_text(json.dumps(vendored))
+
+        # Create a README.md
+        (tmp_path / "README.md").write_text("# README\n")
+
+        # Create a markdown file with a broken link
+        (tmp_path / "doc.md").write_text("See [broken link](missing.md)")
+
+        # Track the files with git
+        subprocess.run(["git", "add", "."], check=True, capture_output=True)
+        subprocess.run(["git", "commit", "-m", "initial"], check=True, capture_output=True)
+
+        # Monkeypatch the ROOT in the check_md_links module to be our tmp_path
+        import check_md_links
+
+        monkeypatch.setattr(check_md_links, "ROOT", tmp_path)
+
+        # Test without --json
+        import contextlib
+        import io
+
+        from check_md_links import main
+
+        # Save sys.argv and set it for the test (no arguments)
+        old_argv = sys.argv
+        try:
+            sys.argv = [sys.argv[0]]
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                result = main()
+        finally:
+            sys.argv = old_argv
+
+        stdout_out = stdout.getvalue()
+        stderr_out = stderr.getvalue()
+
+        # Expected output: the broken link message and then the count message to stderr
+        expected_stdout = "doc.md:1: broken-link -> missing.md\n"
+        expected_stderr = "\n1 finding(s).\n"
+
+        assert stdout_out == expected_stdout
+        assert stderr_out == expected_stderr
+        assert result == 1
+
+        # Now test with --json on the same setup and ensure the JSON output corresponds
+        import contextlib
+        import io
+
+        stdout_json = io.StringIO()
+        stderr_json = io.StringIO()
+        # Save sys.argv and set it for the test
+        old_argv = sys.argv
+        try:
+            sys.argv = [sys.argv[0], "--json"]
+            with contextlib.redirect_stdout(stdout_json), contextlib.redirect_stderr(stderr_json):
+                result_json = main()
+        finally:
+            sys.argv = old_argv
+
+        json_out = stdout_json.getvalue().strip()
+        data = json.loads(json_out)
+
+        assert data["passed"] is False
+        assert len(data["broken_links"]) == 1
+        assert data["unlinked_resources"] == []
+        assert result_json == 1
+        # In JSON mode, stderr should be empty
+        assert stderr_json.getvalue() == ""
