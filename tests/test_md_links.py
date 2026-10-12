@@ -11,7 +11,9 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 import sys
+import unittest.mock as mock
 from pathlib import Path
 
 import pytest
@@ -141,7 +143,8 @@ class TestCheckLinks:
         # tracked-but-deleted file must be skipped, not crash read_text()
         missing = tmp_path / "GONE.md"
         monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [missing])
-        assert check_links(registry=[]) == []
+        findings, _ = check_links(registry=[])
+        assert findings == []
 
 
 def test_non_vendored_routes_use_discoverable_skill_names() -> None:
@@ -218,3 +221,147 @@ def test_claude_hook_examples_use_timeout_seconds() -> None:
                 findings.append(f"{path.relative_to(ROOT)}: timeout={value}")
 
     assert findings == []
+
+
+class TestJsonMode:
+    def test_json_clean_tree(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        # Set up a temporary git repo with no markdown files and no resources
+        monkeypatch.chdir(tmp_path)
+        subprocess.run(["git", "init"], check=True, capture_output=True)
+        subprocess.run(["git", "config", "user.name", "Test"], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "config", "user.email", "test@example.com"], check=True, capture_output=True
+        )
+        # Create an empty vendored.json
+        vendored: dict = {"vendored": []}
+        (tmp_path / "vendored.json").write_text(json.dumps(vendored))
+        # Create an empty README.md
+        (tmp_path / "README.md").write_text("")
+        # Mock discover to return no resources
+        with mock.patch("check_md_links.claude_all.cli.discover", return_value=[]):
+            # Run the script with --json
+            result = subprocess.run(
+                [sys.executable, str(ROOT / "scripts" / "check_md_links.py"), "--json"],
+                cwd=tmp_path,
+                capture_output=True,
+                text=True,
+            )
+            # Parse the JSON output
+            data = json.loads(result.stdout)
+            assert data["pass"] is True
+            assert data["markdown_files_scanned"] == 0
+            assert data["links_resolved"] == 0
+            assert data["resources_checked"] == 0
+            assert data["files_skipped_as_vendored"] == 0
+            assert data["broken_links"] == []
+            assert data["unlinked_resources"] == []
+            # No output to stderr
+            assert result.stderr == ""
+            # Exit code 0
+            assert result.returncode == 0
+
+    def test_json_with_broken_link(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        # Set up a temporary git repo
+        monkeypatch.chdir(tmp_path)
+        subprocess.run(["git", "init"], check=True, capture_output=True)
+        subprocess.run(["git", "config", "user.name", "Test"], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "config", "user.email", "test@example.com"], check=True, capture_output=True
+        )
+        # Create a markdown file with a broken link
+        md_file = tmp_path / "test.md"
+        md_file.write_text("See [link](nonexistent.md) for details.")
+        # Add the file to git
+        subprocess.run(["git", "add", "test.md"], check=True, capture_output=True)
+        subprocess.run(["git", "commit", "-m", "add test.md"], check=True, capture_output=True)
+        # Create an empty vendored.json
+        vendored: dict = {"vendored": []}
+        (tmp_path / "vendored.json").write_text(json.dumps(vendored))
+        # Create a README.md (empty)
+        (tmp_path / "README.md").write_text("")
+        # Mock discover to return no resources
+        with mock.patch("check_md_links.claude_all.cli.discover", return_value=[]):
+            # Run the script with --json
+            result = subprocess.run(
+                [sys.executable, str(ROOT / "scripts" / "check_md_links.py"), "--json"],
+                cwd=tmp_path,
+                capture_output=True,
+                text=True,
+            )
+            # Parse the JSON output
+            data = json.loads(result.stdout)
+            assert data["pass"] is False
+            assert data["markdown_files_scanned"] == 1
+            assert data["links_resolved"] == 1
+            assert data["resources_checked"] == 0
+            assert data["files_skipped_as_vendored"] == 0
+            assert len(data["broken_links"]) == 1
+            broken = data["broken_links"][0]
+            assert broken["file"] == "test.md"
+            assert broken["line"] == 1
+            assert broken["target"] == "nonexistent.md"
+            # The resolved path should be absolute and not exist
+            assert not Path(broken["resolved"]).exists()
+            assert data["unlinked_resources"] == []
+            # No output to stderr (because we are in JSON mode)
+            assert result.stderr == ""
+            # Exit code 1
+            assert result.returncode == 1
+
+    def test_json_with_unlinked_resource(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Set up a temporary git repo
+        monkeypatch.chdir(tmp_path)
+        subprocess.run(["git", "init"], check=True, capture_output=True)
+        subprocess.run(["git", "config", "user.name", "Test"], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "config", "user.email", "test@example.com"], check=True, capture_output=True
+        )
+        # Create a markdown file (no links)
+        md_file = tmp_path / "test.md"
+        md_file.write_text("# Test\n")
+        # Add the file to git
+        subprocess.run(["git", "add", "test.md"], check=True, capture_output=True)
+        subprocess.run(["git", "commit", "-m", "add test.md"], check=True, capture_output=True)
+        # Create an empty vendored.json
+        vendored: dict = {"vendored": []}
+        (tmp_path / "vendored.json").write_text(json.dumps(vendored))
+        # Create a README.md that does not link to our resource
+        (tmp_path / "README.md").write_text("# README\n")
+
+        # Create a fake resource that discover will return
+        class FakeItem:
+            def __init__(self, kind, name, src):
+                self.kind = kind
+                self.name = name
+                self.src = Path(src)
+
+        fake_item = FakeItem("skill", "fake-skill", tmp_path / "fake-skill" / "SKILL.md")
+        # Mock discover to return our fake item
+        with mock.patch("check_md_links.claude_all.cli.discover", return_value=[fake_item]):
+            # Run the script with --json
+            result = subprocess.run(
+                [sys.executable, str(ROOT / "scripts" / "check_md_links.py"), "--json"],
+                cwd=tmp_path,
+                capture_output=True,
+                text=True,
+            )
+            # Parse the JSON output
+            data = json.loads(result.stdout)
+            assert data["pass"] is False
+            assert data["markdown_files_scanned"] == 1
+            assert data["links_resolved"] == 0  # no links in the markdown file
+            assert data["resources_checked"] == 1
+            assert data["files_skipped_as_vendored"] == 0
+            assert data["broken_links"] == []
+            assert len(data["unlinked_resources"]) == 1
+            unlinked = data["unlinked_resources"][0]
+            assert unlinked["file"] == "fake-skill/SKILL.md"
+            assert unlinked["kind"] == "skill"
+            assert unlinked["name"] == "fake-skill"
+            assert data["links_resolved"] == 0
+            # No output to stderr
+            assert result.stderr == ""
+            # Exit code 1
+            assert result.returncode == 1
