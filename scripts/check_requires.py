@@ -81,8 +81,14 @@ def find_undeclared_instruction_refs(
 
 
 def main() -> int:
-    """CLI entry point — print findings to stdout, exit 1 on any."""
+    """CLI entry point — print findings to stdout, exit 1 on any, exit 2 on zero discovery."""
     known = load_resource_keys()
+    if not known:
+        print(
+            "Error: discovery pattern (agents/**, skills/**, plugins/**, mcps/**, tools/**, instructions/**, hooks/**) matched zero resources",
+            file=sys.stderr,
+        )
+        return 2
     findings = find_violations(known) + find_undeclared_instruction_refs(known)
     for finding in findings:
         print(finding)
@@ -94,6 +100,7 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
+    print(f"Inspected {len(known)} resources")
     return 0
 
 

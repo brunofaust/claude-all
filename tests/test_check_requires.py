@@ -68,3 +68,80 @@ def test_shipped_instructions_declare_every_reference() -> None:
     known = check_requires.load_resource_keys()
 
     assert check_requires.find_undeclared_instruction_refs(known) == []
+
+
+def test_zero_discovery_exits_with_error_and_message(monkeypatch):
+    """When discovery returns no resources, the gate exits with code 2 and an error message."""
+    import check_requires
+
+    # Patch load_resource_keys to return an empty set
+    monkeypatch.setattr(check_requires, "load_resource_keys", lambda: set())
+
+    # Run the main function and capture exit code and stderr
+    import sys
+    from io import StringIO
+
+    old_stderr = sys.stderr
+    sys.stderr = StringIO()
+    try:
+        exit_code = check_requires.main()
+        stderr_output = sys.stderr.getvalue()
+    finally:
+        sys.stderr = old_stderr
+
+    assert exit_code == 2
+    assert "Error: discovery pattern" in stderr_output
+    assert "matched zero resources" in stderr_output
+
+
+def test_normal_success_prints_summary_line(monkeypatch, capsys):
+    """When discovery returns resources and no violations, the gate prints a summary line and exits 0."""
+    import check_requires
+
+    # Patch load_resource_keys to return a non-empty set
+    monkeypatch.setattr(check_requires, "load_resource_keys", lambda: {"agents/foo", "skills/bar"})
+    # Patch the two find functions to return empty lists
+    monkeypatch.setattr(check_requires, "find_violations", lambda known: [])
+    monkeypatch.setattr(check_requires, "find_undeclared_instruction_refs", lambda known, _: [])
+
+    # Run the main function
+    exit_code = check_requires.main()
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert "Inspected 2 resources" in captured.out
+    # Ensure no error output
+    assert captured.err == ""
+
+
+def test_existing_genuine_failure_still_fails(monkeypatch, capsys):
+    """When there is a genuine violation, the gate still exits 1 and prints the findings and error message."""
+    import check_requires
+
+    # Patch load_resource_keys to return a non-empty set
+    monkeypatch.setattr(check_requires, "load_resource_keys", lambda: {"agents/foo"})
+    # Patch find_violations to return a finding
+    monkeypatch.setattr(
+        check_requires,
+        "find_violations",
+        lambda known: ["some/path/claude-all.json: requires 'missing' — no such resource"],
+    )
+    # Patch find_undeclared_instruction_refs to return empty
+    monkeypatch.setattr(
+        check_requires,
+        "find_undeclared_instruction_refs",
+        lambda known, _: [],
+    )
+
+    # Run the main function
+    exit_code = check_requires.main()
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    # Check that the finding is printed to stdout
+    assert "some/path/claude-all.json: requires 'missing' — no such resource" in captured.out
+    # Check that the error message is printed to stderr
+    assert "requires finding(s)" in captured.err
+    assert "dependency manifest points at a resource" in captured.err
+    # Ensure no summary line
+    assert "Inspected" not in captured.out
