@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -230,8 +231,13 @@ class TestJsonOutput:
         # We'll monkeypatch the ROOT to point to our temporary directory.
         monkeypatch.setattr("check_md_links.ROOT", tmp_path)
         # Initialize a git repository.
-        (tmp_path / ".git").mkdir()
-        (tmp_path / ".git" / "config").write_text("[core]\n")
+        subprocess.run(
+            ["git", "init"],
+            cwd=tmp_path,
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
         # Create a vendored.json with an empty vendored list.
         vendored_json = tmp_path / "vendored.json"
         vendored_json.write_text('{"vendored": []}')
@@ -300,8 +306,13 @@ class TestJsonOutput:
     def test_json_broken_link(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """--json with a broken link should output the broken link details."""
         monkeypatch.setattr("check_md_links.ROOT", tmp_path)
-        (tmp_path / ".git").mkdir()
-        (tmp_path / ".git" / "config").write_text("[core]\n")
+        subprocess.run(
+            ["git", "init"],
+            cwd=tmp_path,
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
         vendored_json = tmp_path / "vendored.json"
         vendored_json.write_text('{"vendored": []}')
         readme = tmp_path / "README.md"
@@ -357,8 +368,13 @@ class TestJsonOutput:
     def test_json_unlinked_resource(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """--json with an unlinked resource should output the resource details."""
         monkeypatch.setattr("check_md_links.ROOT", tmp_path)
-        (tmp_path / ".git").mkdir()
-        (tmp_path / ".git" / "config").write_text("[core]\n")
+        subprocess.run(
+            ["git", "init"],
+            cwd=tmp_path,
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
         vendored_json = tmp_path / "vendored.json"
         vendored_json.write_text('{"vendored": []}')
         readme = tmp_path / "README.md"
@@ -423,8 +439,13 @@ class TestJsonOutput:
         # We'll test that without --json, the output is the same as before.
         # We'll use a scenario with one broken link and one unlinked resource.
         monkeypatch.setattr("check_md_links.ROOT", tmp_path)
-        (tmp_path / ".git").mkdir()
-        (tmp_path / ".git" / "config").write_text("[core]\n")
+        subprocess.run(
+            ["git", "init"],
+            cwd=tmp_path,
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
         vendored_json = tmp_path / "vendored.json"
         vendored_json.write_text('{"vendored": []}')
         readme = tmp_path / "README.md"
