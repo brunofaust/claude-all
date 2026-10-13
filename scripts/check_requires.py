@@ -3,7 +3,7 @@
 
 Also checks that resources named by an instruction snippet are in its `requires`.
 Targets are resolved via the installer's own `discover()`, never re-derived here.
-Exit 0 = all resolve, 1 = dangling/malformed entry.
+Exit 0 = all resolve, 1 = dangling/malformed entry, 2 = no files discovered.
 """
 
 from __future__ import annotations
@@ -83,6 +83,15 @@ def find_undeclared_instruction_refs(
 def main() -> int:
     """CLI entry point — print findings to stdout, exit 1 on any."""
     known = load_resource_keys()
+
+    # Count the units we are going to inspect
+    manifest_files = list((SRC / "claude_all").rglob("claude-all.json")) + list(
+        (SRC / "claude_all").rglob("*.claude-all.json")
+    )
+    manifest_count = len(manifest_files)
+    snippet_files = list(INSTRUCTIONS_DIR.glob("*/claude_md.md"))
+    snippet_count = len(snippet_files)
+
     findings = find_violations(known) + find_undeclared_instruction_refs(known)
     for finding in findings:
         print(finding)
@@ -94,7 +103,20 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
-    return 0
+
+    # No findings
+    total_units = manifest_count + snippet_count
+    if total_units == 0:
+        print(
+            f"Error: No manifest files found in {SRC / 'claude_all'} "
+            f"(using patterns 'claude-all.json' and '*.claude-all.json') "
+            f"and no instruction snippets found in {INSTRUCTIONS_DIR}/*/claude_md.md.",
+            file=sys.stderr,
+        )
+        return 2
+    else:
+        print(f"Inspected {total_units} units")
+        return 0
 
 
 if __name__ == "__main__":
