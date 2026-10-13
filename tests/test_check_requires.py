@@ -72,8 +72,6 @@ def test_shipped_instructions_declare_every_reference() -> None:
 
 def test_main_zero_discovery_fails(tmp_path: Path, monkeypatch, capsys):
     """When no manifests and no snippets are found, exit with 2 and error message."""
-    import scripts.check_requires as check_requires
-
     # Create a temporary directory structure that is empty for src/claude_all
     fake_src = tmp_path / "src"
     fake_src.mkdir()
@@ -99,8 +97,6 @@ def test_main_zero_discovery_fails(tmp_path: Path, monkeypatch, capsys):
 def test_main_success_prints_summary(tmp_path: Path, monkeypatch, capsys):
     """When there are manifests and snippets and no findings, exit 0 and print summary."""
     import json
-
-    import scripts.check_requires as check_requires
 
     # Create a temporary directory structure with one manifest and one snippet
     fake_src = tmp_path / "src"
@@ -136,8 +132,6 @@ def test_main_success_prints_summary(tmp_path: Path, monkeypatch, capsys):
 def test_main_failure_unchanged(tmp_path: Path, monkeypatch, capsys):
     """When there is a finding, exit 1 and print the finding and summary (existing behavior)."""
     import json
-
-    import scripts.check_requires as check_requires
 
     # Create a temporary directory structure with one manifest that has a bad require
     fake_src = tmp_path / "src"
