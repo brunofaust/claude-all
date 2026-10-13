@@ -71,7 +71,7 @@ def test_json_output():
                 assert "unlinked_resources" in data
 
                 # Verify values
-                assert data["passed"] == False  # Should fail due to broken link
+                assert not data["passed"]  # Should fail due to broken link
                 assert data["markdown_files_scanned"] == 1
                 assert data["links_resolved"] == 1
                 assert data["resources_checked"] == 0

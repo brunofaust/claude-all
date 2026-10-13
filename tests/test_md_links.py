@@ -256,7 +256,7 @@ class TestJsonOutput:
                 self.name = name
                 self.src = src
 
-        def mock_discover() -> list[MockItem]:
+        def mock_discover(_) -> list[MockItem]:
             return [MockItem("skill", "test", tmp_path / "test" / "SKILL.md")]
 
         monkeypatch.setattr("claude_all.cli.discover", mock_discover)
@@ -322,7 +322,7 @@ class TestJsonOutput:
         markdown.write_text("# Test\n\n[link](nonexistent.md)\n")
 
         # No resources to keep it simple.
-        def mock_discover() -> list:
+        def mock_discover(_) -> list:
             return []
 
         monkeypatch.setattr("claude_all.cli.discover", mock_discover)
@@ -390,7 +390,7 @@ class TestJsonOutput:
                 self.name = name
                 self.src = src
 
-        def mock_discover() -> list[MockItem]:
+        def mock_discover(_) -> list[MockItem]:
             return [MockItem("skill", "unlinked", tmp_path / "unlinked" / "SKILL.md")]
 
         monkeypatch.setattr("claude_all.cli.discover", mock_discover)
@@ -460,7 +460,7 @@ class TestJsonOutput:
                 self.name = name
                 self.src = src
 
-        def mock_discover() -> list[MockItem]:
+        def mock_discover(_) -> list[MockItem]:
             return [MockItem("skill", "unlinked", tmp_path / "unlinked" / "SKILL.md")]
 
         monkeypatch.setattr("claude_all.cli.discover", mock_discover)
