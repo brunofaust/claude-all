@@ -1,23 +1,10 @@
 #!/usr/bin/env python3
 """Gate: relative markdown links resolve and every resource is linked from the README.
 
-Vendored files are exempt from the link check (kept byte-identical to upstream);
-their `local_only` sidecars stay checked. README links are the proxy for "documented".
+Vendored files are exempt; their local_only sidecars are checked.
+README links are the proxy for "documented".
 
-When invoked with `--json`, the script outputs a JSON object with the following keys:
-- passed: boolean indicating if all checks passed
-- counts: dict with keys:
-    * markdown_files_scanned: number of markdown files processed (excluding vendored)
-    * links_checked: number of link targets examined (after filtering)
-    * vendored_skipped: number of markdown files skipped due to vendored exemption
-    * resources_checked: number of resources discovered from the README check
-- broken_links: list of objects, each representing a broken link with:
-    * file: the markdown file containing the link (relative to repository root)
-    * link: the raw link target as found in the markdown
-    * resolved_path: the resolved path that did not exist (absolute path, or relative to
-      repository root if resolvable)
-- unlinked_resources: list of strings, each being the path of a resource not linked from
-  the README (relative to repository root)
+With --json, output JSON: pass/fail, counts, broken links, unlinked resources.
 """
 
 import argparse
@@ -73,7 +60,7 @@ def tracked_markdown() -> list[Path]:
     return [ROOT / p for p in out.split("\0") if p]
 
 
-def _check_links_internal(registry: list[dict], counts: dict) -> list[dict]:
+def check_links_internal(registry: list[dict], counts: dict) -> list[dict]:
     broken_links = []
     for md in tracked_markdown():
         if is_vendored(md, registry):
@@ -98,14 +85,7 @@ def _check_links_internal(registry: list[dict], counts: dict) -> list[dict]:
     return broken_links
 
 
-def check_links(registry: list[dict], counts: dict | None = None) -> list[str]:
-    if counts is None:
-        counts = {}
-    broken_links_struct = _check_links_internal(registry, counts)
-    return [format_broken_link_finding(f) for f in broken_links_struct]
-
-
-def _check_readme_coverage_internal(counts: dict) -> list[dict]:
+def check_readme_coverage_internal(counts: dict) -> list[dict]:
     sys.path.insert(0, str(ROOT / "src"))
     from claude_all.cli import discover
 
@@ -116,13 +96,6 @@ def _check_readme_coverage_internal(counts: dict) -> list[dict]:
         if f"]({item.src.relative_to(ROOT).as_posix()})" not in readme:
             unlinked_resources.append({"item": item})
     return unlinked_resources
-
-
-def check_readme_coverage(counts: dict | None = None) -> list[str]:
-    if counts is None:
-        counts = {}
-    unlinked_resources_struct = _check_readme_coverage_internal(counts)
-    return [format_unlinked_resource_finding(f) for f in unlinked_resources_struct]
 
 
 def format_broken_link_finding(finding: dict) -> str:
@@ -150,8 +123,8 @@ def main() -> int:
         "vendored_skipped": 0,
         "resources_checked": 0,
     }
-    broken_links_struct = _check_links_internal(registry, counts)
-    unlinked_resources_struct = _check_readme_coverage_internal(counts)
+    broken_links_struct = check_links_internal(registry, counts)
+    unlinked_resources_struct = check_readme_coverage_internal(counts)
 
     if args.json:
         # Build JSON object

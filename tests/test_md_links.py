@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 from check_md_links import (
     CODE_SPAN,
     LINK,
-    check_links,
+    check_links_internal,
     is_vendored,
     strip_code_blocks,
 )
@@ -141,7 +141,7 @@ class TestCheckLinks:
         # tracked-but-deleted file must be skipped, not crash read_text()
         missing = tmp_path / "GONE.md"
         monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [missing])
-        assert check_links(registry=[]) == []
+        assert check_links_internal(registry=[], counts={}) == []
 
 
 def test_non_vendored_routes_use_discoverable_skill_names() -> None:
