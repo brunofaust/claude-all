@@ -68,3 +68,99 @@ def test_shipped_instructions_declare_every_reference() -> None:
     known = check_requires.load_resource_keys()
 
     assert check_requires.find_undeclared_instruction_refs(known) == []
+
+
+def test_main_zero_discovery_fails(tmp_path: Path, monkeypatch, capsys):
+    """When no manifests and no snippets are found, exit with 2 and error message."""
+    import scripts.check_requires as check_requires
+
+    # Create a temporary directory structure that is empty for src/claude_all
+    fake_src = tmp_path / "src"
+    fake_src.mkdir()
+    fake_claude_all = fake_src / "claude_all"
+    fake_claude_all.mkdir()
+    fake_instructions = fake_claude_all / "instructions"
+    fake_instructions.mkdir()
+
+    # Monkeypatch the constants
+    monkeypatch.setattr(check_requires, "SRC", fake_src)
+    monkeypatch.setattr(check_requires, "INSTRUCTIONS_DIR", fake_instructions)
+    monkeypatch.setattr(check_requires, "REPO_ROOT", tmp_path)
+
+    exit_code = check_requires.main()
+    assert exit_code == 2
+
+    captured = capsys.readouterr()
+    # The error message should be printed to stderr
+    assert "Error: No files found for manifest patterns" in captured.err
+    assert "and for snippet pattern" in captured.err
+
+
+def test_main_success_prints_summary(tmp_path: Path, monkeypatch, capsys):
+    """When there are manifests and snippets and no findings, exit 0 and print summary."""
+    import json
+
+    import scripts.check_requires as check_requires
+
+    # Create a temporary directory structure with one manifest and one snippet
+    fake_src = tmp_path / "src"
+    fake_src.mkdir()
+    fake_claude_all = fake_src / "claude_all"
+    fake_claude_all.mkdir()
+    fake_instructions = fake_claude_all / "instructions"
+    fake_instructions.mkdir()
+
+    # Create a manifest
+    manifest = fake_claude_all / "test.claude-all.json"
+    manifest.write_text(json.dumps({"requires": []}), encoding="utf-8")
+
+    # Create a snippet directory and files
+    snippet_dir = fake_instructions / "demo"
+    snippet_dir.mkdir()
+    (snippet_dir / "claude_md.md").write_text("No references", encoding="utf-8")
+    (snippet_dir / "claude-all.json").write_text(json.dumps({"requires": []}), encoding="utf-8")
+
+    # Monkeypatch the constants
+    monkeypatch.setattr(check_requires, "SRC", fake_src)
+    monkeypatch.setattr(check_requires, "INSTRUCTIONS_DIR", fake_instructions)
+    monkeypatch.setattr(check_requires, "REPO_ROOT", tmp_path)
+
+    exit_code = check_requires.main()
+    assert exit_code == 0
+
+    captured = capsys.readouterr()
+    # The summary line should be printed to stdout
+    assert "Inspected 2 manifest(s) and 1 instruction snippet(s)" in captured.out
+
+
+def test_main_failure_unchanged(tmp_path: Path, monkeypatch, capsys):
+    """When there is a finding, exit 1 and print the finding and summary (existing behavior)."""
+    import json
+
+    import scripts.check_requires as check_requires
+
+    # Create a temporary directory structure with one manifest that has a bad require
+    fake_src = tmp_path / "src"
+    fake_src.mkdir()
+    fake_claude_all = fake_src / "claude_all"
+    fake_claude_all.mkdir()
+    fake_instructions = fake_claude_all / "instructions"
+    fake_instructions.mkdir()
+
+    # Create a manifest with a bad require
+    manifest = fake_claude_all / "test.claude-all.json"
+    manifest.write_text(json.dumps({"requires": ["bad/resource"]}), encoding="utf-8")
+
+    # Monkeypatch the constants
+    monkeypatch.setattr(check_requires, "SRC", fake_src)
+    monkeypatch.setattr(check_requires, "INSTRUCTIONS_DIR", fake_instructions)
+    monkeypatch.setattr(check_requires, "REPO_ROOT", tmp_path)
+
+    exit_code = check_requires.main()
+    assert exit_code == 1
+
+    captured = capsys.readouterr()
+    # The finding should be in stdout
+    assert "requires 'bad/resource' — no such resource" in captured.out
+    # The summary about findings should be in stderr
+    assert "1 requires finding(s)" in captured.err

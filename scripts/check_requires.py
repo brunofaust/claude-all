@@ -83,9 +83,66 @@ def find_undeclared_instruction_refs(
 def main() -> int:
     """CLI entry point — print findings to stdout, exit 1 on any."""
     known = load_resource_keys()
-    findings = find_violations(known) + find_undeclared_instruction_refs(known)
+
+    # Count and collect manifest files
+    manifest_files = sorted((SRC / "claude_all").rglob("claude-all.json")) + sorted(
+        (SRC / "claude_all").rglob("*.claude-all.json")
+    )
+    manifest_count = len(manifest_files)
+    # Count and collect snippet files
+    snippet_files = sorted(INSTRUCTIONS_DIR.glob("*/claude_md.md"))
+    snippet_count = len(snippet_files)
+    total_inspected = manifest_count + snippet_count
+
+    if total_inspected == 0:
+        manifest_dir = SRC / "claude_all"
+        if manifest_count == 0 and snippet_count == 0:
+            msg = (
+                "Error: No files found for manifest patterns "
+                + "'claude-all.json' or '.claude-all.json' in "
+                + str(manifest_dir)
+                + " and for snippet pattern '*/claude_md.md' in "
+                + str(INSTRUCTIONS_DIR)
+            )
+        elif manifest_count == 0:
+            msg = (
+                "Error: No files found for manifest patterns "
+                + "'claude-all.json' or '.claude-all.json' in "
+                + str(manifest_dir)
+            )
+        else:  # snippet_count == 0
+            msg = "Error: No files found for snippet pattern '*/claude_md.md' in " + str(
+                INSTRUCTIONS_DIR
+            )
+        print(msg, file=sys.stderr)
+        return 2
+
+    findings: list[str] = []
+    for manifest in manifest_files:
+        rel = manifest.relative_to(REPO_ROOT)
+        try:
+            config = json.loads(manifest.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError) as exc:
+            findings.append(f"{rel}: not valid JSON — {exc}")
+            continue
+        requires = config.get("requires", [])
+        if not isinstance(requires, list):
+            findings.append(f"{rel}: `requires` must be a list of 'kind/name' strings")
+            continue
+        for dep in requires:
+            if not isinstance(dep, str):
+                findings.append(f"{rel}: non-string dependency {dep!r}")
+            elif dep not in known:
+                findings.append(
+                    f"{rel}: requires '{dep}' — no such resource (renamed/deleted? "
+                    "a built-in like /code-review does not belong in requires)"
+                )
+
+    findings += find_undeclared_instruction_refs(known, INSTRUCTIONS_DIR)
+
     for finding in findings:
         print(finding)
+
     if findings:
         print(
             f"\n{len(findings)} requires finding(s) — a dependency manifest points at a "
@@ -94,6 +151,9 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
+
+    # Success case: no findings and we inspected at least one unit
+    print(f"Inspected {manifest_count} manifest(s) and {snippet_count} instruction snippet(s)")
     return 0
 
 
