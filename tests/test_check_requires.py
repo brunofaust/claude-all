@@ -102,6 +102,7 @@ def test_success_print_summary_and_exit_0(tmp_path: Path, monkeypatch, capsys) -
     monkeypatch.setattr(
         check_requires, "INSTRUCTIONS_DIR", instr_dir.parent.parent / "instructions"
     )
+    monkeypatch.setattr(check_requires, "REPO_ROOT", tmp_path)
 
     # Run the main function.
     exit_code = check_requires.main()
@@ -134,6 +135,7 @@ def test_zero_discovery_fails_exit_2(tmp_path: Path, monkeypatch, capsys) -> Non
     # Mock the SRC and INSTRUCTIONS_DIR constants.
     monkeypatch.setattr(check_requires, "SRC", tmp_path / "src")
     monkeypatch.setattr(check_requires, "INSTRUCTIONS_DIR", instr_dir)
+    monkeypatch.setattr(check_requires, "REPO_ROOT", tmp_path)
 
     # Run the main function.
     exit_code = check_requires.main()
@@ -179,6 +181,7 @@ def test_genuine_failure_still_fails_exit_1(tmp_path: Path, monkeypatch, capsys)
     # Mock the SRC and INSTRUCTIONS_DIR constants.
     monkeypatch.setattr(check_requires, "SRC", tmp_path / "src")
     monkeypatch.setattr(check_requires, "INSTRUCTIONS_DIR", instr_dir)
+    monkeypatch.setattr(check_requires, "REPO_ROOT", tmp_path)
 
     # Run the main function.
     exit_code = check_requires.main()
