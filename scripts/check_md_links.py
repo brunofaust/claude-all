@@ -8,7 +8,8 @@ The script defaults to a human-readable report. With `--json`, it emits a machin
 JSON object to stdout instead, containing:
 
 - passed: boolean, true if no broken links and all resources are linked from the README
-- markdown_files_scanned: number of Markdown files examined (excluding vendored and missing)
+- markdown_files_scanned: number of Markdown files examined for link checks
+  (excluding vendored, missing, and the README.md file)
 - links_resolved: number of non-skipped Markdown links checked
 - resources_checked: number of resources discovered by `claude-all discover`
 - files_skipped_as_vendored: number of Markdown files skipped due to vendored exemption
@@ -140,6 +141,9 @@ def collect_data(
             continue
         if not md.exists():
             # tracked-but-deleted file: skip entirely
+            continue
+        # Skip the README.md file in the root for the link scan
+        if md == ROOT / "README.md":
             continue
         markdown_files_scanned += 1
         for line_no, line in strip_code_blocks(md.read_text()):
