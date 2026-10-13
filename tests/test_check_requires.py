@@ -95,7 +95,8 @@ def test_zero_discovery_exits_with_error_and_message(monkeypatch):
 
 
 def test_normal_success_prints_summary_line(monkeypatch, capsys):
-    """When discovery returns resources and no violations, the gate prints a summary line and exits 0."""
+    """When discovery returns resources and no violations, the gate prints a
+    summary line and exits 0."""
     import check_requires
 
     # Patch load_resource_keys to return a non-empty set
@@ -115,7 +116,8 @@ def test_normal_success_prints_summary_line(monkeypatch, capsys):
 
 
 def test_existing_genuine_failure_still_fails(monkeypatch, capsys):
-    """When there is a genuine violation, the gate still exits 1 and prints the findings and error message."""
+    """When there is a genuine violation, the gate still exits 1 and prints
+    the findings and error message."""
     import check_requires
 
     # Patch load_resource_keys to return a non-empty set

@@ -85,11 +85,12 @@ def main() -> int:
     known = load_resource_keys()
     if not known:
         print(
-            "Error: discovery pattern (agents/**, skills/**, plugins/**, mcps/**, tools/**, instructions/**, hooks/**) matched zero resources",
+            "Error: discovery pattern (agents/**, skills/**, plugins/**, mcps/**, tools/**, "
+            "instructions/**, hooks/**) matched zero resources",
             file=sys.stderr,
         )
         return 2
-    findings = find_violations(known) + find_undeclared_instruction_refs(known)
+    findings = find_violations(known) + find_undeclared_instruction_refs(known, INSTRUCTIONS_DIR)
     for finding in findings:
         print(finding)
     if findings:
