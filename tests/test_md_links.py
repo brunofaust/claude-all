@@ -262,7 +262,7 @@ def test_collect_data(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     import check_md_links
 
     monkeypatch.setattr(check_md_links, "ROOT", root)
-    monkeypatch.setattr("check_md_links.discover", lambda _: [item])
+    monkeypatch.setattr("claude_all.cli.discover", lambda _: [item])
 
     # Call collect_data
     registry: list[dict] = []
@@ -325,7 +325,7 @@ def test_json_mode_with_broken_link_and_unlinked_resource(
     import check_md_links
 
     monkeypatch.setattr(check_md_links, "ROOT", root)
-    monkeypatch.setattr("check_md_links.discover", lambda _: [item])
+    monkeypatch.setattr("claude_all.cli.discover", lambda _: [item])
 
     # Test JSON mode
     import json
@@ -406,7 +406,7 @@ def test_non_json_output_unaffected(monkeypatch: pytest.MonkeyPatch, tmp_path: P
     import check_md_links
 
     monkeypatch.setattr(check_md_links, "ROOT", root)
-    monkeypatch.setattr("check_md_links.discover", lambda _: [item])
+    monkeypatch.setattr("claude_all.cli.discover", lambda _: [item])
 
     # Test without --json
     import sys
@@ -485,7 +485,7 @@ def test_json_mode_clean_tree(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -
     import check_md_links
 
     monkeypatch.setattr(check_md_links, "ROOT", root)
-    monkeypatch.setattr("check_md_links.discover", lambda _: [item])
+    monkeypatch.setattr("claude_all.cli.discover", lambda _: [item])
 
     # Test JSON mode
     import json
