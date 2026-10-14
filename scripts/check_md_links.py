@@ -99,13 +99,16 @@ def check_links(registry: list[dict]) -> tuple[list[dict], dict]:
     findings = []  # will be list of dicts
     stats = {"markdown_files_scanned": 0, "links_resolved": 0, "files_skipped_vendored": 0}
     markdown_files = tracked_markdown()
-    stats["markdown_files_scanned"] = len(markdown_files)
     for md in markdown_files:
+        # Skip the README.md
+        if md == ROOT / "README.md":
+            continue
         if is_vendored(md, registry):
             stats["files_skipped_vendored"] += 1
             continue
         if not md.exists():
             continue
+        stats["markdown_files_scanned"] += 1
         for line_no, line in strip_code_blocks(md.read_text()):
             for target in LINK.findall(CODE_SPAN.sub("", line)):
                 if target.startswith(SKIP_PREFIX):
@@ -140,10 +143,15 @@ def check_readme_coverage() -> tuple[list[dict], dict]:
     items = discover([])
     findings = []
     for item in items:
-        if f"]({item.src.relative_to(ROOT).as_posix()})" not in readme:
+        try:
+            relative_path = item.src.relative_to(ROOT).as_posix()
+        except ValueError:
+            # Skip items not under the ROOT
+            continue
+        if f"]({relative_path})" not in readme:
             findings.append(
                 {
-                    "path": item.src.relative_to(ROOT).as_posix(),
+                    "path": relative_path,
                     "kind": item.kind,
                     "name": item.name,
                 }
