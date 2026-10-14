@@ -82,6 +82,20 @@ def find_undeclared_instruction_refs(
 
 def main() -> int:
     """CLI entry point — print findings to stdout, exit 1 on any."""
+    # Discover manifests to get the count
+    manifest_paths = sorted((SRC / "claude_all").rglob("claude-all.json")) + sorted(
+        (SRC / "claude_all").rglob("*.claude-all.json")
+    )
+    count = len(manifest_paths)
+    if count == 0:
+        under_path = SRC.relative_to(REPO_ROOT)
+        patterns = "'claude-all.json' and '*.claude-all.json'"
+        print(
+            f"No files matched patterns {patterns} under {under_path}",
+            file=sys.stderr,
+        )
+        return 2
+    print(f"scanned={count}")
     known = load_resource_keys()
     findings = find_violations(known) + find_undeclared_instruction_refs(known)
     for finding in findings:

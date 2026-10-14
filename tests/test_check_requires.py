@@ -68,3 +68,87 @@ def test_shipped_instructions_declare_every_reference() -> None:
     known = check_requires.load_resource_keys()
 
     assert check_requires.find_undeclared_instruction_refs(known) == []
+
+
+def test_zero_discovery_fails(tmp_path: Path, monkeypatch, capsys) -> None:
+    """When no manifests are found, the script exits with code 2
+    and prints an error."""
+    # Set up a temporary repo root with no manifests
+    monkeypatch.setattr(check_requires, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_requires, "SRC", tmp_path / "src")
+    monkeypatch.setattr(
+        check_requires, "INSTRUCTIONS_DIR", tmp_path / "src" / "claude_all" / "instructions"
+    )
+    # Create the directories (they will be empty)
+    (check_requires.SRC / "claude_all").mkdir(parents=True, exist_ok=True)
+    (check_requires.INSTRUCTIONS_DIR).mkdir(parents=True, exist_ok=True)
+    # Run the main function
+    exit_code = check_requires.main()
+    assert exit_code == 2
+    captured = capsys.readouterr()
+    # Expect the error message in stderr
+    under_path = check_requires.SRC.relative_to(check_requires.REPO_ROOT)
+    expected_msg = (
+        f"No files matched patterns 'claude-all.json' and '*.claude-all.json' under {under_path}"
+    )
+    assert expected_msg in captured.err
+    # We don't expect anything in stdout
+    assert captured.out == ""
+
+
+def test_success_no_findings(tmp_path: Path, monkeypatch, capsys) -> None:
+    """When manifests are found and there are no violations,
+    exit 0 and print scanned line."""
+    # Set up a temporary repo root
+    monkeypatch.setattr(check_requires, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_requires, "SRC", tmp_path / "src")
+    monkeypatch.setattr(
+        check_requires, "INSTRUCTIONS_DIR", tmp_path / "src" / "claude_all" / "instructions"
+    )
+    # Create the directory structure
+    src_claude_all = check_requires.SRC / "claude_all"
+    src_claude_all.mkdir(parents=True)
+    (check_requires.INSTRUCTIONS_DIR).mkdir(parents=True)
+    # Create a manifest file
+    manifest = src_claude_all / "claude-all.json"
+    manifest.write_text('{"requires": []}', encoding="utf-8")
+    # Mock load_resource_keys to return an empty set (so no violations)
+    monkeypatch.setattr(check_requires, "load_resource_keys", lambda: set())
+    # Run the main function
+    exit_code = check_requires.main()
+    assert exit_code == 0
+    captured = capsys.readouterr()
+    # Expect the scanned line in stdout
+    assert captured.out.strip() == "scanned=1"
+    # Expect nothing in stderr
+    assert captured.err == ""
+
+
+def test_success_with_findings(tmp_path: Path, monkeypatch, capsys) -> None:
+    """When manifests are found and there are violations,
+    exit 1 and print scanned line and findings."""
+    # Set up a temporary repo root
+    monkeypatch.setattr(check_requires, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_requires, "SRC", tmp_path / "src")
+    monkeypatch.setattr(
+        check_requires, "INSTRUCTIONS_DIR", tmp_path / "src" / "claude_all" / "instructions"
+    )
+    # Create the directory structure
+    src_claude_all = check_requires.SRC / "claude_all"
+    src_claude_all.mkdir(parents=True)
+    (check_requires.INSTRUCTIONS_DIR).mkdir(parents=True)
+    # Create a manifest file with a bad requires
+    manifest = src_claude_all / "claude-all.json"
+    manifest.write_text('{"requires": ["bad/resource"]}', encoding="utf-8")
+    # Mock load_resource_keys to return an empty set (so the requires is bad)
+    monkeypatch.setattr(check_requires, "load_resource_keys", lambda: set())
+    # Run the main function
+    exit_code = check_requires.main()
+    assert exit_code == 1
+    captured = capsys.readouterr()
+    # Expect the scanned line in stdout
+    assert "scanned=1" in captured.out
+    # Expect a finding line in stdout (the finding about the bad resource)
+    assert "bad/resource" in captured.out
+    # Expect the findings summary in stderr
+    assert "1 requires finding(s)" in captured.err
