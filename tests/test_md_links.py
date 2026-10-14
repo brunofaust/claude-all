@@ -26,6 +26,7 @@ from check_md_links import (
     main,
     strip_code_blocks,
 )
+from vendor_sync import clone_upstream
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -228,6 +229,9 @@ class TestJsonOutput:
         monkeypatch.setenv("GIT_AUTHOR_NAME", "test")
         monkeypatch.setenv("GIT_AUTHOR_EMAIL", "test@example.com")
 
+        # Make sure claude_all is importable
+        sys.path.insert(0, str(ROOT / "src"))
+
         # Create a simple markdown file with no broken links
         md_file = tmp_path / "test.md"
         md_file.write_text("# Test\n\nThis is a [link](other.md).\n")
@@ -255,7 +259,7 @@ class TestJsonOutput:
         def mock_discover(_):
             return []
 
-        monkeypatch.setattr("check_md_links.discover", mock_discover)
+        monkeypatch.setattr("claude_all.cli.discover", mock_discover)
         # Change to temp directory
         monkeypatch.chdir(tmp_path)
 
@@ -278,6 +282,9 @@ class TestJsonOutput:
         # Set up a temporary git repo with a broken link
         monkeypatch.setenv("GIT_AUTHOR_NAME", "test")
         monkeypatch.setenv("GIT_AUTHOR_EMAIL", "test@example.com")
+
+        # Make sure claude_all is importable
+        sys.path.insert(0, str(ROOT / "src"))
 
         # Create a markdown file with a broken link
         md_file = tmp_path / "test.md"
@@ -303,7 +310,7 @@ class TestJsonOutput:
         def mock_discover(_):
             return []
 
-        monkeypatch.setattr("check_md_links.claude_all.cli.discover", mock_discover)
+        monkeypatch.setattr("claude_all.cli.discover", mock_discover)
 
         # Import and test the structured functions directly
         from check_md_links import check_links_structured, check_readme_coverage_structured
@@ -346,6 +353,9 @@ class TestJsonOutput:
         monkeypatch.setenv("GIT_AUTHOR_NAME", "test")
         monkeypatch.setenv("GIT_AUTHOR_EMAIL", "test@example.com")
 
+        # Make sure claude_all is importable
+        sys.path.insert(0, str(ROOT / "src"))
+
         # Create a simple markdown file (no links)
         md_file = tmp_path / "test.md"
         md_file.write_text("# Test\n\nJust some content.\n")
@@ -380,7 +390,7 @@ class TestJsonOutput:
         def mock_discover(_):
             return [MockResource("skill", "myskill", resource_file)]
 
-        monkeypatch.setattr("check_md_links.claude_all.cli.discover", mock_discover)
+        monkeypatch.setattr("claude_all.cli.discover", mock_discover)
 
         # Create a README that does NOT link to our resource
         readme_file = tmp_path / "README.md"
@@ -425,6 +435,9 @@ class TestJsonOutput:
         monkeypatch.setenv("GIT_AUTHOR_NAME", "test")
         monkeypatch.setenv("GIT_AUTHOR_EMAIL", "test@example.com")
 
+        # Make sure claude_all is importable
+        sys.path.insert(0, str(ROOT / "src"))
+
         # Create a markdown file with a broken link
         md_file = tmp_path / "test.md"
         md_file.write_text("# Test\n\nThis is a [broken link](nonexistent.md).\n")
@@ -449,7 +462,7 @@ class TestJsonOutput:
         def mock_discover(_):
             return []
 
-        monkeypatch.setattr("check_md_links.claude_all.cli.discover", mock_discover)
+        monkeypatch.setattr("claude_all.cli.discover", mock_discover)
 
         # Import and test the main function
         from check_md_links import main
