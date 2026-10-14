@@ -68,3 +68,106 @@ def test_shipped_instructions_declare_every_reference() -> None:
     known = check_requires.load_resource_keys()
 
     assert check_requires.find_undeclared_instruction_refs(known) == []
+
+
+def test_check_requires_success(tmp_path: Path, monkeypatch, capsys) -> None:
+    """A successful run prints the number of units inspected."""
+    known: set[str] = {"skills/test-skill", "instructions/test-instruction"}
+    monkeypatch.setattr(check_requires, "load_resource_keys", lambda: known)
+
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    claude_all_dir = src_dir / "claude_all"
+    claude_all_dir.mkdir()
+    instructions_dir = claude_all_dir / "instructions"
+    instructions_dir.mkdir()
+
+    # Create skill resource
+    skill_dir = claude_all_dir / "skills" / "test-skill"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "claude-all.json").write_text('{"requires": []}')
+
+    # Create instruction resource
+    instr_dir = instructions_dir / "test-instruction"
+    instr_dir.mkdir()
+    (instr_dir / "claude-all.json").write_text('{"requires": []}')
+    (instr_dir / "claude_md.md").write_text("")
+
+    # Patch the paths
+    monkeypatch.setattr(check_requires, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_requires, "SRC", src_dir)
+    monkeypatch.setattr(check_requires, "INSTRUCTIONS_DIR", instructions_dir)
+
+    exit_code = check_requires.main()
+    assert exit_code == 0
+
+    captured = capsys.readouterr()
+    # The summary line should be in stdout
+    assert "Inspected 2 units" in captured.out
+    # There should be no findings in stdout and no error message in stderr
+    assert captured.err == ""
+
+
+def test_check_requires_zero_discovery(tmp_path: Path, monkeypatch, capsys) -> None:
+    """A run that discovers zero files fails with a message."""
+    known: set[str] = set()
+    monkeypatch.setattr(check_requires, "load_resource_keys", lambda: known)
+
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    claude_all_dir = src_dir / "claude_all"
+    claude_all_dir.mkdir()
+    instructions_dir = claude_all_dir / "instructions"
+    instructions_dir.mkdir()
+    # We intentionally create no manifest files and no instruction snippet files.
+
+    monkeypatch.setattr(check_requires, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_requires, "SRC", src_dir)
+    monkeypatch.setattr(check_requires, "INSTRUCTIONS_DIR", instructions_dir)
+
+    exit_code = check_requires.main()
+    assert exit_code == 1
+
+    captured = capsys.readouterr()
+    # The error message should be in stderr
+    assert "no resources discovered for inspection" in captured.err
+    # We should not see the summary line in stdout
+    assert "Inspected" not in captured.out
+
+
+def test_check_requires_existing_failure(tmp_path: Path, monkeypatch, capsys) -> None:
+    """An existing genuine failure still fails and does not print the success summary."""
+    known: set[str] = {"skills/test-skill"}
+    monkeypatch.setattr(check_requires, "load_resource_keys", lambda: known)
+
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    claude_all_dir = src_dir / "claude_all"
+    claude_all_dir.mkdir()
+    instructions_dir = claude_all_dir / "instructions"
+    instructions_dir.mkdir()
+
+    # Create a skill resource
+    skill_dir = claude_all_dir / "skills" / "test-skill"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "claude-all.json").write_text('{"requires": []}')
+
+    # Create a manifest with a dangling dependency
+    manifest_dir = claude_all_dir / "some-agent"
+    manifest_dir.mkdir()
+    (manifest_dir / "claude-all.json").write_text('{"requires": ["skills/nonexistent"]}')
+
+    monkeypatch.setattr(check_requires, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_requires, "SRC", src_dir)
+    monkeypatch.setattr(check_requires, "INSTRUCTIONS_DIR", instructions_dir)
+
+    exit_code = check_requires.main()
+    assert exit_code == 1
+
+    captured = capsys.readouterr()
+    # The finding should be in stdout
+    assert "requires 'skills/nonexistent' — no such resource" in captured.out
+    # The error message about the number of findings should be in stderr
+    assert "1 requires finding(s)" in captured.err
+    # The success summary line should not be in stdout
+    assert "Inspected" not in captured.out
