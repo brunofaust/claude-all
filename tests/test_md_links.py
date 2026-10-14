@@ -126,7 +126,8 @@ class TestCheckLinks:
     ) -> None:
         missing = tmp_path / "GONE.md"
         monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [missing])
-        assert check_links(registry=[]) == []
+        findings, _ = check_links(registry=[])
+        assert findings == []
 
 
 def test_non_vendored_routes_use_discoverable_skill_names() -> None:
@@ -204,6 +205,10 @@ def test_claude_hook_examples_use_timeout_seconds() -> None:
 class TestMainJsonOutput:
     def test_json_clean_tree(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr("check_md_links.ROOT", tmp_path)
+        # Create a fake cli module for the import in check_readme_coverage
+        fake_cli = tmp_path / "src" / "claude_all" / "cli.py"
+        fake_cli.parent.mkdir(parents=True, exist_ok=True)
+        fake_cli.write_text("def discover(_): return []\n")
         import subprocess
 
         subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
@@ -251,6 +256,10 @@ class TestMainJsonOutput:
 
     def test_json_with_broken_link(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr("check_md_links.ROOT", tmp_path)
+        # Create a fake cli module for the import in check_readme_coverage
+        fake_cli = tmp_path / "src" / "claude_all" / "cli.py"
+        fake_cli.parent.mkdir(parents=True, exist_ok=True)
+        fake_cli.write_text("def discover(_): return []\n")
         import subprocess
 
         subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
@@ -305,6 +314,10 @@ class TestMainJsonOutput:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr("check_md_links.ROOT", tmp_path)
+        # Create a fake cli module for the import in check_readme_coverage
+        fake_cli = tmp_path / "src" / "claude_all" / "cli.py"
+        fake_cli.parent.mkdir(parents=True, exist_ok=True)
+        fake_cli.write_text("def discover(_): return []\n")
         import subprocess
 
         subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
@@ -334,7 +347,7 @@ class TestMainJsonOutput:
                 self.src = src
 
         fake_item = FakeItem("skill", "test-skill", tmp_path / "src" / "test-skill" / "SKILL.md")
-        with patch("check_md_links.discover", return_value=[fake_item]):
+        with patch("claude_all.cli.discover", return_value=[fake_item]):
             import sys
             from io import StringIO
 
@@ -368,6 +381,10 @@ class TestMainJsonOutput:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr("check_md_links.ROOT", tmp_path)
+        # Create a fake cli module for the import in check_readme_coverage
+        fake_cli = tmp_path / "src" / "claude_all" / "cli.py"
+        fake_cli.parent.mkdir(parents=True, exist_ok=True)
+        fake_cli.write_text("def discover(_): return []\n")
         import subprocess
 
         subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
@@ -393,7 +410,7 @@ class TestMainJsonOutput:
                 self.src = src
 
         fake_item = FakeItem("skill", "test-skill", tmp_path / "src" / "test-skill" / "SKILL.md")
-        with patch("check_md_links.discover", return_value=[fake_item]):
+        with patch("claude_all.cli.discover", return_value=[fake_item]):
             import sys
             from io import StringIO
 
