@@ -32,22 +32,23 @@ def find_violations(known: set[str]) -> list[str]:
     for manifest in sorted((SRC / "claude_all").rglob("claude-all.json")) + sorted(
         (SRC / "claude_all").rglob("*.claude-all.json")
     ):
-        rel = manifest.relative_to(REPO_ROOT)
+        rel = manifest.relative_to(SRC)
+        display_path = f"src/{rel}"
         try:
             config = json.loads(manifest.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError) as exc:
-            findings.append(f"{rel}: not valid JSON — {exc}")
+            findings.append(f"{display_path}: not valid JSON — {exc}")
             continue
         requires = config.get("requires", [])
         if not isinstance(requires, list):
-            findings.append(f"{rel}: `requires` must be a list of 'kind/name' strings")
+            findings.append(f"{display_path}: `requires` must be a list of 'kind/name' strings")
             continue
         for dep in requires:
             if not isinstance(dep, str):
-                findings.append(f"{rel}: non-string dependency {dep!r}")
+                findings.append(f"{display_path}: non-string dependency {dep!r}")
             elif dep not in known:
                 findings.append(
-                    f"{rel}: requires '{dep}' — no such resource (renamed/deleted? "
+                    f"{display_path}: requires '{dep}' — no such resource (renamed/deleted? "
                     "a built-in like /code-review does not belong in requires)"
                 )
     return findings
