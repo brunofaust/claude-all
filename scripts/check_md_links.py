@@ -37,11 +37,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
-
 
 def discover(arg):
-    sys.path.insert(0, str(ROOT / "src"))
+    sys.path.insert(0, str(Path.cwd() / "src"))
     from claude_all.cli import discover as _discover
 
     return _discover(arg)
@@ -58,7 +56,7 @@ CODE_SPAN = re.compile(r"`[^`]*`")
 
 def is_vendored(path: Path, registry: list[dict]) -> bool:
     for entry in registry:
-        base = ROOT / entry["path"]
+        base = Path.cwd() / entry["path"]
         if base not in path.parents:
             continue
         if path.name in entry.get("local_only", []):
@@ -83,12 +81,12 @@ def strip_code_blocks(text: str) -> list[tuple[int, str]]:
 def tracked_markdown() -> list[Path]:
     out = subprocess.run(
         ["git", "ls-files", "-z", "*.md"],
-        cwd=ROOT,
+        cwd=Path.cwd(),
         capture_output=True,
         text=True,
         check=True,
     ).stdout
-    return [ROOT / p for p in out.split("\0") if p]
+    return [Path.cwd() / p for p in out.split("\0") if p]
 
 
 def check_links(registry: list[dict]) -> tuple[list[str], int, list[dict]]:
@@ -109,7 +107,7 @@ def check_links(registry: list[dict]) -> tuple[list[str], int, list[dict]]:
                     continue  # pure anchor
                 links_checked += 1
                 if not (md.parent / bare).resolve().exists():
-                    rel = md.relative_to(ROOT)
+                    rel = md.relative_to(Path.cwd())
                     findings.append(f"{rel}:{line_no}: broken-link -> {target}")
                     broken_links.append(
                         {
@@ -124,13 +122,13 @@ def check_links(registry: list[dict]) -> tuple[list[str], int, list[dict]]:
 
 def check_readme_coverage() -> tuple[list[str], int, list[str]]:
 
-    readme = (ROOT / "README.md").read_text()
+    readme = (Path.cwd() / "README.md").read_text()
     items = discover([])
     findings = []
     unlinked_resources = []
     for item in items:
-        if f"]({item.src.relative_to(ROOT).as_posix()})" not in readme:
-            rel_path = item.src.relative_to(ROOT).as_posix()
+        if f"]({item.src.relative_to(Path.cwd()).as_posix()})" not in readme:
+            rel_path = item.src.relative_to(Path.cwd()).as_posix()
             findings.append(
                 f"README.md: undocumented -> {item.kind}/{item.name} (add a row linking {rel_path})"
             )
@@ -139,7 +137,7 @@ def check_readme_coverage() -> tuple[list[str], int, list[str]]:
 
 
 def main() -> int:
-    registry = json.loads((ROOT / "vendored.json").read_text()).get("vendored", [])
+    registry = json.loads((Path.cwd() / "vendored.json").read_text()).get("vendored", [])
     json_mode = "--json" in sys.argv[1:]
 
     # Count markdown files
