@@ -39,6 +39,14 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
+
+def discover(arg):
+    sys.path.insert(0, str(ROOT / "src"))
+    from claude_all.cli import discover as _discover
+
+    return _discover(arg)
+
+
 # [label](target) — skip images, absolute URLs, anchors and mailto. A leading `/` is
 # a site-absolute URL (the SEO skill's llms.txt examples), never a repo path.
 LINK = re.compile(r"(?<!!)\[[^\]]*\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
@@ -115,8 +123,6 @@ def check_links(registry: list[dict]) -> tuple[list[str], int, list[dict]]:
 
 
 def check_readme_coverage() -> tuple[list[str], int, list[str]]:
-    sys.path.insert(0, str(ROOT / "src"))
-    from claude_all.cli import discover
 
     readme = (ROOT / "README.md").read_text()
     items = discover([])
