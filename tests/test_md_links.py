@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -218,3 +219,207 @@ def test_claude_hook_examples_use_timeout_seconds() -> None:
                 findings.append(f"{path.relative_to(ROOT)}: timeout={value}")
 
     assert findings == []
+
+
+def test_json_clean_tree(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """--json on a clean tree outputs pass: true and zero counts."""
+    # Set up temporary repo structure
+    repo_root = tmp_path
+    (repo_root / "vendored.json").write_text('{"vendored": []}')
+    (repo_root / "README.md").write_text("# README\n")
+
+    # Mock the functions in check_md_links
+    import check_md_links
+
+    monkeypatch.setattr(check_md_links, "ROOT", repo_root)
+    monkeypatch.setattr(check_md_links, "tracked_markdown", lambda: [])  # no markdown files
+    monkeypatch.setattr(check_md_links, "check_readme_coverage", lambda: ([], 0))  # no resources
+
+    # Run the script with --json
+    import subprocess
+
+    result = subprocess.run(
+        [sys.executable, "-m", "check_md_links", "--json"],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0
+    data = json.loads(result.stdout)
+    assert data["pass"] is True
+    assert data["markdown_files_scanned"] == 0
+    assert data["links_resolved"] == 0
+    assert data["resources_checked"] == 0
+    assert data["files_skipped_as_vendored"] == 0
+    assert data["broken_links"] == []
+    assert data["unlinked_resources"] == []
+
+
+def test_json_with_broken_link(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """--json with a broken link outputs pass: false and one broken link."""
+    repo_root = tmp_path
+    (repo_root / "vendored.json").write_text('{"vendored": []}')
+    (repo_root / "README.md").write_text("# README\n")
+
+    # Create a markdown file with a broken link
+    md_file = repo_root / "doc.md"
+    md_file.write_text("See [the missing](missing.md)")
+
+    import check_md_links
+
+    monkeypatch.setattr(check_md_links, "ROOT", repo_root)
+    monkeypatch.setattr(check_md_links, "tracked_markdown", lambda: [md_file])
+    monkeypatch.setattr(check_md_links, "is_vendored", lambda p, r: False)
+    monkeypatch.setattr(check_md_links, "check_readme_coverage", lambda: ([], 0))
+
+    result = subprocess.run(
+        [sys.executable, "-m", "check_md_links", "--json"],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 1  # because there is a finding
+    data = json.loads(result.stdout)
+    assert data["pass"] is False
+    assert data["markdown_files_scanned"] == 1
+    assert data["links_resolved"] == 1  # one link examined
+    assert data["resources_checked"] == 0
+    assert data["files_skipped_as_vendored"] == 0
+    assert len(data["broken_links"]) == 1
+    link = data["broken_links"][0]
+    assert link["file"] == "doc.md"
+    assert link["line"] == 1
+    assert link["link_target"] == "missing.md"
+    assert link["resolved_path"] == str((repo_root / "missing.md").relative_to(repo_root))
+    assert data["unlinked_resources"] == []
+
+
+def test_json_with_unlinked_resource(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """--json with an unlinked resource outputs pass: false and one unlinked resource."""
+    repo_root = tmp_path
+    (repo_root / "vendored.json").write_text('{"vendored": []}')
+    (repo_root / "README.md").write_text("# README\n")
+
+    # Mock discover to return one item that is not in README
+    class Item:
+        def __init__(self, kind, name, src):
+            self.kind = kind
+            self.name = name
+            self.src = src
+
+    item = Item("skill", "test-skill", Path("src/test/SKILL.md"))
+    import check_md_links
+
+    monkeypatch.setattr(check_md_links, "ROOT", repo_root)
+    monkeypatch.setattr(check_md_links, "tracked_markdown", lambda: [])
+    monkeypatch.setattr(check_md_links, "check_links", lambda r: ([], 0, 0, 0))  # no broken links
+    monkeypatch.setattr(
+        check_md_links,
+        "check_readme_coverage",
+        lambda: ([{"kind": item.kind, "name": item.name, "path": item.src.as_posix()}], 1),
+    )
+
+    result = subprocess.run(
+        [sys.executable, "-m", "check_md_links", "--json"],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 1
+    data = json.loads(result.stdout)
+    assert data["pass"] is False
+    assert data["markdown_files_scanned"] == 0
+    assert data["links_resolved"] == 0
+    assert data["resources_checked"] == 1
+    assert data["files_skipped_as_vendored"] == 0
+    assert data["broken_links"] == []
+    assert data["unlinked_resources"] == [item.src.as_posix()]
+
+
+def test_json_default_output_unaffected(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Default (non-JSON) output should be unchanged by the --json flag."""
+    repo_root = tmp_path
+    (repo_root / "vendored.json").write_text('{"vendored": []}')
+    (repo_root / "README.md").write_text("# README\n")
+
+    # Create a markdown file with a broken link and an unlinked resource via mock
+    md_file = repo_root / "doc.md"
+    md_file.write_text("See [the missing](missing.md)")
+
+    class Item:
+        def __init__(self, kind, name, src):
+            self.kind = kind
+            self.name = name
+            self.src = src
+
+    item = Item("skill", "test-skill", Path("src/test/SKILL.md"))
+
+    import check_md_links
+
+    monkeypatch.setattr(check_md_links, "ROOT", repo_root)
+    monkeypatch.setattr(check_md_links, "tracked_markdown", lambda: [md_file])
+    monkeypatch.setattr(check_md_links, "is_vendored", lambda p, r: False)
+    monkeypatch.setattr(
+        check_md_links,
+        "check_links",
+        lambda r: (
+            [
+                {
+                    "file": "doc.md",
+                    "line": 1,
+                    "link_target": "missing.md",
+                    "resolved_path": str((repo_root / "missing.md").relative_to(repo_root)),
+                }
+            ],
+            1,
+            1,
+            0,
+        ),
+    )
+    monkeypatch.setattr(
+        check_md_links,
+        "check_readme_coverage",
+        lambda: ([{"kind": item.kind, "name": item.name, "path": item.src.as_posix()}], 1),
+    )
+
+    # Run without --json
+    result = subprocess.run(
+        [sys.executable, "-m", "check_md_links"],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 1
+    # Expected human-readable output:
+    #   doc.md:1: broken-link -> missing.md
+    #   README.md: undocumented -> test-skill/skill (add a row linking src/test/SKILL.md)
+    #   2 finding(s).
+    # Note: the script prints the findings to stdout and the count to stderr.
+    stdout_lines = result.stdout.strip().splitlines()
+    stderr_lines = result.stderr.strip().splitlines()
+    expected_out = (
+        f"README.md: undocumented -> {item.kind}/{item.name} "
+        f"(add a row linking {item.src.as_posix()})"
+    )
+    assert stdout_lines == [
+        "doc.md:1: broken-link -> missing.md",
+        expected_out,
+    ]
+    assert stderr_lines == ["2 finding(s)."]
+
+    # Now run with --json and ensure the human-readable output is not affected
+    # (we already tested JSON). We just want to make sure that the non-JSON
+    # output is the same as before our changes.
+    # We'll do a sanity check: run with --json and verify that the
+    # human-readable output is not printed.
+    result_json = subprocess.run(
+        [sys.executable, "-m", "check_md_links", "--json"],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+    )
+    assert result_json.returncode == 1
+    # When --json is used, stdout should be JSON and stderr should be empty.
+    assert result_json.stderr == ""
+    data = json.loads(result_json.stdout)
+    assert data["pass"] is False
