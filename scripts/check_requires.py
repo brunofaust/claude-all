@@ -117,8 +117,18 @@ def main() -> int:
         (SRC / "claude_all").rglob("*.claude-all.json")
     )
     snippet_files = list(INSTRUCTIONS_DIR.glob("*/claude_md.md"))
-    total_files = len(manifest_files) + len(snippet_files)
-    if total_files == 0:
+
+    keys_inspected = set()
+    for manifest in manifest_files:
+        key = get_resource_key_from_manifest(manifest)
+        if key is not None:
+            keys_inspected.add(key)
+    for snippet in snippet_files:
+        key = get_resource_key_from_snippet(snippet)
+        if key is not None:
+            keys_inspected.add(key)
+
+    if not keys_inspected:
         print(
             "Error: no resources discovered for inspection. Checked for manifest files in "
             "'src/claude_all/**/claude-all.json' and 'src/claude_all/**/*.claude-all.json' "
