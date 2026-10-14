@@ -83,7 +83,29 @@ def find_undeclared_instruction_refs(
 def main() -> int:
     """CLI entry point — print findings to stdout, exit 1 on any."""
     known = load_resource_keys()
+    manifest_files = list(
+        sorted((SRC / "claude_all").rglob("claude-all.json"))
+        + sorted((SRC / "claude_all").rglob("*.claude-all.json"))
+    )
+    snippet_files = sorted(INSTRUCTIONS_DIR.glob("*/claude_md.md"))
+    total_inspected = len(manifest_files) + len(snippet_files)
+    if total_inspected == 0:
+        patterns = [
+            "src/claude_all/**/claude-all.json",
+            "src/claude_all/**/*.claude-all.json",
+            "src/claude_all/instructions/*/claude_md.md",
+        ]
+        print(
+            f"No files discovered for inspection via patterns: {', '.join(patterns)}",
+            file=sys.stderr,
+        )
+        return 2
     findings = find_violations(known) + find_undeclared_instruction_refs(known)
+    # Print inspection count to stderr, consistent with other checkers
+    print(
+        f"inspected={len(manifest_files)} manifests, {len(snippet_files)} snippets",
+        file=sys.stderr,
+    )
     for finding in findings:
         print(finding)
     if findings:
