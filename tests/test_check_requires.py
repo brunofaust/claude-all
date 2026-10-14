@@ -93,7 +93,6 @@ def test_zero_discovery_exits_2_and_prints_message(tmp_path: Path, monkeypatch, 
     # Check stderr for the expected message
     stderr = capsys.readouterr().err
     assert "No files discovered for inspection via patterns:" in stderr
-    assert "src/claude_all/**/claude-all.json" in stderr
     assert "src/claude_all/**/*.claude-all.json" in stderr
     assert "src/claude_all/instructions/*/claude_md.md" in stderr
     # Ensure no stdout output (findings)

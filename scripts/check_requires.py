@@ -29,9 +29,7 @@ def load_resource_keys() -> set[str]:
 
 def find_violations(known: set[str]) -> list[str]:
     findings: list[str] = []
-    for manifest in sorted((SRC / "claude_all").rglob("claude-all.json")) + sorted(
-        (SRC / "claude_all").rglob("*.claude-all.json")
-    ):
+    for manifest in sorted((SRC / "claude_all").rglob("*.claude-all.json")):
         rel = manifest.relative_to(SRC)
         display_path = f"src/{rel}"
         try:
@@ -84,15 +82,11 @@ def find_undeclared_instruction_refs(
 def main() -> int:
     """CLI entry point — print findings to stdout, exit 1 on any."""
     known = load_resource_keys()
-    manifest_files = list(
-        sorted((SRC / "claude_all").rglob("claude-all.json"))
-        + sorted((SRC / "claude_all").rglob("*.claude-all.json"))
-    )
+    manifest_files = sorted((SRC / "claude_all").rglob("*.claude-all.json"))
     snippet_files = sorted(INSTRUCTIONS_DIR.glob("*/claude_md.md"))
     total_inspected = len(manifest_files) + len(snippet_files)
     if total_inspected == 0:
         patterns = [
-            "src/claude_all/**/claude-all.json",
             "src/claude_all/**/*.claude-all.json",
             "src/claude_all/instructions/*/claude_md.md",
         ]
