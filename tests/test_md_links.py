@@ -1,11 +1,4 @@
-"""Tests for the markdown link + README-coverage gate.
-
-The gate exists because four cross-skill links shipped broken — one in an
-already-merged PR. So the tests that matter are the ones proving it BITES: a
-check that can only ever report "clean" is the vacuous pass this repo keeps
-hunting. Every positive case is paired with the no-false-positive case that
-made the first version of this checker report 18 findings, all of them wrong.
-"""
+"""Tests for the markdown link + README-coverage gate."""
 
 from __future__ import annotations
 
@@ -62,7 +55,6 @@ def test_vendor_clone_supports_pinned_commit_refs(
 
 
 def targets(line: str) -> list[str]:
-    """Link targets a line actually offers, after inline code is discounted."""
     return LINK.findall(CODE_SPAN.sub("", line))
 
 
@@ -71,15 +63,12 @@ class TestLinkExtraction:
         assert targets("see [the audit](references/audit.md) first") == ["references/audit.md"]
 
     def test_code_labelled_link_keeps_its_target(self) -> None:
-        # The README's generated rows look like [`name`](path) — stripping the
-        # code span must not take the link with it.
         assert targets("| [`code-quality`](src/a/b.md) | x |") == ["src/a/b.md"]
 
     def test_bold_labelled_link_keeps_its_target(self) -> None:
         assert targets("| [**frontend**](src/a/b.md) |") == ["src/a/b.md"]
 
     def test_inline_code_generic_is_not_a_link(self) -> None:
-        # `def first[T](...)` reads as [T](...) — 3 of the original false positives.
         assert targets("| PEP 695 | `def first[T](...)` |") == []
 
     def test_image_is_not_a_link(self) -> None:
@@ -94,7 +83,6 @@ class TestStripCodeBlocks:
         assert "[b](yes.md)" in kept
 
     def test_line_numbers_survive_the_fence(self) -> None:
-        # A finding is useless if it points at the wrong line.
         text = "one\n```\nfenced\n```\n[b](yes.md)\n"
         assert (5, "[b](yes.md)") in strip_code_blocks(text)
 
@@ -110,8 +98,6 @@ class TestIsVendored:
         assert is_vendored(root / "src/x/skill/AGENTS.md", registry)
 
     def test_local_only_file_stays_checked(self) -> None:
-        # ATTRIBUTION.md sits inside a vendored dir but is OURS — a broken link
-        # in it is our bug, so the exemption must not swallow it.
         registry = [
             {
                 "path": "src/x/skill",
@@ -138,14 +124,12 @@ class TestCheckLinks:
     def test_tracked_file_missing_from_disk_is_skipped(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
-        # tracked-but-deleted file must be skipped, not crash read_text()
         missing = tmp_path / "GONE.md"
         monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [missing])
         assert check_links(registry=[]) == []
 
 
 def test_non_vendored_routes_use_discoverable_skill_names() -> None:
-    """Local routing prose names active Claude skills, not retired aliases."""
     registry = json.loads((ROOT / "vendored.json").read_text(encoding="utf-8"))["vendored"]
     retired_names = {"react-correctness", "react-testing", "web-security"}
     canonical_aliases: dict[str, str] = {}
@@ -176,7 +160,6 @@ def test_non_vendored_routes_use_discoverable_skill_names() -> None:
 
 
 def test_readme_uses_vendored_skill_frontmatter_names() -> None:
-    """README labels match the Claude frontmatter names users can invoke."""
     registry = json.loads((ROOT / "vendored.json").read_text(encoding="utf-8"))["vendored"]
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     findings: list[str] = []
@@ -196,7 +179,6 @@ def test_readme_uses_vendored_skill_frontmatter_names() -> None:
 
 
 def test_vendored_local_only_entries_exist() -> None:
-    """The vendoring registry does not promise sidecars that are absent on disk."""
     registry = json.loads((ROOT / "vendored.json").read_text(encoding="utf-8"))["vendored"]
     missing = [
         f"{entry['id']}:{relative_path}"
@@ -209,7 +191,6 @@ def test_vendored_local_only_entries_exist() -> None:
 
 
 def test_claude_hook_examples_use_timeout_seconds() -> None:
-    """Authored Claude settings examples do not encode millisecond-scale values."""
     timeout_field = re.compile(r'"timeout"\s*:\s*(\d+)')
     findings: list[str] = []
     for path in sorted((ROOT / "src" / "claude_all").rglob("*.md")):
@@ -218,3 +199,226 @@ def test_claude_hook_examples_use_timeout_seconds() -> None:
                 findings.append(f"{path.relative_to(ROOT)}: timeout={value}")
 
     assert findings == []
+
+
+class TestMainJsonOutput:
+    def test_json_clean_tree(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr("check_md_links.ROOT", tmp_path)
+        import subprocess
+
+        subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
+        subprocess.run(
+            ["git", "config", "user.name", "test"], cwd=tmp_path, check=True, capture_output=True
+        )
+        subprocess.run(
+            ["git", "config", "user.email", "test@test.com"],
+            cwd=tmp_path,
+            check=True,
+            capture_output=True,
+        )
+        vendored: dict = {"vendored": []}
+        (tmp_path / "vendored.json").write_text(json.dumps(vendored))
+        (tmp_path / "README.md").write_text("# README\n")
+        (tmp_path / "test.md").write_text("# Test\n")
+        subprocess.run(["git", "add", "."], cwd=tmp_path, check=True, capture_output=True)
+        subprocess.run(
+            ["git", "commit", "-m", "initial"], cwd=tmp_path, check=True, capture_output=True
+        )
+        import sys
+        from io import StringIO
+
+        from check_md_links import main
+
+        old_stdout = sys.stdout
+        sys.stdout = StringIO()
+        try:
+            old_argv = sys.argv
+            sys.argv = ["check_md_links.py", "--json"]
+            exit_code = main()
+            output = sys.stdout.getvalue()
+        finally:
+            sys.stdout = old_stdout
+            sys.argv = old_argv
+        data = json.loads(output)
+        assert data["passed"] is True
+        assert data["markdown_files_scanned"] == 1
+        assert data["links_resolved"] == 0
+        assert data["files_skipped_vendored"] == 0
+        assert data["resources_checked"] == 0
+        assert data["broken_links"] == []
+        assert data["unlinked_resources"] == []
+        assert exit_code == 0
+
+    def test_json_with_broken_link(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr("check_md_links.ROOT", tmp_path)
+        import subprocess
+
+        subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
+        subprocess.run(
+            ["git", "config", "user.name", "test"], cwd=tmp_path, check=True, capture_output=True
+        )
+        subprocess.run(
+            ["git", "config", "user.email", "test@test.com"],
+            cwd=tmp_path,
+            check=True,
+            capture_output=True,
+        )
+        vendored: dict = {"vendored": []}
+        (tmp_path / "vendored.json").write_text(json.dumps(vendored))
+        (tmp_path / "README.md").write_text("# README\n")
+        (tmp_path / "test.md").write_text("# Test\n\n[link](nonexistent.md)")
+        subprocess.run(["git", "add", "."], cwd=tmp_path, check=True, capture_output=True)
+        subprocess.run(
+            ["git", "commit", "-m", "initial"], cwd=tmp_path, check=True, capture_output=True
+        )
+        import sys
+        from io import StringIO
+
+        from check_md_links import main
+
+        old_stdout = sys.stdout
+        sys.stdout = StringIO()
+        try:
+            old_argv = sys.argv
+            sys.argv = ["check_md_links.py", "--json"]
+            exit_code = main()
+            output = sys.stdout.getvalue()
+        finally:
+            sys.stdout = old_stdout
+            sys.argv = old_argv
+        data = json.loads(output)
+        assert data["passed"] is False
+        assert data["markdown_files_scanned"] == 1
+        assert data["links_resolved"] == 1
+        assert data["files_skipped_vendored"] == 0
+        assert data["resources_checked"] == 0
+        assert len(data["broken_links"]) == 1
+        broken = data["broken_links"][0]
+        assert broken["file"] == "test.md"
+        assert broken["line"] == 3
+        assert broken["target"] == "nonexistent.md"
+        assert broken["resolved_path"].endswith("nonexistent.md")
+        assert data["unlinked_resources"] == []
+        assert exit_code == 1
+
+    def test_json_with_unlinked_resource(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr("check_md_links.ROOT", tmp_path)
+        import subprocess
+
+        subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
+        subprocess.run(
+            ["git", "config", "user.name", "test"], cwd=tmp_path, check=True, capture_output=True
+        )
+        subprocess.run(
+            ["git", "config", "user.email", "test@test.com"],
+            cwd=tmp_path,
+            check=True,
+            capture_output=True,
+        )
+        vendored: dict = {"vendored": []}
+        (tmp_path / "vendored.json").write_text(json.dumps(vendored))
+        (tmp_path / "README.md").write_text("# README\n")
+        (tmp_path / "test.md").write_text("# Test\n")
+        subprocess.run(["git", "add", "."], cwd=tmp_path, check=True, capture_output=True)
+        subprocess.run(
+            ["git", "commit", "-m", "initial"], cwd=tmp_path, check=True, capture_output=True
+        )
+        from unittest.mock import patch
+
+        class FakeItem:
+            def __init__(self, kind: str, name: str, src: Path) -> None:
+                self.kind = kind
+                self.name = name
+                self.src = src
+
+        fake_item = FakeItem("skill", "test-skill", tmp_path / "src" / "test-skill" / "SKILL.md")
+        with patch("check_md_links.discover", return_value=[fake_item]):
+            import sys
+            from io import StringIO
+
+            from check_md_links import main
+
+            old_stdout = sys.stdout
+            sys.stdout = StringIO()
+            try:
+                old_argv = sys.argv
+                sys.argv = ["check_md_links.py", "--json"]
+                exit_code = main()
+                output = sys.stdout.getvalue()
+            finally:
+                sys.stdout = old_stdout
+                sys.argv = old_argv
+        data = json.loads(output)
+        assert data["passed"] is False
+        assert data["markdown_files_scanned"] == 1
+        assert data["links_resolved"] == 0
+        assert data["files_skipped_vendored"] == 0
+        assert data["resources_checked"] == 1
+        assert data["broken_links"] == []
+        assert len(data["unlinked_resources"]) == 1
+        unlinked = data["unlinked_resources"][0]
+        assert unlinked["path"] == "src/test-skill/SKILL.md"
+        assert unlinked["kind"] == "skill"
+        assert unlinked["name"] == "test-skill"
+        assert exit_code == 1
+
+    def test_default_output_unaffected(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr("check_md_links.ROOT", tmp_path)
+        import subprocess
+
+        subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
+        subprocess.run(
+            ["git", "config", "user.name", "test"], cwd=tmp_path, check=True, capture_output=True
+        )
+        subprocess.run(
+            ["git", "config", "user.email", "test@test.com"],
+            cwd=tmp_path,
+            check=True,
+            capture_output=True,
+        )
+        vendored: dict = {"vendored": []}
+        (tmp_path / "vendored.json").write_text(json.dumps(vendored))
+        (tmp_path / "README.md").write_text("# README\n")
+        (tmp_path / "test.md").write_text("# Test\n\n[link](nonexistent.md)")
+        from unittest.mock import patch
+
+        class FakeItem:
+            def __init__(self, kind: str, name: str, src: Path) -> None:
+                self.kind = kind
+                self.name = name
+                self.src = src
+
+        fake_item = FakeItem("skill", "test-skill", tmp_path / "src" / "test-skill" / "SKILL.md")
+        with patch("check_md_links.discover", return_value=[fake_item]):
+            import sys
+            from io import StringIO
+
+            from check_md_links import main
+
+            old_stdout = sys.stdout
+            old_stderr = sys.stderr
+            sys.stdout = StringIO()
+            sys.stderr = StringIO()
+            try:
+                old_argv = sys.argv
+                sys.argv = ["check_md_links.py"]
+                exit_code = main()
+                stdout_output = sys.stdout.getvalue()
+                stderr_output = sys.stderr.getvalue()
+            finally:
+                sys.stdout = old_stdout
+                sys.stderr = old_stderr
+                sys.argv = old_argv
+        lines = stdout_output.strip().splitlines()
+        assert len(lines) == 2
+        assert lines[0] == "test.md:3: broken-link -> nonexistent.md"
+        assert lines[1] == (
+            "README.md: undocumented -> skill/test-skill "
+            "(add a row linking src/test-skill/SKILL.md)"
+        )
+        assert stderr_output.strip() == "2 finding(s)."
+        assert exit_code == 1

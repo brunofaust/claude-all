@@ -3,8 +3,46 @@
 
 Vendored files are exempt from the link check (kept byte-identical to upstream);
 their `local_only` sidecars stay checked. README links are the proxy for "documented".
+
+The script can output in two modes:
+- Default: human-readable format, one finding per line.
+- --json: machine-readable JSON object with the following shape:
+
+{
+    "passed": boolean,  # True if no findings, False otherwise
+    "markdown_files_scanned": integer,  # number of markdown files considered (from git ls-files)
+    "links_resolved": integer,  # number of links checked (after skipping certain
+                                 prefixes and empty anchors)
+    "files_skipped_vendored": integer,  # number of markdown files skipped because
+                                        they are vendored
+    "resources_checked": integer,  # number of resources discovered by
+                                   claude_all.cli.discover
+    "broken_links": [  # list of objects for each broken link
+        {
+            "file": string,  # path of the markdown file containing the broken
+                             link, relative to repo root
+            "line": integer,  # line number in the markdown file (1-indexed)
+            "target": string,  # the raw link target as found in the markdown
+            "resolved_path": string  # the resolved path that was checked and did
+                                     not exist; if the resolved path is inside the
+                                     repo, it is relative to the repo root;
+                                     otherwise, it is an absolute path
+        }
+    ],
+    "unlinked_resources": [  # list of objects for each resource not found in
+                             the README
+        {
+            "path": string,  # path of the resource relative to the repo root
+            "kind": string,  # the kind of the resource (e.g., "skill", "agent")
+            "name": string   # the name of the resource
+        }
+    ]
+}
+
+Exit codes are the same in both modes: 0 if no findings, 1 otherwise.
 """
 
+import argparse
 import json
 import re
 import subprocess
@@ -57,15 +95,16 @@ def tracked_markdown() -> list[Path]:
     return [ROOT / p for p in out.split("\0") if p]
 
 
-def check_links(registry: list[dict]) -> list[str]:
-    findings = []
-    for md in tracked_markdown():
+def check_links(registry: list[dict]) -> tuple[list[dict], dict]:
+    findings = []  # will be list of dicts
+    stats = {"markdown_files_scanned": 0, "links_resolved": 0, "files_skipped_vendored": 0}
+    markdown_files = tracked_markdown()
+    stats["markdown_files_scanned"] = len(markdown_files)
+    for md in markdown_files:
         if is_vendored(md, registry):
+            stats["files_skipped_vendored"] += 1
             continue
         if not md.exists():
-            # `git ls-files` reflects the INDEX: a tracked file deleted from the
-            # working tree but not yet re-staged (`git rm`/`git add`) still shows up
-            # here. Nothing left to check its links against.
             continue
         for line_no, line in strip_code_blocks(md.read_text()):
             for target in LINK.findall(CODE_SPAN.sub("", line)):
@@ -74,34 +113,84 @@ def check_links(registry: list[dict]) -> list[str]:
                 bare = target.split("#", 1)[0]
                 if not bare:
                     continue  # pure anchor
+                stats["links_resolved"] += 1
                 if not (md.parent / bare).resolve().exists():
                     rel = md.relative_to(ROOT)
-                    findings.append(f"{rel}:{line_no}: broken-link -> {target}")
-    return findings
+                    resolved_abs = (md.parent / bare).resolve()
+                    if resolved_abs.is_relative_to(ROOT):
+                        resolved_str = resolved_abs.relative_to(ROOT).as_posix()
+                    else:
+                        resolved_str = resolved_abs.as_posix()
+                    findings.append(
+                        {
+                            "file": rel.as_posix(),
+                            "line": line_no,
+                            "target": target,
+                            "resolved_path": resolved_str,
+                        }
+                    )
+    return findings, stats
 
 
-def check_readme_coverage() -> list[str]:
+def check_readme_coverage() -> tuple[list[dict], dict]:
     sys.path.insert(0, str(ROOT / "src"))
     from claude_all.cli import discover
 
     readme = (ROOT / "README.md").read_text()
-    return [
-        f"README.md: undocumented -> {item.kind}/{item.name} "
-        f"(add a row linking {item.src.relative_to(ROOT).as_posix()})"
-        for item in discover([])
-        if f"]({item.src.relative_to(ROOT).as_posix()})" not in readme
-    ]
+    items = discover([])
+    findings = []
+    for item in items:
+        if f"]({item.src.relative_to(ROOT).as_posix()})" not in readme:
+            findings.append(
+                {
+                    "path": item.src.relative_to(ROOT).as_posix(),
+                    "kind": item.kind,
+                    "name": item.name,
+                }
+            )
+    stats = {"resources_checked": len(items)}
+    return findings, stats
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--json", action="store_true")
+    args, unknown = parser.parse_known_args()
+    if unknown:
+        # Ignore unknown arguments for backward compatibility
+        pass
+
     registry = json.loads((ROOT / "vendored.json").read_text()).get("vendored", [])
-    findings = check_links(registry) + check_readme_coverage()
-    for finding in findings:
-        print(finding)
-    if findings:
-        print(f"\n{len(findings)} finding(s).", file=sys.stderr)
-        return 1
-    return 0
+    link_findings, link_stats = check_links(registry)
+    coverage_findings, coverage_stats = check_readme_coverage()
+
+    total_findings = len(link_findings) + len(coverage_findings)
+    exit_code = 0 if total_findings == 0 else 1
+
+    if args.json:
+        result = {
+            "passed": exit_code == 0,
+            "markdown_files_scanned": link_stats["markdown_files_scanned"],
+            "links_resolved": link_stats["links_resolved"],
+            "files_skipped_vendored": link_stats["files_skipped_vendored"],
+            "resources_checked": coverage_stats["resources_checked"],
+            "broken_links": link_findings,
+            "unlinked_resources": coverage_findings,
+        }
+        print(json.dumps(result))
+        return exit_code
+    else:
+        # Output human-readable format
+        for finding in link_findings:
+            print(f"{finding['file']}:{finding['line']}: broken-link -> {finding['target']}")
+        for finding in coverage_findings:
+            print(
+                f"README.md: undocumented -> {finding['kind']}/{finding['name']} "
+                f"(add a row linking {finding['path']})"
+            )
+        if total_findings > 0:
+            print(f"\n{total_findings} finding(s).", file=sys.stderr)
+        return exit_code
 
 
 if __name__ == "__main__":
