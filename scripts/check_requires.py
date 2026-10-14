@@ -19,6 +19,35 @@ INSTRUCTIONS_DIR = SRC / "claude_all" / "instructions"
 CODE_SPAN = re.compile(r"`([^`\s]+)`")
 
 
+def get_resource_key_from_manifest(path: Path) -> str | None:
+    """Extract resource key from a manifest file path, or return None if not possible."""
+    try:
+        # Try to get the relative path from SRC / "claude_all"
+        rel = path.relative_to(SRC / "claude_all")
+        # We expect the manifest to be named claude-all.json and be in a directory that is kind/name
+        if rel.name == "claude-all.json" and len(rel.parts) == 3:
+            # rel.parts[0] = kind, rel.parts[1] = name, rel.parts[2] = claude-all.json
+            return f"{rel.parts[0]}/{rel.parts[1]}"
+    except ValueError:
+        # path is not relative to SRC/claude_all
+        pass
+    return None
+
+
+def get_resource_key_from_snippet(path: Path) -> str | None:
+    """Extract resource key from a snippet file path, or return None if not possible."""
+    try:
+        rel = path.relative_to(INSTRUCTIONS_DIR)
+        # We expect the snippet to be in a directory named after the resource name,
+        # and the file to be claude_md.md
+        if rel.name == "claude_md.md" and len(rel.parts) == 2:
+            # rel.parts[0] = name, rel.parts[1] = claude_md.md
+            return f"instructions/{rel.parts[0]}"
+    except ValueError:
+        pass
+    return None
+
+
 def load_resource_keys() -> set[str]:
     """Return every installable resource key (``kind/name``) via the installer."""
     sys.path.insert(0, str(SRC))
@@ -98,6 +127,16 @@ def main() -> int:
         )
         return 1
 
+    keys_inspected = set()
+    for manifest in manifest_files:
+        key = get_resource_key_from_manifest(manifest)
+        if key is not None:
+            keys_inspected.add(key)
+    for snippet in snippet_files:
+        key = get_resource_key_from_snippet(snippet)
+        if key is not None:
+            keys_inspected.add(key)
+
     findings = find_violations(known) + find_undeclared_instruction_refs(known)
     for finding in findings:
         print(finding)
@@ -109,7 +148,7 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
-    print(f"Inspected {total_files} units")
+    print(f"Inspected {len(keys_inspected)} units")
     return 0
 
 
