@@ -23,9 +23,9 @@ from check_md_links import (
     LINK,
     check_links,
     is_vendored,
+    main,
     strip_code_blocks,
 )
-from vendor_sync import clone_upstream
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -218,3 +218,262 @@ def test_claude_hook_examples_use_timeout_seconds() -> None:
                 findings.append(f"{path.relative_to(ROOT)}: timeout={value}")
 
     assert findings == []
+
+
+# Tests for the new --json functionality
+class TestJsonOutput:
+    def test_json_clean_tree(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test --json output on a clean tree with no issues."""
+        # Set up a temporary git repo with clean markdown files
+        monkeypatch.setenv("GIT_AUTHOR_NAME", "test")
+        monkeypatch.setenv("GIT_AUTHOR_EMAIL", "test@example.com")
+
+        # Create a simple markdown file with no broken links
+        md_file = tmp_path / "test.md"
+        md_file.write_text("# Test\n\nThis is a [link](other.md).\n")
+
+        other_file = tmp_path / "other.md"
+        other_file.write_text("# Other\n\nContent.\n")
+
+        # Mock git ls-files to return our test files
+        def mock_tracked_markdown():
+            return [md_file, other_file]
+
+        monkeypatch.setattr("check_md_links.tracked_markdown", mock_tracked_markdown)
+
+        # Mock vendored.json to return empty registry
+        original_read_text = Path.read_text
+
+        def mock_read_text(self, *args, **kwargs):
+            if str(self).endswith("vendored.json"):
+                return '{"vendored": []}'
+            return original_read_text(self, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "read_text", mock_read_text)
+
+        # Mock discover to return empty resources (so no README coverage issues)
+        def mock_discover(_):
+            return []
+
+        monkeypatch.setattr("check_md_links.discover", mock_discover)
+        # Change to temp directory
+        monkeypatch.chdir(tmp_path)
+
+        # Initialize git repo
+        import subprocess
+
+        subprocess.run(["git", "init"], check=True, capture_output=True)
+        subprocess.run(["git", "add", "."], check=True, capture_output=True)
+        subprocess.run(["git", "commit", "-m", "initial"], check=True, capture_output=True)
+
+        # Test JSON output
+        sys.argv = ["check_md_links.py", "--json"]
+        result = main()
+
+        # Should return 0 (success)
+        assert result == 0
+
+    def test_json_with_broken_link(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test --json output with a broken link."""
+        # Set up a temporary git repo with a broken link
+        monkeypatch.setenv("GIT_AUTHOR_NAME", "test")
+        monkeypatch.setenv("GIT_AUTHOR_EMAIL", "test@example.com")
+
+        # Create a markdown file with a broken link
+        md_file = tmp_path / "test.md"
+        md_file.write_text("# Test\n\nThis is a [broken link](nonexistent.md).\n")
+
+        # Mock git ls-files to return our test file
+        def mock_tracked_markdown():
+            return [md_file]
+
+        monkeypatch.setattr("check_md_links.tracked_markdown", mock_tracked_markdown)
+
+        # Mock vendored.json to return empty registry
+        original_read_text = Path.read_text
+
+        def mock_read_text(self, *args, **kwargs):
+            if str(self).endswith("vendored.json"):
+                return '{"vendored": []}'
+            return original_read_text(self, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "read_text", mock_read_text)
+
+        # Mock discover to return empty resources
+        def mock_discover(_):
+            return []
+
+        monkeypatch.setattr("check_md_links.claude_all.cli.discover", mock_discover)
+
+        # Import and test the structured functions directly
+        from check_md_links import check_links_structured, check_readme_coverage_structured
+
+        # Change to temp directory
+        monkeypatch.chdir(tmp_path)
+
+        # Initialize git repo
+        import subprocess
+
+        subprocess.run(["git", "init"], check=True, capture_output=True)
+        subprocess.run(["git", "add", "."], check=True, capture_output=True)
+        subprocess.run(["git", "commit", "-m", "initial"], check=True, capture_output=True)
+
+        # Test the structured link checking
+        registry: list[dict] = []
+        scanned_files, links_resolved, broken_links, skipped_vendored = check_links_structured(
+            registry
+        )
+        resources_checked, unlinked_resources = check_readme_coverage_structured()
+
+        # Verify we found the broken link
+        assert scanned_files == 1
+        assert links_resolved == 1
+        assert len(broken_links) == 1
+        assert broken_links[0]["target"] == "nonexistent.md"
+        assert broken_links[0]["file"] == md_file
+        assert broken_links[0]["line"] == 2  # Line 2 in the file
+
+        # Verify no resources issues
+        assert resources_checked == 0
+        assert len(unlinked_resources) == 0
+        assert skipped_vendored == 0
+
+    def test_json_with_unlinked_resource(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test --json output with an unlinked resource."""
+        # Set up a temporary git repo
+        monkeypatch.setenv("GIT_AUTHOR_NAME", "test")
+        monkeypatch.setenv("GIT_AUTHOR_EMAIL", "test@example.com")
+
+        # Create a simple markdown file (no links)
+        md_file = tmp_path / "test.md"
+        md_file.write_text("# Test\n\nJust some content.\n")
+
+        # Mock git ls-files to return our test file
+        def mock_tracked_markdown():
+            return [md_file]
+
+        monkeypatch.setattr("check_md_links.tracked_markdown", mock_tracked_markdown)
+
+        # Mock vendored.json to return empty registry
+        original_read_text = Path.read_text
+
+        def mock_read_text(self, *args, **kwargs):
+            if str(self).endswith("vendored.json"):
+                return '{"vendored": []}'
+            return original_read_text(self, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "read_text", mock_read_text)
+
+        # Mock discover to return a resource that's not linked from README
+        class MockResource:
+            def __init__(self, kind, name, src):
+                self.kind = kind
+                self.name = name
+                self.src = src
+
+        resource_file = tmp_path / "src" / "myskill" / "SKILL.md"
+        resource_file.parent.mkdir(parents=True, exist_ok=True)
+        resource_file.write_text("# My Skill\n\nContent.\n")
+
+        def mock_discover(_):
+            return [MockResource("skill", "myskill", resource_file)]
+
+        monkeypatch.setattr("check_md_links.claude_all.cli.discover", mock_discover)
+
+        # Create a README that does NOT link to our resource
+        readme_file = tmp_path / "README.md"
+        readme_file.write_text("# README\n\nSome content but no link to myskill.\n")
+
+        # Import and test the structured functions directly
+        from check_md_links import check_links_structured, check_readme_coverage_structured
+
+        # Change to temp directory
+        monkeypatch.chdir(tmp_path)
+
+        # Initialize git repo
+        import subprocess
+
+        subprocess.run(["git", "init"], check=True, capture_output=True)
+        subprocess.run(["git", "add", "."], check=True, capture_output=True)
+        subprocess.run(["git", "commit", "-m", "initial"], check=True, capture_output=True)
+
+        # Test the structured link checking
+        registry: list[dict] = []
+        scanned_files, links_resolved, broken_links, skipped_vendored = check_links_structured(
+            registry
+        )
+        resources_checked, unlinked_resources = check_readme_coverage_structured()
+
+        # Verify no link issues
+        assert scanned_files == 1
+        assert links_resolved == 0
+        assert len(broken_links) == 0
+        assert skipped_vendored == 0
+
+        # Verify we found the unlinked resource
+        assert resources_checked == 1
+        assert len(unlinked_resources) == 1
+        assert unlinked_resources[0] == "src/myskill/SKILL.md"
+
+    def test_default_output_unaffected(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test that default (non-JSON) output is unchanged."""
+        # Set up a temporary git repo with a broken link
+        monkeypatch.setenv("GIT_AUTHOR_NAME", "test")
+        monkeypatch.setenv("GIT_AUTHOR_EMAIL", "test@example.com")
+
+        # Create a markdown file with a broken link
+        md_file = tmp_path / "test.md"
+        md_file.write_text("# Test\n\nThis is a [broken link](nonexistent.md).\n")
+
+        # Mock git ls-files to return our test file
+        def mock_tracked_markdown():
+            return [md_file]
+
+        monkeypatch.setattr("check_md_links.tracked_markdown", mock_tracked_markdown)
+
+        # Mock vendored.json to return empty registry
+        original_read_text = Path.read_text
+
+        def mock_read_text(self, *args, **kwargs):
+            if str(self).endswith("vendored.json"):
+                return '{"vendored": []}'
+            return original_read_text(self, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "read_text", mock_read_text)
+
+        # Mock discover to return empty resources
+        def mock_discover(_):
+            return []
+
+        monkeypatch.setattr("check_md_links.claude_all.cli.discover", mock_discover)
+
+        # Import and test the main function
+        from check_md_links import main
+
+        # Change to temp directory
+        monkeypatch.chdir(tmp_path)
+
+        # Initialize git repo
+        import subprocess
+
+        subprocess.run(["git", "init"], check=True, capture_output=True)
+        subprocess.run(["git", "add", "."], check=True, capture_output=True)
+        subprocess.run(["git", "commit", "-m", "initial"], check=True, capture_output=True)
+
+        # Test default output (should be unchanged)
+        sys.argv = ["check_md_links.py"]
+        result = main()
+
+        # Should return 1 (failure due to broken link)
+        assert result == 1
+
+        # Test JSON output (should also return 1 for same issue)
+        sys.argv = ["check_md_links.py", "--json"]
+        result_json = main()
+
+        # Should also return 1 (same exit code)
+        assert result_json == 1
