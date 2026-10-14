@@ -263,6 +263,10 @@ class TestJsonOutput:
         # Change to temp directory
         monkeypatch.chdir(tmp_path)
 
+        # Set git identity
+        monkeypatch.setenv("GIT_COMMITTER_NAME", "test")
+        monkeypatch.setenv("GIT_COMMITTER_EMAIL", "test@example.com")
+
         # Initialize git repo
         import subprocess
 
@@ -317,6 +321,10 @@ class TestJsonOutput:
 
         # Change to temp directory
         monkeypatch.chdir(tmp_path)
+
+        # Set git identity
+        monkeypatch.setenv("GIT_COMMITTER_NAME", "test")
+        monkeypatch.setenv("GIT_COMMITTER_EMAIL", "test@example.com")
 
         # Initialize git repo
         import subprocess
@@ -402,6 +410,10 @@ class TestJsonOutput:
         # Change to temp directory
         monkeypatch.chdir(tmp_path)
 
+        # Set git identity
+        monkeypatch.setenv("GIT_COMMITTER_NAME", "test")
+        monkeypatch.setenv("GIT_COMMITTER_EMAIL", "test@example.com")
+
         # Initialize git repo
         import subprocess
 
@@ -469,6 +481,10 @@ class TestJsonOutput:
 
         # Change to temp directory
         monkeypatch.chdir(tmp_path)
+
+        # Set git identity
+        monkeypatch.setenv("GIT_COMMITTER_NAME", "test")
+        monkeypatch.setenv("GIT_COMMITTER_EMAIL", "test@example.com")
 
         # Initialize git repo
         import subprocess
