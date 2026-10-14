@@ -141,7 +141,10 @@ class TestCheckLinks:
         # tracked-but-deleted file must be skipped, not crash read_text()
         missing = tmp_path / "GONE.md"
         monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [missing])
-        assert check_links(registry=[]) == []
+        findings, links_checked, broken_links = check_links(registry=[])
+        assert findings == []
+        assert links_checked == 0
+        assert broken_links == []
 
 
 def test_non_vendored_routes_use_discoverable_skill_names() -> None:
@@ -218,3 +221,329 @@ def test_claude_hook_examples_use_timeout_seconds() -> None:
                 findings.append(f"{path.relative_to(ROOT)}: timeout={value}")
 
     assert findings == []
+
+
+class TestJsonMode:
+    def test_json_clean_tree(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        """--json on a tree with no findings."""
+        # Setup a temporary git repo with one markdown file and no links.
+        # We'll mock the necessary functions to avoid touching the real repo.
+        monkeypatch.setattr(
+            "check_md_links.tracked_markdown",
+            lambda: [tmp_path / "doc.md"],
+        )
+        monkeypatch.setattr(
+            "check_md_links.is_vendored",
+            lambda path, registry: False,
+        )
+        (tmp_path / "doc.md").write_text("# Hello\n")
+        # Mock vendored.json to be empty
+        monkeypatch.setattr(
+            "check_md_links.Path.__add__",
+            lambda self, other: (
+                tmp_path / "vendored.json"
+                if other == "vendored.json"
+                else self.__class__.__add__(self, other)
+            ),
+        )
+        # We'll monkeypatch the specific path used in main for vendored.json
+        vendored_path = tmp_path / "vendored.json"
+        vendored_path.write_text('{"vendored": []}')
+        monkeypatch.setattr(
+            "check_md_links.ROOT", tmp_path, raising=False
+        )  # This is tricky; we'll instead mock the open call.
+        # Better to mock the json.loads call? Let's instead set the ROOT in the module.
+        # We'll do a more direct approach: monkeypatch the file read.
+        original_open = Path.open
+
+        def mock_open(self, *args, **kwargs):
+            if self.name == "vendored.json":
+                return open(vendored_path, *args, **kwargs)
+            return original_open(self, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "open", mock_open)
+
+        # Mock discover to return an empty list
+        class MockItem:
+            def __init__(self, kind, name, src):
+                self.kind = kind
+                self.name = name
+                self.src = src
+
+        monkeypatch.setattr(
+            "check_md_links.discover",
+            lambda _: [],
+        )
+
+        # Import main inside the test to get the mocked functions
+        from check_md_links import main
+
+        # Run with --json
+        sys.argv = ["check_md_links.py", "--json"]
+        # We need to change the current working directory to tmp_path for the git ls-files call?
+        # But we mocked tracked_markdown, so it's fine.
+        # Actually, we can just run and let the mocked functions handle it.
+        # We'll change the working directory to tmp_path to avoid any real git calls.
+        monkeypatch.setattr("os.chdir", lambda x: None)  # no-op
+        monkeypatch.setattr(
+            "builtins.__import__", lambda name, *args: __import__(name, *args)
+        )  # no-op
+        with monkeypatch.context() as m:
+            m.setattr("os.getcwd", lambda: str(tmp_path))
+
+            # We also need to mock subprocess.run for tracked_markdown,
+            # but we already mocked tracked_markdown.
+            # But tracked_markdown uses subprocess.run. We'll mock that too.
+            def mock_run(*args, **kwargs):
+                class MockResult:
+                    stdout = "doc.md\0"
+                    stderr = ""
+                    returncode = 0
+
+                return MockResult()
+
+            m.setattr("subprocess.run", mock_run)
+            exit_code = main()
+
+        # Capture stdout and stderr
+        captured = capsys.readouterr()
+        # stdout should be JSON
+        assert captured.out.strip()
+        data = json.loads(captured.out)
+        assert data["pass"] is True
+        assert data["counts"]["markdown_files_scanned"] == 1
+        assert data["counts"]["links_resolved"] == 0
+        assert data["counts"]["resources_checked"] == 0
+        assert data["counts"]["files_skipped_as_vendored"] == 0
+        assert data["broken_links"] == []
+        assert data["unlinked_resources"] == []
+        assert exit_code == 0
+        # stderr should be empty (no findings)
+        assert captured.err == ""
+
+    def test_json_with_broken_link(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        """--json with a broken link."""
+        # Setup a markdown file with a broken link.
+        md_file = tmp_path / "doc.md"
+        md_file.write_text("See [broken](missing.md)")
+
+        # Mock tracked_markdown to return this file
+        monkeypatch.setattr(
+            "check_md_links.tracked_markdown",
+            lambda: [md_file],
+        )
+        monkeypatch.setattr(
+            "check_md_links.is_vendored",
+            lambda path, registry: False,
+        )
+        # Mock vendored.json
+        vendored_path = tmp_path / "vendored.json"
+        vendored_path.write_text('{"vendored": []}')
+        original_open = Path.open
+
+        def mock_open(self, *args, **kwargs):
+            if self.name == "vendored.json":
+                return open(vendored_path, *args, **kwargs)
+            return original_open(self, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "open", mock_open)
+
+        # Mock discover to return empty
+        monkeypatch.setattr(
+            "check_md_links.discover",
+            lambda _: [],
+        )
+
+        # Mock subprocess.run for tracked_markdown
+        def mock_run(*args, **kwargs):
+            class MockResult:
+                stdout = f"{md_file.name}\0"
+                stderr = ""
+                returncode = 0
+
+            return MockResult()
+
+        monkeypatch.setattr("subprocess.run", mock_run)
+
+        from check_md_links import main
+
+        sys.argv = ["check_md_links.py", "--json"]
+        with monkeypatch.context() as m:
+            m.setattr("os.getcwd", lambda: str(tmp_path))
+            exit_code = main()
+
+        captured = capsys.readouterr()
+        data = json.loads(captured.out)
+        assert data["pass"] is False
+        assert data["counts"]["markdown_files_scanned"] == 1
+        assert data["counts"]["links_resolved"] == 1
+        assert data["counts"]["resources_checked"] == 0
+        assert data["counts"]["files_skipped_as_vendored"] == 0
+        assert len(data["broken_links"]) == 1
+        broken = data["broken_links"][0]
+        assert broken["file"] == "doc.md"
+        assert broken["line"] == 1
+        assert broken["target"] == "missing.md"
+        # resolved_path should be absolute path to tmp_path/doc.md's parent / missing.md
+        expected_resolved = (tmp_path / "missing.md").resolve()
+        assert broken["resolved_path"] == str(expected_resolved)
+        assert data["unlinked_resources"] == []
+        assert exit_code == 1
+        # stderr should have the findings message
+        assert "1 finding(s)." in captured.err
+
+    def test_json_with_unlinked_resource(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        """--json with an unlinked resource."""
+        # We need a README and a resource discovered by discover that is not linked.
+        readme = tmp_path / "README.md"
+        readme.write_text("# README\n")
+
+        # Mock discover to return one item
+        class MockItem:
+            def __init__(self, kind, name, src):
+                self.kind = kind
+                self.name = name
+                self.src = src
+
+        mock_item = MockItem("skill", "test-skill", tmp_path / "src" / "test-skill" / "SKILL.md")
+        monkeypatch.setattr(
+            "check_md_links.discover",
+            lambda _: [mock_item],
+        )
+        # No markdown files to scan for links
+        monkeypatch.setattr(
+            "check_md_links.tracked_markdown",
+            lambda: [],
+        )
+        # Mock vendored.json
+        vendored_path = tmp_path / "vendored.json"
+        vendored_path.write_text('{"vendored": []}')
+        original_open = Path.open
+
+        def mock_open(self, *args, **kwargs):
+            if self.name == "vendored.json":
+                return open(vendored_path, *args, **kwargs)
+            return original_open(self, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "open", mock_open)
+
+        from check_md_links import main
+
+        sys.argv = ["check_md_links.py", "--json"]
+        with monkeypatch.context() as m:
+            m.setattr("os.getcwd", lambda: str(tmp_path))
+
+            # Mock subprocess.run to return empty for tracked_markdown
+            def mock_run(*args, **kwargs):
+                class MockResult:
+                    stdout = "\0"
+                    stderr = ""
+                    returncode = 0
+
+                return MockResult()
+
+            m.setattr("subprocess.run", mock_run)
+            exit_code = main()
+
+        captured = capsys.readouterr()
+        data = json.loads(captured.out)
+        assert data["pass"] is False
+        assert data["counts"]["markdown_files_scanned"] == 0
+        assert data["counts"]["links_resolved"] == 0
+        assert data["counts"]["resources_checked"] == 1
+        assert data["counts"]["files_skipped_as_vendored"] == 0
+        assert data["broken_links"] == []
+        assert len(data["unlinked_resources"]) == 1
+        assert data["unlinked_resources"][0] == "src/test-skill/SKILL.md"
+        assert exit_code == 1
+        assert "1 finding(s)." in captured.err
+
+    def test_non_json_output_unaffected(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        """Ensure that without --json, the output is
+        unchanged."""
+        # We'll test with a broken link and compare the output
+        # to the expected human-readable format.
+        md_file = tmp_path / "doc.md"
+        md_file.write_text("See [broken](missing.md)")
+        readme = tmp_path / "README.md"
+        readme.write_text("# README\n")
+
+        # Mock tracked_markdown
+        monkeypatch.setattr(
+            "check_md_links.tracked_markdown",
+            lambda: [md_file],
+        )
+        monkeypatch.setattr(
+            "check_md_links.is_vendored",
+            lambda path, registry: False,
+        )
+        # Mock vendored.json
+        vendored_path = tmp_path / "vendored.json"
+        vendored_path.write_text('{"vendored": []}')
+        original_open = Path.open
+
+        def mock_open(self, *args, **kwargs):
+            if self.name == "vendored.json":
+                return open(vendored_path, *args, **kwargs)
+            return original_open(self, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "open", mock_open)
+
+        # Mock discover to return empty (so no README findings)
+        monkeypatch.setattr(
+            "check_md_links.discover",
+            lambda _: [],
+        )
+
+        # Mock subprocess.run for tracked_markdown
+        def mock_run(*args, **kwargs):
+            class MockResult:
+                stdout = f"{md_file.name}\0"
+                stderr = ""
+                returncode = 0
+
+            return MockResult()
+
+        monkeypatch.setattr("subprocess.run", mock_run)
+
+        from check_md_links import main
+
+        # Run without --json
+        sys.argv = ["check_md_links.py"]
+        with monkeypatch.context() as m:
+            m.setattr("os.getcwd", lambda: str(tmp_path))
+            exit_code = main()
+
+        captured = capsys.readouterr()
+        # Expected output: one line for the broken link
+        expected_out = "doc.md:1: broken-link -> missing.md\n"
+        assert captured.out == expected_out
+        # Expected stderr: the findings message
+        assert captured.err.strip() == "1 finding(s)."
+        assert exit_code == 1
+
+        # Now run with --json and ensure the stdout is JSON and stderr still has the message
+        sys.argv = ["check_md_links.py", "--json"]
+        with monkeypatch.context() as m:
+            m.setattr("os.getcwd", lambda: str(tmp_path))
+            exit_code = main()
+
+        captured = capsys.readouterr()
+        data = json.loads(captured.out)
+        assert data["pass"] is False
+        assert data["counts"]["markdown_files_scanned"] == 1
+        assert data["counts"]["links_resolved"] == 1
+        assert data["counts"]["resources_checked"] == 0
+        assert data["counts"]["files_skipped_as_vendored"] == 0
+        assert len(data["broken_links"]) == 1
+        # stderr should still have the findings message
+        assert "1 finding(s)." in captured.err
+        assert exit_code == 1
