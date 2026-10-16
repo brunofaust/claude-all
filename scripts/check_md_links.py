@@ -3,6 +3,23 @@
 
 Vendored files are exempt from the link check (kept byte-identical to upstream);
 their `local_only` sidecars stay checked. README links are the proxy for "documented".
+
+With the --json flag, output a machine-readable JSON object instead of the
+human-readable report. The JSON object contains:
+- passed: boolean indicating if all checks passed
+- markdown_files_scanned: number of markdown files scanned (excluding vendored)
+- links_resolved: number of non-skipped links resolved
+- resources_checked: number of resources discovered by the CLI
+- files_skipped_as_vendored: number of markdown files skipped due to vendored exemption
+- broken_links: list of objects, each with:
+    - file: relative path of the markdown file containing the broken link
+    - line: line number of the broken link
+    - target: the raw link target
+    - resolved_path: the absolute path that was checked and did not exist
+- unlinked_resources: list of objects, each with:
+    - kind: the kind of resource (e.g., "agent", "skill")
+    - name: the name of the resource
+    - src: the source file path relative to the repository root
 """
 
 import json
@@ -57,16 +74,23 @@ def tracked_markdown() -> list[Path]:
     return [ROOT / p for p in out.split("\0") if p]
 
 
-def check_links(registry: list[dict]) -> list[str]:
+def check_links(registry: list[dict]) -> dict:
     findings = []
+    broken_links = []
+    markdown_files_scanned = 0
+    links_resolved = 0
+    files_skipped_as_vendored = 0
+
     for md in tracked_markdown():
         if is_vendored(md, registry):
+            files_skipped_as_vendored += 1
             continue
         if not md.exists():
             # `git ls-files` reflects the INDEX: a tracked file deleted from the
             # working tree but not yet re-staged (`git rm`/`git add`) still shows up
             # here. Nothing left to check its links against.
             continue
+        markdown_files_scanned += 1
         for line_no, line in strip_code_blocks(md.read_text()):
             for target in LINK.findall(CODE_SPAN.sub("", line)):
                 if target.startswith(SKIP_PREFIX):
@@ -74,34 +98,76 @@ def check_links(registry: list[dict]) -> list[str]:
                 bare = target.split("#", 1)[0]
                 if not bare:
                     continue  # pure anchor
+                links_resolved += 1
                 if not (md.parent / bare).resolve().exists():
                     rel = md.relative_to(ROOT)
                     findings.append(f"{rel}:{line_no}: broken-link -> {target}")
-    return findings
+                    broken_links.append(
+                        {
+                            "file": str(rel),
+                            "line": line_no,
+                            "target": target,
+                            "resolved_path": str((md.parent / bare).resolve()),
+                        }
+                    )
+    return {
+        "findings": findings,
+        "broken_links": broken_links,
+        "markdown_files_scanned": markdown_files_scanned,
+        "links_resolved": links_resolved,
+        "files_skipped_as_vendored": files_skipped_as_vendored,
+    }
 
 
-def check_readme_coverage() -> list[str]:
+def check_readme_coverage() -> dict:
     sys.path.insert(0, str(ROOT / "src"))
     from claude_all.cli import discover
 
     readme = (ROOT / "README.md").read_text()
-    return [
-        f"README.md: undocumented -> {item.kind}/{item.name} "
-        f"(add a row linking {item.src.relative_to(ROOT).as_posix()})"
-        for item in discover([])
-        if f"]({item.src.relative_to(ROOT).as_posix()})" not in readme
-    ]
+    resources = discover([])
+    findings = []
+    unlinked_resources = []
+    for item in resources:
+        if f"]({item.src.relative_to(ROOT).as_posix()})" not in readme:
+            rel_src = item.src.relative_to(ROOT).as_posix()
+            findings.append(
+                f"README.md: undocumented -> {item.kind}/{item.name} (add a row linking {rel_src})"
+            )
+            unlinked_resources.append({"kind": item.kind, "name": item.name, "src": rel_src})
+    return {
+        "findings": findings,
+        "unlinked_resources": unlinked_resources,
+        "resources_checked": len(resources),
+    }
 
 
 def main() -> int:
+    # Check for --json flag
+    json_mode = "--json" in sys.argv
     registry = json.loads((ROOT / "vendored.json").read_text()).get("vendored", [])
-    findings = check_links(registry) + check_readme_coverage()
-    for finding in findings:
-        print(finding)
-    if findings:
-        print(f"\n{len(findings)} finding(s).", file=sys.stderr)
-        return 1
-    return 0
+    link_result = check_links(registry)
+    coverage_result = check_readme_coverage()
+    all_findings = link_result["findings"] + coverage_result["findings"]
+    if json_mode:
+        result = {
+            "passed": len(all_findings) == 0,
+            "markdown_files_scanned": link_result["markdown_files_scanned"],
+            "links_resolved": link_result["links_resolved"],
+            "resources_checked": coverage_result["resources_checked"],
+            "files_skipped_as_vendored": link_result["files_skipped_as_vendored"],
+            "broken_links": link_result["broken_links"],
+            "unlinked_resources": coverage_result["unlinked_resources"],
+        }
+        # Output compact JSON
+        print(json.dumps(result, separators=(",", ":")))
+        return 0 if len(all_findings) == 0 else 1
+    else:
+        for finding in all_findings:
+            print(finding)
+        if all_findings:
+            print(f"\n{len(all_findings)} finding(s).", file=sys.stderr)
+            return 1
+        return 0
 
 
 if __name__ == "__main__":

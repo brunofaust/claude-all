@@ -141,7 +141,12 @@ class TestCheckLinks:
         # tracked-but-deleted file must be skipped, not crash read_text()
         missing = tmp_path / "GONE.md"
         monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [missing])
-        assert check_links(registry=[]) == []
+        result = check_links(registry=[])
+        assert result["findings"] == []
+        assert result["broken_links"] == []
+        assert result["markdown_files_scanned"] == 0
+        assert result["links_resolved"] == 0
+        assert result["files_skipped_as_vendored"] == 0
 
 
 def test_non_vendored_routes_use_discoverable_skill_names() -> None:
