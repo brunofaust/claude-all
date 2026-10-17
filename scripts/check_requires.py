@@ -27,11 +27,13 @@ def load_resource_keys() -> set[str]:
     return {state_key(it.kind, it.name) for it in discover([])}
 
 
-def find_violations(known: set[str]) -> list[str]:
+def find_violations(known: set[str]) -> tuple[list[str], int]:
     findings: list[str] = []
+    manifest_count = 0
     for manifest in sorted((SRC / "claude_all").rglob("claude-all.json")) + sorted(
         (SRC / "claude_all").rglob("*.claude-all.json")
     ):
+        manifest_count += 1
         rel = manifest.relative_to(REPO_ROOT)
         try:
             config = json.loads(manifest.read_text(encoding="utf-8"))
@@ -50,17 +52,19 @@ def find_violations(known: set[str]) -> list[str]:
                     f"{rel}: requires '{dep}' — no such resource (renamed/deleted? "
                     "a built-in like /code-review does not belong in requires)"
                 )
-    return findings
+    return findings, manifest_count
 
 
 def find_undeclared_instruction_refs(
     known: set[str], instructions_dir: Path = INSTRUCTIONS_DIR
-) -> list[str]:
+) -> tuple[list[str], int]:
     keys_by_name: dict[str, set[str]] = {}
     for key in known:
         keys_by_name.setdefault(key.split("/", 1)[1], set()).add(key)
     findings: list[str] = []
+    snippet_count = 0
     for snippet in sorted(instructions_dir.glob("*/claude_md.md")):
+        snippet_count += 1
         manifest = snippet.parent / "claude-all.json"
         declared: set[str] = set()
         if manifest.exists():
@@ -77,13 +81,24 @@ def find_undeclared_instruction_refs(
                     f"{rel}: names `{token}` but its claude-all.json does not require "
                     + " or ".join(sorted(candidates))
                 )
-    return findings
+    return findings, snippet_count
 
 
 def main() -> int:
     """CLI entry point — print findings to stdout, exit 1 on any."""
     known = load_resource_keys()
-    findings = find_violations(known) + find_undeclared_instruction_refs(known)
+    violation_findings, manifest_count = find_violations(known)
+    instruction_findings, snippet_count = find_undeclared_instruction_refs(known)
+    findings = violation_findings + instruction_findings
+
+    # Check for zero discovery and fail loudly
+    if manifest_count == 0:
+        print(f"error: no claude-all.json manifests found in {SRC / 'claude_all'}", file=sys.stderr)
+        return 1
+    if snippet_count == 0:
+        print(f"error: no instruction snippets found in {INSTRUCTIONS_DIR}", file=sys.stderr)
+        return 1
+
     for finding in findings:
         print(finding)
     if findings:
@@ -94,6 +109,11 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
+
+    # Success: print summary line
+    print(
+        f"checked {manifest_count} manifest{'' if manifest_count == 1 else 's'} and {snippet_count} instruction snippet{'' if snippet_count == 1 else 's'}"
+    )
     return 0
 
 
