@@ -298,6 +298,26 @@ class TestMainOutput:
         assert payload["counts"]["markdown_scanned"] == 1
         assert payload["counts"]["links_checked"] == 0
 
+    def test_exit_code_identical_in_both_modes(
+        self,
+        gate,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        mds = _make_tree(tmp_path, {"src/a/b.md": "[x](../gone.md)\n"})
+        monkeypatch.setattr(gate, "tracked_markdown", lambda: mds)
+
+        monkeypatch.setattr(sys, "argv", ["check_md_links.py"])
+        default_code = gate.main()
+        capsys.readouterr()
+
+        monkeypatch.setattr(sys, "argv", ["check_md_links.py", "--json"])
+        json_code = gate.main()
+        capsys.readouterr()
+
+        assert default_code == json_code == 1
+
     def test_json_internal_error_prints_error_object(
         self,
         gate,
