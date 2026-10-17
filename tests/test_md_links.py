@@ -13,15 +13,19 @@ import json
 import re
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
+import check_md_links
 from check_md_links import (
     CODE_SPAN,
     LINK,
     check_links,
+    collect_link_results,
     is_vendored,
     strip_code_blocks,
 )
@@ -135,12 +139,144 @@ class TestIsVendored:
 
 
 class TestCheckLinks:
+    def test_json_mode_clean_tree_passes(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        (tmp_path / "vendored.json").write_text('{"vendored": []}')
+        monkeypatch.setattr(check_md_links, "ROOT", tmp_path)
+        monkeypatch.setattr(
+            check_md_links,
+            "collect_link_results",
+            lambda _: (
+                [],
+                {
+                    "markdown_files_scanned": 3,
+                    "links_resolved": 4,
+                    "vendored_files_skipped": 1,
+                },
+            ),
+        )
+        monkeypatch.setattr(check_md_links, "check_readme_coverage", lambda: [])
+        monkeypatch.setattr(check_md_links, "unlinked_resources", lambda _: [])
+        monkeypatch.setattr("claude_all.cli.discover", lambda _: [])
+
+        assert check_md_links.main(["--json"]) == 0
+        output = capsys.readouterr()
+        assert output.err == ""
+        assert json.loads(output.out) == {
+            "passed": True,
+            "counts": {
+                "markdown_files_scanned": 3,
+                "links_resolved": 4,
+                "vendored_files_skipped": 1,
+                "resources_checked": 0,
+            },
+            "broken_links": [],
+            "unlinked_resources": [],
+        }
+
+    def test_json_mode_emits_structured_findings_without_prose(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        (tmp_path / "vendored.json").write_text('{"vendored": []}')
+        monkeypatch.setattr(check_md_links, "ROOT", tmp_path)
+        monkeypatch.setattr(
+            check_md_links,
+            "collect_link_results",
+            lambda _: (
+                [
+                    (
+                        "sample.md:1: broken-link -> missing.md",
+                        {
+                            "file": "sample.md",
+                            "line": 1,
+                            "target": "missing.md",
+                            "resolved_path": "missing.md",
+                        },
+                    )
+                ],
+                {"markdown_files_scanned": 1, "links_resolved": 2, "vendored_files_skipped": 0},
+            ),
+        )
+        monkeypatch.setattr(
+            check_md_links,
+            "check_readme_coverage",
+            lambda: ["README.md: undocumented -> skill/demo (add a row linking src/demo/SKILL.md)"],
+        )
+        resource = SimpleNamespace(src=ROOT / "src/demo/SKILL.md")
+        monkeypatch.setattr(check_md_links, "unlinked_resources", lambda _: ["src/demo/SKILL.md"])
+        monkeypatch.setattr("claude_all.cli.discover", lambda _: [resource])
+
+        assert check_md_links.main(["--json"]) == 1
+        output = capsys.readouterr()
+        result = json.loads(output.out)
+        assert output.err == ""
+        assert result["passed"] is False
+        assert result["broken_links"] == [
+            {
+                "file": "sample.md",
+                "line": 1,
+                "target": "missing.md",
+                "resolved_path": "missing.md",
+            }
+        ]
+        assert result["unlinked_resources"] == ["src/demo/SKILL.md"]
+        assert result["counts"]["resources_checked"] == 1
+
+    def test_default_mode_keeps_human_report(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        (tmp_path / "vendored.json").write_text('{"vendored": []}')
+        monkeypatch.setattr(check_md_links, "ROOT", tmp_path)
+        monkeypatch.setattr(
+            check_md_links,
+            "collect_link_results",
+            lambda _: (
+                [("sample.md:1: broken-link -> missing.md", {})],
+                {"markdown_files_scanned": 1, "links_resolved": 0, "vendored_files_skipped": 0},
+            ),
+        )
+        monkeypatch.setattr(check_md_links, "check_readme_coverage", lambda: [])
+        monkeypatch.setattr("claude_all.cli.discover", lambda _: [])
+
+        assert check_md_links.main([]) == 1
+        output = capsys.readouterr()
+        assert output.out == "sample.md:1: broken-link -> missing.md\n"
+        assert output.err == "\n1 finding(s).\n"
+
+    def test_structured_results_report_broken_links_and_counts(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        source = tmp_path / "sample.md"
+        source.write_text("[missing](absent.md)\n[ok](present.md)\n")
+        (tmp_path / "present.md").touch()
+        monkeypatch.setattr("check_md_links.ROOT", tmp_path)
+        monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [source])
+
+        findings, counts = collect_link_results([])
+
+        assert findings[0][1] == {
+            "file": "sample.md",
+            "line": 1,
+            "target": "absent.md",
+            "resolved_path": "absent.md",
+        }
+        assert counts == {
+            "markdown_files_scanned": 1,
+            "links_resolved": 1,
+            "vendored_files_skipped": 0,
+        }
+
     def test_tracked_file_missing_from_disk_is_skipped(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         # tracked-but-deleted file must be skipped, not crash read_text()
         missing = tmp_path / "GONE.md"
+        monkeypatch.setattr("check_md_links.ROOT", tmp_path)
         monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [missing])
+        findings, counts = collect_link_results([{"path": ".", "vendor_mode": "dir"}])
+        assert findings == []
+        assert counts["vendored_files_skipped"] == 0
         assert check_links(registry=[]) == []
 
 
