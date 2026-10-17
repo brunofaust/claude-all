@@ -91,11 +91,12 @@ def main() -> int:
     findings2 = find_undeclared_instruction_refs(known)
     findings.extend(findings2)
     if manifest_count == 0:
-        print(
-            f"Error: Zero manifests discovered (looked for 'claude-all.json' and '*.claude-all.json' "
-            f"under {SRC / 'claude_all'})",
-            file=sys.stderr,
+        search_path = str(SRC / "claude_all")
+        msg = (
+            "Error: Zero manifests discovered (looked for 'claude-all.json' and '*.claude-all.json'"
         )
+        msg += f" under {search_path})"
+        print(msg, file=sys.stderr)
         return 1
     if findings:
         for finding in findings:

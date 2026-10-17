@@ -29,7 +29,7 @@ KNOWN = {"skills/foo-skill", "agents/bar-agent", "instructions/demo"}
 
 def snippet(root: Path, body: str, requires: list[str] | None = None) -> Path:
     folder = root / "demo"
-    folder.mkdir(parents=True)
+    folder.mkdir(parents=True, exist_ok=True)
     (folder / "claude_md.md").write_text(body, encoding="utf-8")
     if requires is not None:
         (folder / "claude-all.json").write_text(json.dumps({"requires": requires}))
@@ -70,8 +70,7 @@ class TestCheckRequires(unittest.TestCase):
         self.assertEqual(check_requires.find_undeclared_instruction_refs(known), [])
 
     def test_success_prints_summary_and_exits_zero(self) -> None:
-        """When manifests are present and valid, the script exits 0
-        with a summary line."""
+        """Script exits 0 with summary when manifests are valid."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_path = Path(tmp_dir)
             # Monkey-patch the paths to point to the temporary directory.
@@ -83,18 +82,18 @@ class TestCheckRequires(unittest.TestCase):
                 check_requires.SRC = check_requires.REPO_ROOT / "src"  # type: ignore[attr-defined]
                 check_requires.INSTRUCTIONS_DIR = check_requires.SRC / "claude_all" / "instructions"  # type: ignore[attr-defined]
                 # Ensure the directories exist.
-                check_requires.INSTRUCTIONS_DIR.mkdir(parents=True)
-                (check_requires.SRC / "claude_all").mkdir(parents=True)
+                check_requires.INSTRUCTIONS_DIR.mkdir(parents=True, exist_ok=True)
+                (check_requires.SRC / "claude_all").mkdir(parents=True, exist_ok=True)
 
                 # Create a valid manifest.
                 manifest_dir = check_requires.SRC / "claude_all" / "skill"
-                manifest_dir.mkdir(parents=True)
+                manifest_dir.mkdir(parents=True, exist_ok=True)
                 manifest = manifest_dir / "claude-all.json"
                 manifest.write_text('{"requires": ["skills/valid"]}', encoding="utf-8")
 
                 # Monkey-patch load_resource_keys to return a known set that includes the require.
-                original_load = check_requires.load_resource_keys
-                check_requires.load_resource_keys = lambda: {"skills/valid"}
+                original_load = check_requires.load_resource_keys  # type: ignore[attr-defined]
+                check_requires.load_resource_keys = lambda: {"skills/valid"}  # type: ignore[attr-defined]
 
                 # Capture stdout and stderr.
                 stdout_capture = io.StringIO()
@@ -120,12 +119,12 @@ class TestCheckRequires(unittest.TestCase):
                 # stderr should be empty.
                 self.assertEqual(stderr_capture.getvalue(), "")
             finally:
-                check_requires.REPO_ROOT = original_repo_root
-                check_requires.SRC = original_src
-                check_requires.INSTRUCTIONS_DIR = original_instructions_dir
+                check_requires.REPO_ROOT = original_repo_root  # type: ignore[attr-defined]
+                check_requires.SRC = original_src  # type: ignore[attr-defined]
+                check_requires.INSTRUCTIONS_DIR = original_instructions_dir  # type: ignore[attr-defined]
 
     def test_zero_discovery_fails_with_message(self) -> None:
-        """When no manifests are found, the script exits 1 with an error message."""
+        """Script exits 1 with error when no manifests are found."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_path = Path(tmp_dir)
             original_repo_root = check_requires.REPO_ROOT
@@ -137,7 +136,7 @@ class TestCheckRequires(unittest.TestCase):
                 check_requires.INSTRUCTIONS_DIR = check_requires.SRC / "claude_all" / "instructions"  # type: ignore[attr-defined]
                 # We do not create any manifest files.
 
-                # Monkey-patch load_resource_keys to avoid calling the actual discover (which would look in the real src).
+                # Monkey-patch load_resource_keys to avoid actual discover
                 original_load = check_requires.load_resource_keys
                 check_requires.load_resource_keys = lambda: set()
 
@@ -160,14 +159,14 @@ class TestCheckRequires(unittest.TestCase):
                 # Assertions.
                 self.assertEqual(exit_code, 1)
                 stdout_output = stdout_capture.getvalue().strip()
-                # On zero-discovery, we expect no output to stdout (the summary line is only on success).
+                # On zero-discovery, expect no stdout (summary only on success)
                 self.assertEqual(stdout_output, "")
                 stderr_output = stderr_capture.getvalue().strip()
                 # Expect the error message about zero manifests.
-                expected_error = (
-                    f"Error: Zero manifests discovered (looked for 'claude-all.json' and '*.claude-all.json' "
-                    f"under {check_requires.SRC / 'claude_all'})"
-                )
+                search_path = str(check_requires.SRC / "claude_all")
+                msg = "Error: Zero manifests discovered (looked for 'claude-all.json' and '*.claude-all.json'"
+                msg += f" under {search_path})"
+                expected_error = msg
                 self.assertEqual(stderr_output, expected_error)
             finally:
                 check_requires.REPO_ROOT = original_repo_root
@@ -175,7 +174,7 @@ class TestCheckRequires(unittest.TestCase):
                 check_requires.INSTRUCTIONS_DIR = original_instructions_dir
 
     def test_existing_failure_still_fails(self) -> None:
-        """When a manifest has a dangling require, the script exits 1 with the finding and error message."""
+        """Script exits 1 with finding when manifest has dangling require."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_path = Path(tmp_dir)
             original_repo_root = check_requires.REPO_ROOT
@@ -186,12 +185,12 @@ class TestCheckRequires(unittest.TestCase):
                 check_requires.SRC = check_requires.REPO_ROOT / "src"  # type: ignore[attr-defined]
                 check_requires.INSTRUCTIONS_DIR = check_requires.SRC / "claude_all" / "instructions"  # type: ignore[attr-defined]
                 # Ensure the directories exist.
-                check_requires.INSTRUCTIONS_DIR.mkdir(parents=True)
-                (check_requires.SRC / "claude_all").mkdir(parents=True)
+                check_requires.INSTRUCTIONS_DIR.mkdir(parents=True, exist_ok=True)
+                (check_requires.SRC / "claude_all").mkdir(parents=True, exist_ok=True)
 
                 # Create a manifest with a dangling require.
                 manifest_dir = check_requires.SRC / "claude_all" / "skill"
-                manifest_dir.mkdir(parents=True)
+                manifest_dir.mkdir(parents=True, exist_ok=True)
                 manifest = manifest_dir / "claude-all.json"
                 manifest.write_text('{"requires": ["skills/missing"]}', encoding="utf-8")
 
