@@ -232,32 +232,55 @@ def test_claude_hook_examples_use_timeout_seconds() -> None:
 
 def test_json_output_clean_tree() -> None:
     """Test --json output on a clean tree (no findings)."""
+    import io
     import json
-    import subprocess
+    import sys
 
-    result = subprocess.run(
-        [sys.executable, "scripts/check_md_links.py", "--json"],
-        capture_output=True,
-        text=True,
-        cwd=ROOT,
-    )
-    assert result.returncode == 0
-    assert result.stderr == ""
+    # Backup sys.argv and sys.stdout/stderr
+    old_argv = sys.argv
+    old_stdout = sys.stdout
+    old_stderr = sys.stderr
 
-    data = json.loads(result.stdout)
-    assert data["pass"] is True
-    assert isinstance(data["markdown_files_scanned"], int)
-    assert isinstance(data["links_resolved"], int)
-    assert isinstance(data["resources_checked"], int)
-    assert isinstance(data["files_skipped_as_vendored"], int)
-    assert data["broken_links"] == []
-    assert data["unlinked_resources"] == []
+    try:
+        sys.argv = [sys.executable, "scripts/check_md_links.py", "--json"]
+        stdout_capture = io.StringIO()
+        stderr_capture = io.StringIO()
+        sys.stdout = stdout_capture
+        sys.stderr = stderr_capture
+
+        # Import and run main
+        from check_md_links import main
+
+        returncode = main()
+
+        # Get captured output
+        stdout = stdout_capture.getvalue()
+        stderr = stderr_capture.getvalue()
+
+        assert returncode == 0
+        assert stderr == ""
+
+        data = json.loads(stdout)
+        assert data["pass"] is True
+        assert isinstance(data["markdown_files_scanned"], int)
+        assert isinstance(data["links_resolved"], int)
+        assert isinstance(data["resources_checked"], int)
+        assert isinstance(data["files_skipped_as_vendored"], int)
+        assert data["broken_links"] == []
+        assert data["unlinked_resources"] == []
+    finally:
+        # Restore
+        sys.argv = old_argv
+        sys.stdout = old_stdout
+        sys.stderr = old_stderr
 
 
 def test_json_output_with_broken_link(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Test --json output with a broken link."""
+    import importlib
+    import io
     import json
-    import subprocess
+    import sys
 
     # Create a temporary markdown file with a broken link
     broken_md = tmp_path / "broken.md"
@@ -269,31 +292,58 @@ def test_json_output_with_broken_link(tmp_path: Path, monkeypatch: pytest.Monkey
 
     monkeypatch.setattr("check_md_links.tracked_markdown", mock_tracked_markdown)
 
-    # Run with --json
-    result = subprocess.run(
-        [sys.executable, "scripts/check_md_links.py", "--json"],
-        capture_output=True,
-        text=True,
-        cwd=ROOT,
-    )
-    assert result.returncode == 1  # Should fail due to broken link
-    assert result.stderr == ""  # No stderr in JSON mode
+    # Backup sys.argv and sys.stdout/stderr
+    old_argv = sys.argv
+    old_stdout = sys.stdout
+    old_stderr = sys.stderr
 
-    data = json.loads(result.stdout)
-    assert data["pass"] is False
-    assert data["markdown_files_scanned"] == 1
-    assert data["links_resolved"] == 1
-    assert data["broken_links"] == [
-        {"file": "broken.md:1", "raw_target": "nonexistent.md", "resolved_path": "nonexistent.md"}
-    ]
+    try:
+        sys.argv = [sys.executable, "scripts/check_md_links.py", "--json"]
+        stdout_capture = io.StringIO()
+        stderr_capture = io.StringIO()
+        sys.stdout = stdout_capture
+        sys.stderr = stderr_capture
+
+        # Import and run main - reload the module to ensure monkeypatch takes effect
+        if "check_md_links" in sys.modules:
+            importlib.reload(sys.modules["check_md_links"])
+        from check_md_links import main
+
+        returncode = main()
+
+        # Get captured output
+        stdout = stdout_capture.getvalue()
+        stderr = stderr_capture.getvalue()
+
+        assert returncode == 1  # Should fail due to broken link
+        assert stderr == ""  # No stderr in JSON mode
+
+        data = json.loads(stdout)
+        assert data["pass"] is False
+        assert data["markdown_files_scanned"] == 1
+        assert data["links_resolved"] == 1
+        assert data["broken_links"] == [
+            {
+                "file": "broken.md:1",
+                "raw_target": "nonexistent.md",
+                "resolved_path": "nonexistent.md",
+            }
+        ]
+    finally:
+        # Restore
+        sys.argv = old_argv
+        sys.stdout = old_stdout
+        sys.stderr = old_stderr
 
 
 def test_json_output_with_unlinked_resource(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Test --json output with an unlinked resource."""
+    import importlib
+    import io
     import json
-    import subprocess
+    import sys
 
     # We'll mock the discover function to return a fake resource
     # that is not linked in the README
@@ -307,20 +357,42 @@ def test_json_output_with_unlinked_resource(
     def mock_discover(_):
         return [FakeItem("skill", "test-skill", Path("src/nonexistent/SKILL.md"))]
 
-    with patch("check_md_links.discover", side_effect=mock_discover):
-        result = subprocess.run(
-            [sys.executable, "scripts/check_md_links.py", "--json"],
-            capture_output=True,
-            text=True,
-            cwd=ROOT,
-        )
-        assert result.returncode == 1  # Should fail due to unlinked resource
-        assert result.stderr == ""  # No stderr in JSON mode
+    with patch("claude_all.cli.discover", side_effect=mock_discover):
+        # Backup sys.argv and sys.stdout/stderr
+        old_argv = sys.argv
+        old_stdout = sys.stdout
+        old_stderr = sys.stderr
 
-        data = json.loads(result.stdout)
-        assert data["pass"] is False
-        assert data["resources_checked"] == 1
-        assert data["unlinked_resources"] == ["src/nonexistent/SKILL.md"]
+        try:
+            sys.argv = [sys.executable, "scripts/check_md_links.py", "--json"]
+            stdout_capture = io.StringIO()
+            stderr_capture = io.StringIO()
+            sys.stdout = stdout_capture
+            sys.stderr = stderr_capture
+
+            # Import and run main - reload the module to ensure monkeypatch takes effect
+            if "check_md_links" in sys.modules:
+                importlib.reload(sys.modules["check_md_links"])
+            from check_md_links import main
+
+            returncode = main()
+
+            # Get captured output
+            stdout = stdout_capture.getvalue()
+            stderr = stderr_capture.getvalue()
+
+            assert returncode == 1  # Should fail due to unlinked resource
+            assert stderr == ""  # No stderr in JSON mode
+
+            data = json.loads(stdout)
+            assert data["pass"] is False
+            assert data["resources_checked"] == 1
+            assert data["unlinked_resources"] == ["src/nonexistent/SKILL.md"]
+        finally:
+            # Restore
+            sys.argv = old_argv
+            sys.stdout = old_stdout
+            sys.stderr = old_stderr
 
 
 def test_normal_output_unchanged() -> None:

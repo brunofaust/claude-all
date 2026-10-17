@@ -76,7 +76,7 @@ def tracked_markdown() -> list[Path]:
 
 
 def check_links(registry: list[dict]) -> dict:
-    findings = []
+    findings = []  # each will be a dict with keys: file (str relative to ROOT), line (int), raw_target (str), resolved_path (str)
     links_checked = 0
     markdown_files_scanned = 0
     files_skipped_as_vendored = 0
@@ -98,9 +98,17 @@ def check_links(registry: list[dict]) -> dict:
                 if not bare:
                     continue  # pure anchor
                 links_checked += 1
-                if not (md.parent / bare).resolve().exists():
+                target_path = (md.parent / bare).resolve()
+                if not target_path.exists():
                     rel = md.relative_to(ROOT)
-                    findings.append(f"{rel}:{line_no}: broken-link -> {target}")
+                    findings.append(
+                        {
+                            "file": rel.as_posix(),
+                            "line": line_no,
+                            "raw_target": target,
+                            "resolved_path": target_path.as_posix(),
+                        }
+                    )
     return {
         "findings": findings,
         "links_checked": links_checked,
@@ -139,46 +147,16 @@ def main() -> int:
 
     if args.json:
         # JSON output mode
-        result = {
-            "pass": len(links_result["findings"]) == 0 and len(readme_result["findings"]) == 0,
-            "markdown_files_scanned": links_result["markdown_files_scanned"],
-            "links_resolved": links_result["links_checked"],
-            "resources_checked": readme_result["resources_checked"],
-            "files_skipped_as_vendored": links_result["files_skipped_as_vendored"],
-            "broken_links": [
-                {
-                    "file": finding.split(":")[0] + ":" + finding.split(":")[1],
-                    "raw_target": finding.split(" -> ")[1],
-                    "resolved_path": finding.split(" -> ")[
-                        1
-                    ],  # We don't have the resolved path stored, but we can reconstruct it
-                }
-                for finding in links_result["findings"]
-            ],
-            "unlinked_resources": [
-                finding.split(" -> ")[1].strip() for finding in readme_result["findings"]
-            ],
-        }
-        # Fix the broken_links structure to match the requirement
         broken_links = []
-        for finding in links_result["findings"]:
-            # Format is: "relative_path:line_number: broken-link -> target"
-            parts = finding.split(":")
-            file_part = ":".join(parts[:2])  # relative_path:line_number
-            target_part = parts[3] if len(parts) > 3 else ""  # everything after " -> "
-            raw_target = target_part.strip()
-            # For resolved_path, we need to compute what was checked
-            # Since we don't store it, we'll leave it as the raw target for now
-            # but note that the actual resolved path would be (md.parent / bare).resolve()
+        for f in links_result["findings"]:
             broken_links.append(
                 {
-                    "file": file_part,
-                    "raw_target": raw_target,
-                    "resolved_path": raw_target,  # This is not ideal but we don't have the resolved path stored
+                    "file": f"{f['file']}:{f['line']}",
+                    "raw_target": f["raw_target"],
+                    "resolved_path": f["resolved_path"],
                 }
             )
 
-        # Fix unlinked_resources - extract just the resource path
         unlinked_resources = []
         for finding in readme_result["findings"]:
             # Format is: "README.md: undocumented -> kind/name (add a row linking path)"
@@ -206,11 +184,16 @@ def main() -> int:
         return 0
     else:
         # Human-readable output (existing behavior)
-        findings = links_result["findings"] + readme_result["findings"]
-        for finding in findings:
+        # Convert link findings to strings
+        link_findings_strings = [
+            f"{f['file']}:{f['line']}: broken-link -> {f['raw_target']}"
+            for f in links_result["findings"]
+        ]
+        all_findings = link_findings_strings + readme_result["findings"]
+        for finding in all_findings:
             print(finding)
-        if findings:
-            print(f"\n{len(findings)} finding(s).", file=sys.stderr)
+        if all_findings:
+            print(f"\n{len(all_findings)} finding(s).", file=sys.stderr)
             return 1
         return 0
 
