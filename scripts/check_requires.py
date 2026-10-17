@@ -27,11 +27,15 @@ def load_resource_keys() -> set[str]:
     return {state_key(it.kind, it.name) for it in discover([])}
 
 
-def find_violations(known: set[str]) -> list[str]:
+def find_violations(known: set[str]) -> tuple[list[str], int]:
+    manifests = list(
+        sorted((SRC / "claude_all").rglob("claude-all.json"))
+        + sorted((SRC / "claude_all").rglob("*.claude-all.json"))
+    )
+    if not manifests:
+        return [], 0
     findings: list[str] = []
-    for manifest in sorted((SRC / "claude_all").rglob("claude-all.json")) + sorted(
-        (SRC / "claude_all").rglob("*.claude-all.json")
-    ):
+    for manifest in manifests:
         rel = manifest.relative_to(REPO_ROOT)
         try:
             config = json.loads(manifest.read_text(encoding="utf-8"))
@@ -50,7 +54,7 @@ def find_violations(known: set[str]) -> list[str]:
                     f"{rel}: requires '{dep}' — no such resource (renamed/deleted? "
                     "a built-in like /code-review does not belong in requires)"
                 )
-    return findings
+    return findings, len(manifests)
 
 
 def find_undeclared_instruction_refs(
@@ -83,10 +87,19 @@ def find_undeclared_instruction_refs(
 def main() -> int:
     """CLI entry point — print findings to stdout, exit 1 on any."""
     known = load_resource_keys()
-    findings = find_violations(known) + find_undeclared_instruction_refs(known)
-    for finding in findings:
-        print(finding)
+    findings, manifest_count = find_violations(known)
+    findings2 = find_undeclared_instruction_refs(known)
+    findings.extend(findings2)
+    if manifest_count == 0:
+        print(
+            f"Error: Zero manifests discovered (looked for 'claude-all.json' and '*.claude-all.json' "
+            f"under {SRC / 'claude_all'})",
+            file=sys.stderr,
+        )
+        return 1
     if findings:
+        for finding in findings:
+            print(finding)
         print(
             f"\n{len(findings)} requires finding(s) — a dependency manifest points at a "
             "resource the installer cannot discover, or an instruction names one it "
@@ -94,6 +107,7 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
+    print(f"Inspected {manifest_count} claude-all.json manifest(s)")
     return 0
 
 
