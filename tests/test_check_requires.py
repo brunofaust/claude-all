@@ -63,6 +63,77 @@ def test_declared_and_non_resource_tokens_pass(tmp_path: Path) -> None:
     assert check_requires.find_undeclared_instruction_refs(KNOWN, root) == []
 
 
+def test_main_reports_inspected_unit_count(tmp_path: Path, monkeypatch, capsys) -> None:
+    root = tmp_path / "src" / "claude_all"
+    root.mkdir(parents=True)
+    (root / "claude-all.json").write_text('{"requires": []}', encoding="utf-8")
+    (root / "demo.claude-all.json").write_text('{"requires": []}', encoding="utf-8")
+    instructions = root / "instructions"
+    snippet(instructions, "No resource refs.\n", [])
+    monkeypatch.setattr(check_requires, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_requires, "SRC", tmp_path / "src")
+    monkeypatch.setattr(check_requires, "INSTRUCTIONS_DIR", instructions)
+    monkeypatch.setattr(check_requires, "load_resource_keys", lambda: {"skills/foo-skill"})
+
+    assert check_requires.main() == 0
+    assert capsys.readouterr().out == "check_requires: inspected 5 units\n"
+
+
+def test_main_fails_when_discovery_patterns_match_nothing(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    root = tmp_path / "src" / "claude_all"
+    root.mkdir(parents=True)
+    instructions = root / "instructions"
+    instructions.mkdir()
+    monkeypatch.setattr(check_requires, "SRC", tmp_path / "src")
+    monkeypatch.setattr(check_requires, "INSTRUCTIONS_DIR", instructions)
+    monkeypatch.setattr(check_requires, "load_resource_keys", lambda: {"skills/foo-skill"})
+
+    assert check_requires.main() == 2
+    captured = capsys.readouterr()
+    assert "claude-all.json" in captured.err
+    assert "*.claude-all.json" in captured.err
+    assert "*/claude_md.md" in captured.err
+    assert captured.out == ""
+
+
+def test_main_fails_when_resource_discovery_is_empty(tmp_path: Path, monkeypatch, capsys) -> None:
+    root = tmp_path / "src" / "claude_all"
+    root.mkdir(parents=True)
+    (root / "claude-all.json").write_text('{"requires": []}', encoding="utf-8")
+    (root / "demo.claude-all.json").write_text('{"requires": []}', encoding="utf-8")
+    instructions = root / "instructions"
+    snippet(instructions, "No resource refs.\n", [])
+    monkeypatch.setattr(check_requires, "SRC", tmp_path / "src")
+    monkeypatch.setattr(check_requires, "INSTRUCTIONS_DIR", instructions)
+    monkeypatch.setattr(check_requires, "load_resource_keys", lambda: set())
+
+    assert check_requires.main() == 2
+    captured = capsys.readouterr()
+    assert "discovery pattern matched zero units: discover([])" in captured.err
+    assert captured.out == ""
+
+
+def test_main_preserves_validation_failure(tmp_path: Path, monkeypatch, capsys) -> None:
+    root = tmp_path / "src" / "claude_all"
+    root.mkdir(parents=True)
+    (root / "claude-all.json").write_text('{"requires": ["skills/missing"]}', encoding="utf-8")
+    (root / "demo.claude-all.json").write_text('{"requires": []}', encoding="utf-8")
+    instructions = root / "instructions"
+    snippet(instructions, "No resource refs.\n", [])
+    monkeypatch.setattr(check_requires, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_requires, "SRC", tmp_path / "src")
+    monkeypatch.setattr(check_requires, "INSTRUCTIONS_DIR", instructions)
+    monkeypatch.setattr(check_requires, "load_resource_keys", lambda: {"skills/foo-skill"})
+
+    assert check_requires.main() == 1
+    captured = capsys.readouterr()
+    assert "requires 'skills/missing'" in captured.out
+    assert "1 requires finding(s)" in captured.err
+    assert "inspected" not in captured.out
+
+
 def test_shipped_instructions_declare_every_reference() -> None:
     """Every shipped instruction requires each resource it names."""
     known = check_requires.load_resource_keys()
