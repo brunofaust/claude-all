@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
-"""Gate: relative markdown links resolve and every resource is linked from the README.
+"""Gate: relative Markdown links resolve and every resource is linked from the README.
 
-Vendored files are exempt from the link check (kept byte-identical to upstream);
-their `local_only` sidecars stay checked. README links are the proxy for "documented".
-
-With `--json`, stdout contains one object with `passed`, `counts` (`markdown_files_scanned`
-actually read and checked, `links_resolved` valid relative links, `resources_checked`,
-`vendored_files_skipped`), `broken_links` (objects with `file`, `target`, `resolved_path`),
-and `unlinked_resources` (resource paths). Missing tracked files are not scanned; links
-resolved counts successful checks only.
+Vendored files are exempt; their `local_only` sidecars remain checked. README links
+proxy for documentation. `--json` emits one object: `passed` (bool), `counts` with
+`markdown_files_scanned` (read and checked), `links_resolved` (successful checks),
+`resources_checked`, and `vendored_files_skipped`; `broken_links` (each has `file`,
+`target`, `resolved_path`) and `unlinked_resources` (paths). Missing tracked files
+are not scanned.
 """
 
 import json
