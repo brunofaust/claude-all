@@ -109,7 +109,7 @@ class TestCheckRequires(unittest.TestCase):
                     sys.stderr = old_stderr
 
                 # Restore the patch.
-                check_requires.load_resource_keys = original_load
+                check_requires.load_resource_keys = original_load  # type: ignore[attr-defined]
 
                 # Assertions.
                 self.assertEqual(exit_code, 0)
@@ -137,8 +137,8 @@ class TestCheckRequires(unittest.TestCase):
                 # We do not create any manifest files.
 
                 # Monkey-patch load_resource_keys to avoid actual discover
-                original_load = check_requires.load_resource_keys
-                check_requires.load_resource_keys = lambda: set()
+                original_load = check_requires.load_resource_keys  # type: ignore[attr-defined]
+                check_requires.load_resource_keys = lambda: set()  # type: ignore[attr-defined]
 
                 # Capture stdout and stderr.
                 stdout_capture = io.StringIO()
@@ -164,8 +164,11 @@ class TestCheckRequires(unittest.TestCase):
                 stderr_output = stderr_capture.getvalue().strip()
                 # Expect the error message about zero manifests.
                 search_path = str(check_requires.SRC / "claude_all")
-                msg = "Error: Zero manifests discovered (looked for 'claude-all.json' and '*.claude-all.json'"
-                msg += f" under {search_path})"
+                msg = (
+                    "Error: Zero manifests discovered (looked for 'claude-all.json' and "
+                    "'*.claude-all.json' under "
+                )
+                msg += f"{search_path})"
                 expected_error = msg
                 self.assertEqual(stderr_output, expected_error)
             finally:
@@ -196,8 +199,10 @@ class TestCheckRequires(unittest.TestCase):
 
                 # Monkey-patch load_resource_keys to return a known set that does
                 # not include the missing require.
-                original_load = check_requires.load_resource_keys
-                check_requires.load_resource_keys = lambda: set()  # empty set
+                original_load = check_requires.load_resource_keys  # type: ignore[attr-defined]
+                check_requires.load_resource_keys = lambda: (
+                    set()
+                )  # empty set  # type: ignore[attr-defined]
 
                 # Capture stdout and stderr.
                 stdout_capture = io.StringIO()
@@ -234,9 +239,9 @@ class TestCheckRequires(unittest.TestCase):
                 # We do not expect the summary line because there were findings.
                 self.assertNotIn("Inspected", stdout_output)
             finally:
-                check_requires.REPO_ROOT = original_repo_root
-                check_requires.SRC = original_src
-                check_requires.INSTRUCTIONS_DIR = original_instructions_dir
+                check_requires.REPO_ROOT = original_repo_root  # type: ignore[attr-defined]
+                check_requires.SRC = original_src  # type: ignore[attr-defined]
+                check_requires.INSTRUCTIONS_DIR = original_instructions_dir  # type: ignore[attr-defined]
 
 
 if __name__ == "__main__":
