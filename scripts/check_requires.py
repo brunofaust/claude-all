@@ -13,17 +13,24 @@ import re
 import sys
 from pathlib import Path
 
+print("DEBUG: top of script", file=sys.stderr, flush=True)
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SRC = REPO_ROOT / "src"
 INSTRUCTIONS_DIR = SRC / "claude_all" / "instructions"
 CODE_SPAN = re.compile(r"`([^`\s]+)`")
 
+print("DEBUG: after global definitions", file=sys.stderr, flush=True)
+
 
 def load_resource_keys() -> set[str]:
     """Return every installable resource key (``kind/name``) via the installer."""
+    print("DEBUG: in load_resource_keys", file=sys.stdout, flush=True)
     sys.path.insert(0, str(SRC))
+    print("DEBUG: after sys.path insert", file=sys.stdout, flush=True)
     from claude_all.cli import discover, state_key
 
+    print("DEBUG: import succeeded", file=sys.stdout, flush=True)
     return {state_key(it.kind, it.name) for it in discover([])}
 
 
@@ -89,6 +96,20 @@ def find_undeclared_instruction_refs(
 
 def main() -> int:
     """CLI entry point — print findings to stdout, exit 1 on any."""
+    # Debug: print sys.path and check for claude_all
+    print(f"DEBUG: sys.path = {sys.path}", file=sys.stderr, flush=True)
+    print(f"DEBUG: REPO_ROOT = {REPO_ROOT}", file=sys.stderr, flush=True)
+    print(f"DEBUG: SRC = {SRC}", file=sys.stderr, flush=True)
+    print(f"DEBUG: SRC exists = {SRC.exists()}", file=sys.stderr, flush=True)
+    claude_all_dir = SRC / "claude_all"
+    print(f"DEBUG: claude_all_dir = {claude_all_dir}", file=sys.stderr, flush=True)
+    print(f"DEBUG: claude_all_dir exists = {claude_all_dir.exists()}", file=sys.stderr, flush=True)
+    if claude_all_dir.exists():
+        print(
+            f"DEBUG: claude_all_dir contents = {list(claude_all_dir.iterdir())}",
+            file=sys.stderr,
+            flush=True,
+        )
     known = load_resource_keys()
     violation_findings, violation_count = find_violations(known)
     instruction_findings, instruction_count = find_undeclared_instruction_refs(known)

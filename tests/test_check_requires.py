@@ -93,7 +93,16 @@ def state_key(kind, name):
 """.strip()
     src_dir = tmp_path / "src" / "claude_all"
     src_dir.mkdir(parents=True)
+    (src_dir / "__init__.py").write_text("", encoding="utf-8")
     (src_dir / "cli.py").write_text(cli_content, encoding="utf-8")
+    # Debug: check that we can import the fake cli module
+    print(f"DEBUG: src_dir = {src_dir}", file=sys.stderr)
+    print(f"DEBUG: cli_content = {cli_content!r}", file=sys.stderr)
+    sys.path.insert(0, str(src_dir.parent))  # src_dir.parent is tmp_path/src
+    try:
+        print("DEBUG: fake cli import succeeded in test", file=sys.stderr)
+    except Exception as e:
+        print(f"DEBUG: fake cli import failed in test: {e}", file=sys.stderr)
 
     # Create a manifest for an agent that requires the skill
     agent_dir = src_dir / "agents" / "test-agent"
@@ -157,6 +166,7 @@ def state_key(kind, name):
 """.strip()
     src_dir = tmp_path / "src" / "claude_all"
     src_dir.mkdir(parents=True)
+    (src_dir / "__init__.py").write_text("", encoding="utf-8")
     (src_dir / "cli.py").write_text(cli_content, encoding="utf-8")
     # No manifests or instruction snippets created -> zero units inspected
 
@@ -200,6 +210,7 @@ def state_key(kind, name):
 """.strip()
     src_dir = tmp_path / "src" / "claude_all"
     src_dir.mkdir(parents=True)
+    (src_dir / "__init__.py").write_text("", encoding="utf-8")
     (src_dir / "cli.py").write_text(cli_content, encoding="utf-8")
 
     # Create a manifest with a dangling requires
