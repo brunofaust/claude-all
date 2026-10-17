@@ -141,7 +141,150 @@ class TestCheckLinks:
         # tracked-but-deleted file must be skipped, not crash read_text()
         missing = tmp_path / "GONE.md"
         monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [missing])
-        assert check_links(registry=[]) == []
+        findings, broken_links, counts = check_links(registry=[])
+        assert findings == []
+        assert broken_links == []
+        assert counts["markdown_files_scanned"] == 0
+
+
+def test_main_json_clean_report(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    import check_md_links
+
+    monkeypatch.setattr(
+        check_md_links,
+        "check_links",
+        lambda registry: (
+            [],
+            [],
+            {
+                "markdown_files_scanned": 2,
+                "links_resolved": 3,
+                "vendored_files_skipped": 1,
+            },
+        ),
+    )
+    monkeypatch.setattr(check_md_links, "check_readme_coverage", lambda: ([], [], 4))
+    monkeypatch.setattr(sys, "argv", ["check_md_links.py", "--json"])
+    assert check_md_links.main() == 0
+    output = capsys.readouterr()
+    assert output.err == ""
+    assert json.loads(output.out) == {
+        "passed": True,
+        "counts": {
+            "markdown_files_scanned": 2,
+            "links_resolved": 3,
+            "vendored_files_skipped": 1,
+            "resources_checked": 4,
+        },
+        "broken_links": [],
+        "unlinked_resources": [],
+    }
+
+
+def test_main_json_findings(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    import check_md_links
+
+    broken = {"file": "docs/a.md", "target": "missing.md", "resolved_path": "docs/missing.md"}
+    monkeypatch.setattr(
+        check_md_links,
+        "check_links",
+        lambda registry: (
+            ["docs/a.md:1: broken-link -> missing.md"],
+            [broken],
+            {"markdown_files_scanned": 1, "links_resolved": 0, "vendored_files_skipped": 0},
+        ),
+    )
+    monkeypatch.setattr(
+        check_md_links,
+        "check_readme_coverage",
+        lambda: (
+            ["README.md: undocumented -> skill/x (add a row linking src/x/SKILL.md)"],
+            ["src/x/SKILL.md"],
+            1,
+        ),
+    )
+    monkeypatch.setattr(sys, "argv", ["check_md_links.py", "--json"])
+    assert check_md_links.main() == 1
+    output = capsys.readouterr()
+    report = json.loads(output.out)
+    assert report["passed"] is False
+    assert report["broken_links"] == [broken]
+    assert report["unlinked_resources"] == ["src/x/SKILL.md"]
+    assert report["counts"]["links_resolved"] == 0
+    assert output.err == ""
+
+
+def test_main_default_output_unchanged(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    import check_md_links
+
+    monkeypatch.setattr(
+        check_md_links,
+        "check_links",
+        lambda registry: (
+            ["docs/a.md:1: broken-link -> missing.md"],
+            [],
+            {"markdown_files_scanned": 1, "links_resolved": 0, "vendored_files_skipped": 0},
+        ),
+    )
+    monkeypatch.setattr(check_md_links, "check_readme_coverage", lambda: ([], [], 1))
+    monkeypatch.setattr(sys, "argv", ["check_md_links.py"])
+    assert check_md_links.main() == 1
+    output = capsys.readouterr()
+    assert output.out == "docs/a.md:1: broken-link -> missing.md\n"
+    assert output.err == "\n1 finding(s).\n"
+
+
+def test_json_unlinked_resource_and_exit_code_parity(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    import check_md_links
+
+    monkeypatch.setattr(
+        check_md_links,
+        "check_links",
+        lambda registry: (
+            [],
+            [],
+            {
+                "markdown_files_scanned": 1,
+                "links_resolved": 2,
+                "vendored_files_skipped": 0,
+            },
+        ),
+    )
+    monkeypatch.setattr(
+        check_md_links,
+        "check_readme_coverage",
+        lambda: (["README.md: undocumented -> skill/x"], ["src/x/SKILL.md"], 1),
+    )
+
+    monkeypatch.setattr(sys, "argv", ["check_md_links.py", "--json"])
+    json_status = check_md_links.main()
+    json_output = capsys.readouterr()
+    report = json.loads(json_output.out)
+    assert report["passed"] is False
+    assert report["unlinked_resources"] == ["src/x/SKILL.md"]
+    assert json_status == 1
+
+    monkeypatch.setattr(sys, "argv", ["check_md_links.py"])
+    human_status = check_md_links.main()
+    human_output = capsys.readouterr()
+    assert human_status == json_status
+    assert human_output.out == "README.md: undocumented -> skill/x\n"
+
+
+def test_json_report_shape_is_documented() -> None:
+    """The machine output schema remains described alongside the gate."""
+    from check_md_links import __doc__
+
+    assert "markdown_files_scanned" in __doc__
+    assert "broken_links" in __doc__
 
 
 def test_non_vendored_routes_use_discoverable_skill_names() -> None:
