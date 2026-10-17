@@ -244,6 +244,29 @@ class TestCheckLinks:
         assert output.out == "sample.md:1: broken-link -> missing.md\n"
         assert output.err == "\n1 finding(s).\n"
 
+    def test_json_and_default_modes_return_same_exit_code(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        (tmp_path / "vendored.json").write_text('{"vendored": []}')
+        monkeypatch.setattr(check_md_links, "ROOT", tmp_path)
+        monkeypatch.setattr(
+            check_md_links,
+            "collect_link_results",
+            lambda _: ([("sample.md:1: broken-link -> missing.md", {})], {}),
+        )
+        monkeypatch.setattr(check_md_links, "check_readme_coverage", lambda: [])
+        monkeypatch.setattr(check_md_links, "unlinked_resources", lambda _: [])
+        monkeypatch.setattr("claude_all.cli.discover", lambda _: [])
+
+        default_code = check_md_links.main([])
+        capsys.readouterr()
+        json_code = check_md_links.main(["--json"])
+        output = capsys.readouterr()
+
+        assert default_code == json_code == 1
+        assert json.loads(output.out)["passed"] is False
+        assert output.err == ""
+
     def test_structured_results_report_broken_links_and_counts(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
