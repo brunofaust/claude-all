@@ -27,8 +27,10 @@ def load_resource_keys() -> set[str]:
     return {state_key(it.kind, it.name) for it in discover([])}
 
 
-def find_violations(known: set[str]) -> list[str]:
+def find_violations(known: set[str]) -> tuple[list[str], int]:
+    """Return (findings, count) where count is the number of dependencies inspected."""
     findings: list[str] = []
+    count = 0
     for manifest in sorted((SRC / "claude_all").rglob("claude-all.json")) + sorted(
         (SRC / "claude_all").rglob("*.claude-all.json")
     ):
@@ -43,6 +45,7 @@ def find_violations(known: set[str]) -> list[str]:
             findings.append(f"{rel}: `requires` must be a list of 'kind/name' strings")
             continue
         for dep in requires:
+            count += 1
             if not isinstance(dep, str):
                 findings.append(f"{rel}: non-string dependency {dep!r}")
             elif dep not in known:
@@ -50,16 +53,18 @@ def find_violations(known: set[str]) -> list[str]:
                     f"{rel}: requires '{dep}' — no such resource (renamed/deleted? "
                     "a built-in like /code-review does not belong in requires)"
                 )
-    return findings
+    return findings, count
 
 
 def find_undeclared_instruction_refs(
     known: set[str], instructions_dir: Path = INSTRUCTIONS_DIR
-) -> list[str]:
+) -> tuple[list[str], int]:
+    """Return (findings, count) where count is the number of instruction tokens inspected."""
     keys_by_name: dict[str, set[str]] = {}
     for key in known:
         keys_by_name.setdefault(key.split("/", 1)[1], set()).add(key)
     findings: list[str] = []
+    count = 0
     for snippet in sorted(instructions_dir.glob("*/claude_md.md")):
         manifest = snippet.parent / "claude-all.json"
         declared: set[str] = set()
@@ -72,21 +77,34 @@ def find_undeclared_instruction_refs(
         rel = snippet.relative_to(instructions_dir.parent)
         for token in sorted(set(CODE_SPAN.findall(snippet.read_text(encoding="utf-8")))):
             candidates = keys_by_name.get(token, set()) - {own}
-            if candidates and not candidates & declared:
-                findings.append(
-                    f"{rel}: names `{token}` but its claude-all.json does not require "
-                    + " or ".join(sorted(candidates))
-                )
-    return findings
+            if candidates:
+                count += 1
+                if not candidates & declared:
+                    findings.append(
+                        f"{rel}: names `{token}` but its claude-all.json does not require "
+                        + " or ".join(sorted(candidates))
+                    )
+    return findings, count
 
 
 def main() -> int:
     """CLI entry point — print findings to stdout, exit 1 on any."""
     known = load_resource_keys()
-    findings = find_violations(known) + find_undeclared_instruction_refs(known)
-    for finding in findings:
-        print(finding)
+    violation_findings, violation_count = find_violations(known)
+    instruction_findings, instruction_count = find_undeclared_instruction_refs(known)
+    findings = violation_findings + instruction_findings
+    total_count = violation_count + instruction_count
+
+    if total_count == 0:
+        print(
+            "Error: dependency scan matched zero files — no resources discovered.",
+            file=sys.stderr,
+        )
+        return 1
+
     if findings:
+        for finding in findings:
+            print(finding)
         print(
             f"\n{len(findings)} requires finding(s) — a dependency manifest points at a "
             "resource the installer cannot discover, or an instruction names one it "
@@ -94,6 +112,8 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
+
+    print(f"Inspected {total_count} units")
     return 0
 
 
