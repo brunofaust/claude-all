@@ -18,6 +18,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
+import check_md_links as gate_module
 from check_md_links import (
     CODE_SPAN,
     LINK,
@@ -141,7 +142,181 @@ class TestCheckLinks:
         # tracked-but-deleted file must be skipped, not crash read_text()
         missing = tmp_path / "GONE.md"
         monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [missing])
-        assert check_links(registry=[]) == []
+        report = check_links(registry=[])
+        assert report.broken == []
+        assert report.scanned == 0
+
+
+def _make_tree(tmp_path: Path, files: dict[str, str]) -> list[Path]:
+    """Write a fake repo under tmp_path and return its markdown paths."""
+    (tmp_path / "vendored.json").write_text('{"vendored": []}')
+    for name, text in files.items():
+        path = tmp_path / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text)
+    return [tmp_path / name for name in files if name.endswith(".md")]
+
+
+@pytest.fixture
+def gate(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    """check_md_links pointed at a fake repo; README coverage is controlled per test."""
+    monkeypatch.setattr(gate_module, "ROOT", tmp_path)
+    monkeypatch.setattr(gate_module, "check_readme_coverage", lambda: ([], 0))
+    return gate_module
+
+
+class TestMainOutput:
+    def test_json_clean_tree(
+        self,
+        gate,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        mds = _make_tree(
+            tmp_path,
+            {"README.md": "[self](README.md)\n", "docs/a.md": "[ext](https://example.com)\n"},
+        )
+        monkeypatch.setattr(gate, "tracked_markdown", lambda: mds)
+        monkeypatch.setattr(sys, "argv", ["check_md_links.py", "--json"])
+
+        assert gate.main() == 0
+        out = capsys.readouterr().out
+        payload = json.loads(out)  # stdout must be exactly one JSON object
+        assert payload["ok"] is True
+        assert payload["error"] is None
+        assert payload["broken_links"] == []
+        assert payload["unlinked_resources"] == []
+        assert payload["counts"]["markdown_scanned"] == 2
+        assert payload["counts"]["links_checked"] == 1  # README.md only; URL skipped
+
+    def test_json_broken_link(
+        self,
+        gate,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        mds = _make_tree(tmp_path, {"src/a/b.md": "ok\n[x](../gone.md)\n"})
+        monkeypatch.setattr(gate, "tracked_markdown", lambda: mds)
+        monkeypatch.setattr(sys, "argv", ["check_md_links.py", "--json"])
+
+        assert gate.main() == 1
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["ok"] is False
+        assert payload["broken_links"] == [
+            {
+                "file": "src/a/b.md",
+                "line": 2,
+                "target": "../gone.md",
+                "resolved": "src/gone.md",
+            }
+        ]
+        # A broken link is reported, not counted as a link that resolved.
+        assert payload["counts"]["links_checked"] == 0
+        assert payload["unlinked_resources"] == []
+
+    def test_json_unlinked_resource(
+        self,
+        gate,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        mds = _make_tree(tmp_path, {"README.md": "nothing linked\n"})
+        monkeypatch.setattr(gate, "tracked_markdown", lambda: mds)
+        unlinked = [gate.UnlinkedResource("skill", "my-skill", tmp_path / "src/x/SKILL.md")]
+        monkeypatch.setattr(gate, "check_readme_coverage", lambda: (unlinked, 3))
+        monkeypatch.setattr(sys, "argv", ["check_md_links.py", "--json"])
+
+        assert gate.main() == 1
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["ok"] is False
+        assert payload["unlinked_resources"] == [
+            {"kind": "skill", "name": "my-skill", "path": "src/x/SKILL.md"}
+        ]
+        assert payload["counts"]["resources_checked"] == 3
+
+    def test_default_output_unchanged(
+        self,
+        gate,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        mds = _make_tree(tmp_path, {"src/a/b.md": "[x](../gone.md)\n"})
+        monkeypatch.setattr(gate, "tracked_markdown", lambda: mds)
+        unlinked = [gate.UnlinkedResource("skill", "my-skill", tmp_path / "src/x/SKILL.md")]
+        monkeypatch.setattr(gate, "check_readme_coverage", lambda: (unlinked, 3))
+        monkeypatch.setattr(sys, "argv", ["check_md_links.py"])
+
+        assert gate.main() == 1
+        captured = capsys.readouterr()
+        assert captured.out == (
+            "src/a/b.md:1: broken-link -> ../gone.md\n"
+            "README.md: undocumented -> skill/my-skill "
+            "(add a row linking src/x/SKILL.md)\n"
+        )
+        assert captured.err == "\n2 finding(s).\n"
+
+    def test_default_clean_tree_exits_zero_silently(
+        self,
+        gate,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        mds = _make_tree(tmp_path, {"README.md": "clean\n"})
+        monkeypatch.setattr(gate, "tracked_markdown", lambda: mds)
+        monkeypatch.setattr(sys, "argv", ["check_md_links.py"])
+
+        assert gate.main() == 0
+        assert capsys.readouterr().out == ""
+
+    def test_json_vendored_files_are_counted_not_scanned(
+        self,
+        gate,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        mds = _make_tree(
+            tmp_path,
+            {"README.md": "clean\n", "vendor/x/SKILL.md": "[up](../../nowhere.md)\n"},
+        )
+        (tmp_path / "vendored.json").write_text(
+            '{"vendored": [{"path": "vendor/x", "vendor_mode": "dir"}]}'
+        )
+        monkeypatch.setattr(gate, "tracked_markdown", lambda: mds)
+        monkeypatch.setattr(sys, "argv", ["check_md_links.py", "--json"])
+
+        assert gate.main() == 0
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["ok"] is True
+        assert payload["broken_links"] == []
+        assert payload["counts"]["vendored_skipped"] == 1
+        assert payload["counts"]["markdown_scanned"] == 1
+        assert payload["counts"]["links_checked"] == 0
+
+    def test_json_internal_error_prints_error_object(
+        self,
+        gate,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        _make_tree(tmp_path, {"README.md": "clean\n"})
+
+        def boom() -> list[Path]:
+            raise RuntimeError("boom")
+
+        monkeypatch.setattr(gate, "tracked_markdown", boom)
+        monkeypatch.setattr(sys, "argv", ["check_md_links.py", "--json"])
+
+        assert gate.main() == 1
+        captured = capsys.readouterr()
+        assert json.loads(captured.out) == {"ok": False, "error": "RuntimeError: boom"}
+        assert "check_md_links: RuntimeError: boom" in captured.err
 
 
 def test_non_vendored_routes_use_discoverable_skill_names() -> None:
