@@ -103,7 +103,7 @@ def _tree(tmp_path: Path, manifest_requires: list[str] | None) -> tuple[Path, Pa
 
 
 def test_success_prints_scanned_count_and_exits_zero(tmp_path: Path) -> None:
-    """A clean run exits 0 and prints one greppable ``scanned=N`` line on stderr.
+    """A clean run exits 0 and prints one ``scanned=N`` line to stderr.
 
     Args:
         tmp_path: pytest's per-test temporary directory.
@@ -136,7 +136,7 @@ def test_zero_manifests_is_cannot_check(tmp_path: Path) -> None:
 
 
 def test_zero_instruction_snippets_is_cannot_check(tmp_path: Path) -> None:
-    """No instruction snippet matched ``*/claude_md.md`` → exit 2 naming that pattern.
+    """No snippet matched ``*/claude_md.md`` → exit 2 naming that pattern.
 
     Args:
         tmp_path: pytest's per-test temporary directory.
@@ -153,7 +153,7 @@ def test_zero_instruction_snippets_is_cannot_check(tmp_path: Path) -> None:
 
 
 def test_dangling_requires_still_fails_with_exit_one(tmp_path: Path) -> None:
-    """A genuine dangling ``requires`` entry still exits 1 with the unchanged finding.
+    """A dangling ``requires`` entry still exits 1 with its finding.
 
     Args:
         tmp_path: pytest's per-test temporary directory.
@@ -168,7 +168,7 @@ def test_dangling_requires_still_fails_with_exit_one(tmp_path: Path) -> None:
 
 
 def test_empty_installer_discovery_is_cannot_check(tmp_path: Path) -> None:
-    """An installer that discovers no resources cannot resolve anything → exit 2.
+    """An installer that discovers nothing cannot resolve anything → exit 2.
 
     Args:
         tmp_path: pytest's per-test temporary directory.
@@ -184,7 +184,7 @@ def test_empty_installer_discovery_is_cannot_check(tmp_path: Path) -> None:
 
 
 def test_dangling_requires_with_empty_installer_still_exits_one(tmp_path: Path) -> None:
-    """A dangling entry keeps exit 1 even when the installer discovers nothing.
+    """A dangling entry keeps exit 1 even when the installer finds nothing.
 
     Args:
         tmp_path: pytest's per-test temporary directory.
@@ -199,7 +199,7 @@ def test_dangling_requires_with_empty_installer_still_exits_one(tmp_path: Path) 
 
 
 def test_undeclared_instruction_reference_still_fails_with_exit_one(tmp_path: Path) -> None:
-    """An instruction naming an undeclared resource still exits 1 with its finding.
+    """An undeclared instruction reference still exits 1 with its finding.
 
     Args:
         tmp_path: pytest's per-test temporary directory.
