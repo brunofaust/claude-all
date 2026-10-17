@@ -1,1 +1,0 @@
-Before editing, verify repo, branch and worktree. Primary checkout on main/master: create a task worktree first. No shared-tree stash/reset/checkout/clean; scope writes to paths. Only explicit opt-out permits main edits (`CLAUDE_ALL_ALLOW_MAIN_EDITS=1`).

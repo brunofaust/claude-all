@@ -1,1 +1,0 @@
-Never print secrets or embed values in commands. Use dedicated agents; otherwise fetch from a secret store at point of use into the consumer's environment, not files/logs. Keychain reads only in captured substitution; user provisions secrets. Never echo user-exported secrets. Keep app settings in its config layer.

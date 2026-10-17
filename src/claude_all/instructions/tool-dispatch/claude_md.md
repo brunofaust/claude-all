@@ -1,1 +1,0 @@
-Delegate operations to matching agents; fix failed preconditions and retry, never bypass. Multi-service probes: `e2e-scenario-runner`. Prefer native file tools; shell only when needed. Use available semantic search for concepts/history, exact search for strings, current library docs for APIs.

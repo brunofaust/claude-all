@@ -3,7 +3,7 @@
 
 Also checks that resources named by an instruction snippet are in its `requires`.
 Targets are resolved via the installer's own `discover()`, never re-derived here.
-Exit 0 = all resolve, 1 = dangling/malformed entry.
+Exit 0 = all resolve, 1 = dangling/malformed entry, 2 = zero discovery.
 """
 
 from __future__ import annotations
@@ -83,6 +83,35 @@ def find_undeclared_instruction_refs(
 def main() -> int:
     """CLI entry point — print findings to stdout, exit 1 on any."""
     known = load_resource_keys()
+
+    # Count manifests and snippets
+    manifest_paths = list(
+        sorted((SRC / "claude_all").rglob("claude-all.json"))
+        + sorted((SRC / "claude_all").rglob("*.claude-all.json"))
+    )
+    snippet_paths = sorted(INSTRUCTIONS_DIR.glob("*/claude_md.md"))
+    manifest_count = len(manifest_paths)
+    snippet_count = len(snippet_paths)
+    total_units = manifest_count + snippet_count
+
+    if total_units == 0:
+        # We have zero manifests and zero snippets -> failure
+        if manifest_count == 0 and snippet_count == 0:
+            sys.stderr.write(
+                "No manifests found via rglob('claude-all.json') or rglob('*.claude-all.json') "
+                "and no instruction snippets found via glob('*/claude_md.md')\n"
+            )
+        elif manifest_count == 0:
+            sys.stderr.write(
+                "No manifests found via rglob('claude-all.json') or rglob('*.claude-all.json')\n"
+            )
+        else:  # snippet_count == 0
+            sys.stderr.write("No instruction snippets found via glob('*/claude_md.md')\n")
+        return 2
+
+    # Print the inspection summary
+    print(f"inspected={manifest_count} manifests and {snippet_count} instruction snippets")
+
     findings = find_violations(known) + find_undeclared_instruction_refs(known)
     for finding in findings:
         print(finding)
