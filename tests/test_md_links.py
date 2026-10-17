@@ -12,20 +12,21 @@ from __future__ import annotations
 import json
 import re
 import sys
+import unittest
 from pathlib import Path
-
-import pytest
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from check_md_links import (
     CODE_SPAN,
     LINK,
     check_links,
+    check_readme_coverage,
     is_vendored,
     strip_code_blocks,
 )
-from vendor_sync import clone_upstream
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -141,7 +142,10 @@ class TestCheckLinks:
         # tracked-but-deleted file must be skipped, not crash read_text()
         missing = tmp_path / "GONE.md"
         monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [missing])
-        assert check_links(registry=[]) == []
+        assert check_links(registry=[]) == (
+            [],
+            {"markdown_files_scanned": 0, "links_resolved": 0, "files_skipped_vendored": 0},
+        )
 
 
 def test_non_vendored_routes_use_discoverable_skill_names() -> None:
@@ -179,20 +183,10 @@ def test_readme_uses_vendored_skill_frontmatter_names() -> None:
     """README labels match the Claude frontmatter names users can invoke."""
     registry = json.loads((ROOT / "vendored.json").read_text(encoding="utf-8"))["vendored"]
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    findings: list[str] = []
-    for entry in registry:
-        if entry.get("kind") != "skill" or entry.get("vendor_mode") != "dir":
-            continue
-        skill_path = ROOT / entry["path"] / "SKILL.md"
-        frontmatter_name = next(
-            line.removeprefix("name:").strip()
-            for line in skill_path.read_text(encoding="utf-8").splitlines()
-            if line.startswith("name:")
-        )
-        if f"[{frontmatter_name}]({entry['path']}/SKILL.md)" not in readme:
-            findings.append(frontmatter_name)
-
-    assert findings == []
+    findings, _ = check_readme_coverage()
+    # Convert findings back to the expected format for this test
+    finding_names = [f"{finding['kind']}/{finding['name']}" for finding in findings]
+    assert finding_names == []
 
 
 def test_vendored_local_only_entries_exist() -> None:
@@ -218,3 +212,182 @@ def test_claude_hook_examples_use_timeout_seconds() -> None:
                 findings.append(f"{path.relative_to(ROOT)}: timeout={value}")
 
     assert findings == []
+
+
+class TestJsonOutput(unittest.TestCase):
+    def setUp(self):
+        self.registry = []
+
+    @patch("check_md_links.tracked_markdown")
+    @patch("check_md_links.is_vendored")
+    @patch("claude_all.cli.discover")
+    def test_json_output_clean_tree(self, mock_discover, mock_is_vendored, mock_tracked_markdown):
+        # Mock a clean tree with no findings
+        mock_tracked_markdown.return_value = [Path("test.md")]
+        mock_is_vendored.return_value = False
+        mock_discover.return_value = []
+
+        # Mock file content with no links
+        with patch("builtins.open", unittest.mock.mock_open(read_data="")):
+            with patch("pathlib.Path.exists", return_value=True):
+                with patch("pathlib.Path.read_text", return_value=""):
+                    # Capture stdout
+                    import io
+                    import sys
+
+                    import check_md_links
+
+                    old_stdout = sys.stdout
+                    sys.stdout = io.StringIO()
+
+                    try:
+                        # Test JSON output
+                        check_md_links.main(["--json"])
+                        output = sys.stdout.getvalue()
+                        result = json.loads(output)
+
+                        # Verify JSON structure
+                        self.assertTrue(result["passed"])
+                        self.assertEqual(result["markdown_files_scanned"], 1)
+                        self.assertEqual(result["links_resolved"], 0)
+                        self.assertEqual(result["resources_checked"], 0)
+                        self.assertEqual(result["files_skipped_vendored"], 0)
+                        self.assertEqual(result["broken_links"], [])
+                        self.assertEqual(result["unlinked_resources"], [])
+                    finally:
+                        sys.stdout = old_stdout
+
+    @patch("check_md_links.tracked_markdown")
+    @patch("check_md_links.is_vendored")
+    @patch("claude_all.cli.discover")
+    def test_json_output_with_broken_link(
+        self, mock_discover, mock_is_vendored, mock_tracked_markdown
+    ):
+        # Mock a file with a broken link
+        mock_tracked_markdown.return_value = [Path("test.md")]
+        mock_is_vendored.return_value = False
+        mock_discover.return_value = []
+
+        # Mock file content with a broken link
+        with patch("builtins.open", unittest.mock.mock_open(read_data="[link](nonexistent.md)")):
+            with patch("pathlib.Path.exists", return_value=True):
+                with patch("pathlib.Path.read_text", return_value="[link](nonexistent.md)"):
+                    with patch(
+                        "pathlib.Path.resolve", return_value=Path("/fake/path/nonexistent.md")
+                    ):
+                        # Capture stdout
+                        import io
+                        import sys
+
+                        import check_md_links
+
+                        old_stdout = sys.stdout
+                        sys.stdout = io.StringIO()
+
+                        try:
+                            # Test JSON output
+                            check_md_links.main(["--json"])
+                            output = sys.stdout.getvalue()
+                            result = json.loads(output)
+
+                            # Verify JSON structure
+                            self.assertFalse(result["passed"])
+                            self.assertEqual(result["markdown_files_scanned"], 1)
+                            self.assertEqual(result["links_resolved"], 1)
+                            self.assertEqual(result["resources_checked"], 0)
+                            self.assertEqual(result["files_skipped_vendored"], 0)
+                            self.assertEqual(len(result["broken_links"]), 1)
+                            broken_link = result["broken_links"][0]
+                            self.assertEqual(broken_link["file"], "test.md")
+                            self.assertEqual(broken_link["line"], 1)
+                            self.assertEqual(broken_link["target"], "nonexistent.md")
+                            self.assertEqual(result["unlinked_resources"], [])
+                        finally:
+                            sys.stdout = old_stdout
+
+    @patch("check_md_links.tracked_markdown")
+    @patch("check_md_links.is_vendored")
+    @patch("claude_all.cli.discover")
+    def test_json_output_with_unlinked_resource(
+        self, mock_discover, mock_is_vendored, mock_tracked_markdown
+    ):
+        # Mock a clean link check but with unlinked resource
+        mock_tracked_markdown.return_value = [Path("test.md")]
+        mock_is_vendored.return_value = False
+
+        # Mock file content with no links
+        with patch("builtins.open", unittest.mock.mock_open(read_data="")):
+            with patch("pathlib.Path.exists", return_value=True):
+                with patch("pathlib.Path.read_text", return_value=""):
+                    # Mock discover to return a resource
+                    mock_item = unittest.mock.MagicMock()
+                    mock_item.kind = "skill"
+                    mock_item.name = "test-skill"
+                    mock_item.src = Path("src/test/skill/SKILL.md")
+                    mock_discover.return_value = [mock_item]
+
+                    # Capture stdout
+                    import io
+                    import sys
+
+                    import check_md_links
+
+                    old_stdout = sys.stdout
+                    sys.stdout = io.StringIO()
+
+                    try:
+                        # Test JSON output
+                        check_md_links.main(["--json"])
+                        output = sys.stdout.getvalue()
+                        result = json.loads(output)
+
+                        # Verify JSON structure
+                        self.assertFalse(result["passed"])
+                        self.assertEqual(result["markdown_files_scanned"], 1)
+                        self.assertEqual(result["links_resolved"], 0)
+                        self.assertEqual(result["resources_checked"], 1)
+                        self.assertEqual(result["files_skipped_vendored"], 0)
+                        self.assertEqual(result["broken_links"], [])
+                        self.assertEqual(len(result["unlinked_resources"]), 1)
+                        resource = result["unlinked_resources"][0]
+                        self.assertEqual(resource["kind"], "skill")
+                        self.assertEqual(resource["name"], "test-skill")
+                        self.assertEqual(resource["src"], "src/test/skill/SKILL.md")
+                    finally:
+                        sys.stdout = old_stdout
+
+    @patch("check_md_links.tracked_markdown")
+    @patch("check_md_links.is_vendored")
+    @patch("claude_all.cli.discover")
+    def test_default_output_unchanged(self, mock_discover, mock_is_vendored, mock_tracked_markdown):
+        # Test that default (non-JSON) output is unchanged
+        mock_tracked_markdown.return_value = [Path("test.md")]
+        mock_is_vendored.return_value = False
+        mock_discover.return_value = []
+
+        # Mock file content with a broken link
+        with patch("builtins.open", unittest.mock.mock_open(read_data="[link](nonexistent.md)")):
+            with patch("pathlib.Path.exists", return_value=True):
+                with patch("pathlib.Path.read_text", return_value="[link](nonexistent.md)"):
+                    with patch(
+                        "pathlib.Path.resolve", return_value=Path("/fake/path/nonexistent.md")
+                    ):
+                        # Capture stdout
+                        import io
+                        import sys
+
+                        import check_md_links
+
+                        old_stdout = sys.stdout
+                        sys.stdout = io.StringIO()
+
+                        try:
+                            # Test default output (no --json flag)
+                            check_md_links.main([])
+                            output = sys.stdout.getvalue()
+
+                            # Should contain human-readable format
+                            self.assertIn("test.md:1: broken-link -> nonexistent.md", output)
+                            self.assertIn("\n1 finding(s).", output)
+                        finally:
+                            sys.stdout = old_stdout
