@@ -19,6 +19,12 @@ INSTRUCTIONS_DIR = SRC / "claude_all" / "instructions"
 CODE_SPAN = re.compile(r"`([^`\s]+)`")
 
 
+def discover_manifests() -> list[Path]:
+    """Return dependency manifests inspected by this gate."""
+    root = SRC / "claude_all"
+    return sorted(root.rglob("claude-all.json")) + sorted(root.rglob("*.claude-all.json"))
+
+
 def load_resource_keys() -> set[str]:
     """Return every installable resource key (``kind/name``) via the installer."""
     sys.path.insert(0, str(SRC))
@@ -27,11 +33,9 @@ def load_resource_keys() -> set[str]:
     return {state_key(it.kind, it.name) for it in discover([])}
 
 
-def find_violations(known: set[str]) -> list[str]:
+def find_violations(known: set[str], manifests: list[Path] | None = None) -> list[str]:
     findings: list[str] = []
-    for manifest in sorted((SRC / "claude_all").rglob("claude-all.json")) + sorted(
-        (SRC / "claude_all").rglob("*.claude-all.json")
-    ):
+    for manifest in discover_manifests() if manifests is None else manifests:
         rel = manifest.relative_to(REPO_ROOT)
         try:
             config = json.loads(manifest.read_text(encoding="utf-8"))
@@ -53,14 +57,23 @@ def find_violations(known: set[str]) -> list[str]:
     return findings
 
 
+def discover_instruction_snippets(instructions_dir: Path = INSTRUCTIONS_DIR) -> list[Path]:
+    """Return standalone instruction snippets inspected by this gate."""
+    return sorted(instructions_dir.glob("*/claude_md.md"))
+
+
 def find_undeclared_instruction_refs(
-    known: set[str], instructions_dir: Path = INSTRUCTIONS_DIR
+    known: set[str],
+    instructions_dir: Path = INSTRUCTIONS_DIR,
+    snippets: list[Path] | None = None,
 ) -> list[str]:
     keys_by_name: dict[str, set[str]] = {}
     for key in known:
         keys_by_name.setdefault(key.split("/", 1)[1], set()).add(key)
     findings: list[str] = []
-    for snippet in sorted(instructions_dir.glob("*/claude_md.md")):
+    for snippet in (
+        discover_instruction_snippets(instructions_dir) if snippets is None else snippets
+    ):
         manifest = snippet.parent / "claude-all.json"
         declared: set[str] = set()
         if manifest.exists():
@@ -83,7 +96,27 @@ def find_undeclared_instruction_refs(
 def main() -> int:
     """CLI entry point — print findings to stdout, exit 1 on any."""
     known = load_resource_keys()
-    findings = find_violations(known) + find_undeclared_instruction_refs(known)
+    manifests = discover_manifests()
+    snippets = discover_instruction_snippets()
+    empty_patterns = []
+    if not manifests:
+        empty_patterns.append(
+            "src/claude_all/**/claude-all.json and src/claude_all/**/*.claude-all.json"
+        )
+    if not snippets:
+        empty_patterns.append("src/claude_all/instructions/*/claude_md.md")
+    if not known:
+        empty_patterns.append("discover([]) installer resources")
+    if empty_patterns:
+        for pattern in empty_patterns:
+            print(
+                f"check_requires: zero files/resources matched pattern: {pattern}", file=sys.stderr
+            )
+        return 2
+
+    findings = find_violations(known, manifests) + find_undeclared_instruction_refs(
+        known, snippets=snippets
+    )
     for finding in findings:
         print(finding)
     if findings:
@@ -94,6 +127,12 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
+    inspected = len(manifests) + len(snippets) + len(known)
+    print(
+        "check_requires: inspected "
+        f"{inspected} units ({len(manifests)} manifests, {len(snippets)} instruction snippets, "
+        f"{len(known)} installer resources)"
+    )
     return 0
 
 
