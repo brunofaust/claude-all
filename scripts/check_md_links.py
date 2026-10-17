@@ -5,8 +5,7 @@ Vendored files are exempt; their `local_only` sidecars stay checked. README link
 proxy for documentation. `--json` emits `passed`, `counts` (`markdown_files_scanned`,
 `links_resolved`, `resources_checked`, `vendored_files_skipped`), `broken_links`
 (`file`, `line`, `target`, `resolved_path`), and `unlinked_resources` paths.
-Scanned files exclude vendored and missing tracked files; resolved links are checked
-local relative links that exist.
+Scanned excludes vendored/missing tracked files; links_resolved counts existing links.
 """
 
 import argparse
