@@ -1,45 +1,12 @@
 #!/usr/bin/env python3
-"""Gate: relative markdown links resolve and every resource is linked from the README.
+"""Gate: relative markdown links resolve; every resource is linked from the README.
 
-Vendored files are exempt from the link check (kept byte-identical to upstream);
-their `local_only` sidecars stay checked. README links are the proxy for "documented".
-
-Usage:
-    python scripts/check_md_links.py          human-readable report (default)
-    python scripts/check_md_links.py --json   one JSON object on stdout instead
-
-The exit code is 0 when the gate passes and 1 on any finding, in both modes.
-
-JSON shape (--json):
-    {
-      "pass": bool,
-      "counts": {
-        "markdown_files_scanned": int,  # tracked .md files read from disk (not vendored)
-        "vendored_files_skipped": int,  # tracked .md files exempt as vendored
-        "links_checked": int,           # relative link occurrences checked against disk
-        "links_resolved": int,          # of those, the ones whose target exists
-        "resources_checked": int        # len(discover([])): every discovered resource
-      },
-      "broken_links": [
-        {"file": str, "line": int, "target": str, "resolved": str}
-      ],
-      "unlinked_resources": [
-        {"kind": str, "name": str, "path": str}
-      ]
-    }
-
-Paths are repo-relative POSIX strings. `target` is the raw link text as written;
-`resolved` is the repo-relative path it points at (it starts with `../` when the
-link escapes the repo). `path` in `unlinked_resources` is the resource's source file.
-
-Error (--json only): when the check itself cannot run (for example `git ls-files`
-fails), stdout carries the error object below instead, the exit code is 1, and the
-traceback goes to stderr:
-    {"pass": false, "error": {"type": str, "message": str}}
-
-Counts are raw. There is no vacuous-pass flag: a caller that must reject a run which
-inspected zero files compares `markdown_files_scanned` against zero itself. The
-exit code does not change for a zero-file run.
+--json prints one object (repo-relative POSIX paths); exit codes match human mode:
+  {"pass", "counts": {"markdown_files_scanned", "vendored_files_skipped",
+   "links_checked", "links_resolved", "resources_checked"},
+   "broken_links": [{"file", "line", "target", "resolved"}],
+   "unlinked_resources": [{"kind", "name", "path"}]}
+Script error: {"pass": false, "error": {"type", "message"}}.
 """
 
 import argparse

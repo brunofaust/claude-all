@@ -359,3 +359,27 @@ class TestJsonEdgeCases:
             "error": {"type": "RuntimeError", "message": "git ls-files exploded"},
         }
         assert "Traceback" in captured.err
+
+
+class TestExitCodeParity:
+    def test_clean_tree_exits_zero_in_both_modes(
+        self, gate_tree: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        assert run_gate(monkeypatch) == 0
+        assert run_gate(monkeypatch, "--json") == 0
+
+    def test_broken_link_exits_one_in_both_modes(
+        self, gate_tree: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        (gate_tree / "docs" / "guide.md").write_text(
+            "see [gone](../missing.md)\n", encoding="utf-8"
+        )
+        assert run_gate(monkeypatch) == 1
+        assert run_gate(monkeypatch, "--json") == 1
+
+    def test_unlinked_resource_exits_one_in_both_modes(
+        self, gate_tree: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        (gate_tree / "README.md").write_text("no links here\n", encoding="utf-8")
+        assert run_gate(monkeypatch) == 1
+        assert run_gate(monkeypatch, "--json") == 1
