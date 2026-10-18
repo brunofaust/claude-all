@@ -3,6 +3,33 @@
 
 Vendored files are exempt from the link check (kept byte-identical to upstream);
 their `local_only` sidecars stay checked. README links are the proxy for "documented".
+
+With --json flag:
+  Emits a single JSON object to stdout containing:
+  {
+    "passed": bool,                    # True if no findings, False otherwise
+    "markdown_files_scanned": int,     # Number of .md files processed (excluding vendored)
+    "links_resolved": int,             # Number of relative links checked for existence
+    "resources_checked": int,          # Number of skills/agents checked for README links
+    "files_skipped_vendored": int,     # Number of vendored .md files skipped
+    "broken_links": [                  # Each broken relative link
+      {
+        "file": str,                   # Path relative to repo root
+        "line": int,                   # Line number (1-based)
+        "target": str,                 # Raw link target from markdown
+        "resolved": str                # Resolved path that did not exist
+      }
+    ],
+    "unlinked_resources": [            # Each resource not linked from README
+      {
+        "kind": str,                   # e.g., "skill", "agent"
+        "name": str,                   # Resource name from frontmatter
+        "path": str                    # Path relative to repo root
+      }
+    ]
+  }
+  Diagnostics (if any) go to stderr. Exit code is 0 if passed, 1 otherwise.
+  Without --json, output and exit codes are unchanged from the original behavior.
 """
 
 import json
