@@ -80,18 +80,7 @@ def lay_out_repo(
     with_snippet: bool = True,
     snippet_requires: list[str] | None = None,
 ) -> Path:
-    """Point the gate at a fake repo under ``tmp_path``.
-
-    Args:
-        tmp_path: pytest's per-test temporary directory.
-        monkeypatch: pytest's monkeypatch fixture.
-        manifest: whether a skill manifest exists under ``src/claude_all``.
-        with_snippet: whether an instruction snippet exists under the instructions dir.
-        snippet_requires: ``requires`` written beside the snippet, if any.
-
-    Returns:
-        The instructions directory the gate will scan.
-    """
+    """Point the gate at a fake repo; returns the instructions dir it scans."""
     monkeypatch.setattr(check_requires, "REPO_ROOT", tmp_path)
     src = tmp_path / "src"
     monkeypatch.setattr(check_requires, "SRC", src)
@@ -113,13 +102,7 @@ def lay_out_repo(
 def test_successful_run_prints_one_summary_line(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """A clean run exits 0 and reports how many units it inspected on stderr.
-
-    Args:
-        tmp_path: pytest's per-test temporary directory.
-        monkeypatch: pytest's monkeypatch fixture.
-        capsys: pytest's captured-output fixture.
-    """
+    """A clean run exits 0 and prints the inspected count on stderr."""
     lay_out_repo(tmp_path, monkeypatch)
     monkeypatch.setattr(check_requires, "load_resource_keys", lambda: KNOWN)
 
@@ -136,13 +119,7 @@ def test_successful_run_prints_one_summary_line(
 def test_zero_manifests_exits_2_and_names_the_pattern(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """Zero manifests is a hard failure, not a silent pass.
-
-    Args:
-        tmp_path: pytest's per-test temporary directory.
-        monkeypatch: pytest's monkeypatch fixture.
-        capsys: pytest's captured-output fixture.
-    """
+    """Zero manifests exits 2 and names the pattern."""
     lay_out_repo(tmp_path, monkeypatch, manifest=False)
     monkeypatch.setattr(check_requires, "load_resource_keys", lambda: KNOWN)
 
@@ -157,13 +134,7 @@ def test_zero_manifests_exits_2_and_names_the_pattern(
 def test_zero_instruction_snippets_exits_2_and_names_the_pattern(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """Zero instruction snippets is a hard failure even when manifests exist.
-
-    Args:
-        tmp_path: pytest's per-test temporary directory.
-        monkeypatch: pytest's monkeypatch fixture.
-        capsys: pytest's captured-output fixture.
-    """
+    """Zero instruction snippets exits 2 and names the pattern."""
     lay_out_repo(tmp_path, monkeypatch, with_snippet=False)
     monkeypatch.setattr(check_requires, "load_resource_keys", lambda: KNOWN)
 
@@ -177,13 +148,7 @@ def test_zero_instruction_snippets_exits_2_and_names_the_pattern(
 def test_empty_discover_exits_2_and_names_the_call(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """An empty ``discover([])`` result is a hard failure, not a list of dangling findings.
-
-    Args:
-        tmp_path: pytest's per-test temporary directory.
-        monkeypatch: pytest's monkeypatch fixture.
-        capsys: pytest's captured-output fixture.
-    """
+    """An empty ``discover([])`` exits 2 and names the call."""
     lay_out_repo(tmp_path, monkeypatch)
     monkeypatch.setattr(check_requires, "load_resource_keys", lambda: set())
 
@@ -197,13 +162,7 @@ def test_empty_discover_exits_2_and_names_the_call(
 def test_genuine_dangling_requires_still_exits_1(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """A real dangling ``requires`` entry keeps its exit 1 and message.
-
-    Args:
-        tmp_path: pytest's per-test temporary directory.
-        monkeypatch: pytest's monkeypatch fixture.
-        capsys: pytest's captured-output fixture.
-    """
+    """A real dangling ``requires`` entry still exits 1."""
     lay_out_repo(tmp_path, monkeypatch)
     monkeypatch.setattr(check_requires, "load_resource_keys", lambda: {"agents/bar-agent"})
 
@@ -219,13 +178,7 @@ def test_genuine_dangling_requires_still_exits_1(
 def test_undeclared_instruction_reference_still_exits_1(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """An instruction naming an undeclared resource keeps its exit 1 and message.
-
-    Args:
-        tmp_path: pytest's per-test temporary directory.
-        monkeypatch: pytest's monkeypatch fixture.
-        capsys: pytest's captured-output fixture.
-    """
+    """An undeclared instruction reference still exits 1."""
     instructions = lay_out_repo(tmp_path, monkeypatch)
     (instructions / "demo" / "claude_md.md").write_text("Load `foo-skill`.\n", encoding="utf-8")
     monkeypatch.setattr(check_requires, "load_resource_keys", lambda: KNOWN)
