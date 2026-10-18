@@ -1,16 +1,11 @@
 #!/usr/bin/env python3
-"""Gate: relative markdown links resolve and every resource is linked from the README.
+"""Gate: relative markdown links resolve; every resource is linked from the README.
 
-Vendored files are exempt from the link check (kept byte-identical to upstream);
-their `local_only` sidecars stay checked. README links are the proxy for "documented".
+Vendored files are exempt from the link check; their `local_only` sidecars stay checked.
 
-Usage:
-    python scripts/check_md_links.py          human-readable report on stdout
-    python scripts/check_md_links.py --json   one machine-readable JSON object on stdout
-
-Exit codes (identical in both modes): 0 when there are no findings, 1 when there
-are findings or when --json could not run the checks. The --json object shape is
-documented in the comment block below this docstring.
+Usage: `check_md_links.py` (human report) or `check_md_links.py --json` (one JSON object).
+Exit codes match in both modes: 0 clean, 1 findings or checker failure. The JSON shape
+is documented in the comment block below.
 """
 
 # --json output shape. Stdout carries exactly one object, nothing else;
