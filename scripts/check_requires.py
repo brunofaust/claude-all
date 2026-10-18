@@ -27,11 +27,13 @@ def load_resource_keys() -> set[str]:
     return {state_key(it.kind, it.name) for it in discover([])}
 
 
-def find_violations(known: set[str]) -> list[str]:
+def find_violations(known: set[str]) -> tuple[list[str], int]:
     findings: list[str] = []
+    manifest_count = 0
     for manifest in sorted((SRC / "claude_all").rglob("claude-all.json")) + sorted(
         (SRC / "claude_all").rglob("*.claude-all.json")
     ):
+        manifest_count += 1
         rel = manifest.relative_to(REPO_ROOT)
         try:
             config = json.loads(manifest.read_text(encoding="utf-8"))
@@ -50,17 +52,19 @@ def find_violations(known: set[str]) -> list[str]:
                     f"{rel}: requires '{dep}' — no such resource (renamed/deleted? "
                     "a built-in like /code-review does not belong in requires)"
                 )
-    return findings
+    return findings, manifest_count
 
 
 def find_undeclared_instruction_refs(
     known: set[str], instructions_dir: Path = INSTRUCTIONS_DIR
-) -> list[str]:
+) -> tuple[list[str], int]:
     keys_by_name: dict[str, set[str]] = {}
     for key in known:
         keys_by_name.setdefault(key.split("/", 1)[1], set()).add(key)
     findings: list[str] = []
+    snippet_count = 0
     for snippet in sorted(instructions_dir.glob("*/claude_md.md")):
+        snippet_count += 1
         manifest = snippet.parent / "claude-all.json"
         declared: set[str] = set()
         if manifest.exists():
@@ -77,13 +81,36 @@ def find_undeclared_instruction_refs(
                     f"{rel}: names `{token}` but its claude-all.json does not require "
                     + " or ".join(sorted(candidates))
                 )
-    return findings
+    return findings, snippet_count
 
 
 def main() -> int:
     """CLI entry point — print findings to stdout, exit 1 on any."""
+    # Check for zero resource discovery
     known = load_resource_keys()
-    findings = find_violations(known) + find_undeclared_instruction_refs(known)
+    if not known:
+        print("error: installer discovery pattern matched zero resources", file=sys.stderr)
+        return 1
+
+    # Check for zero manifest discovery
+    manifests = list(
+        sorted((SRC / "claude_all").rglob("claude-all.json"))
+        + sorted((SRC / "claude_all").rglob("*.claude-all.json"))
+    )
+    if not manifests:
+        print("error: manifest discovery pattern matched zero files", file=sys.stderr)
+        return 1
+
+    # Check for zero snippet discovery
+    snippets = sorted(INSTRUCTIONS_DIR.glob("*/claude_md.md"))
+    if not snippets:
+        print("error: instruction snippet discovery pattern matched zero files", file=sys.stderr)
+        return 1
+
+    violations_findings, manifest_count = find_violations(known)
+    undeclared_findings, snippet_count = find_undeclared_instruction_refs(known)
+    findings = violations_findings + undeclared_findings
+
     for finding in findings:
         print(finding)
     if findings:
@@ -94,6 +121,9 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
+
+    # Success case - print summary
+    print(f"inspected {manifest_count} manifests and {snippet_count} instruction snippets")
     return 0
 
 
