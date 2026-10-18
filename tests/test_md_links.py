@@ -24,8 +24,12 @@ from check_md_links import (
     CODE_SPAN,
     LINK,
     check_links,
+    check_readme_coverage,
+    find_unlinked,
     is_vendored,
     main,
+    parse_args,
+    scan_links,
     strip_code_blocks,
 )
 from vendor_sync import clone_upstream
@@ -221,6 +225,83 @@ def test_claude_hook_examples_use_timeout_seconds() -> None:
                 findings.append(f"{path.relative_to(ROOT)}: timeout={value}")
 
     assert findings == []
+
+
+class TestScanAndCoverage:
+    @pytest.fixture
+    def root(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+        root = tmp_path.resolve()
+        (root / "docs").mkdir()
+        (root / "README.md").write_text("")
+        monkeypatch.setattr("check_md_links.ROOT", root)
+        return root
+
+    def test_scan_links_counts_and_reports_broken_target(
+        self, root: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        (root / "docs" / "a.md").write_text("ok [t](b.md) bad [x](../gone.md#s)\n")
+        (root / "docs" / "b.md").write_text("# b\n")
+        monkeypatch.setattr(
+            "check_md_links.tracked_markdown",
+            lambda: [root / "docs" / "a.md", root / "docs" / "b.md"],
+        )
+
+        broken, counts = scan_links(registry=[])
+
+        assert counts == {"markdown_scanned": 2, "vendored_skipped": 0, "links_resolved": 1}
+        assert broken == [
+            {
+                "file": "docs/a.md",
+                "line": 1,
+                "target": "../gone.md#s",
+                "resolved": "gone.md",
+            }
+        ]
+
+    def test_check_links_renders_broken_link_as_text(
+        self, root: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        (root / "docs" / "a.md").write_text("[x](missing.md)\n")
+        monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [root / "docs" / "a.md"])
+
+        assert check_links(registry=[]) == ["docs/a.md:1: broken-link -> missing.md"]
+
+    def test_find_unlinked_flags_resource_absent_from_readme(
+        self, root: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        src = root / "src" / "demo" / "SKILL.md"
+        monkeypatch.setitem(
+            sys.modules,
+            "claude_all.cli",
+            SimpleNamespace(
+                discover=lambda filters: [SimpleNamespace(kind="skills", name="demo", src=src)]
+            ),
+        )
+
+        unlinked, checked = find_unlinked()
+
+        assert checked == 1
+        assert unlinked == [{"kind": "skills", "name": "demo", "path": "src/demo/SKILL.md"}]
+
+    def test_check_readme_coverage_renders_unlinked_as_text(
+        self, root: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        src = root / "src" / "demo" / "SKILL.md"
+        monkeypatch.setitem(
+            sys.modules,
+            "claude_all.cli",
+            SimpleNamespace(
+                discover=lambda filters: [SimpleNamespace(kind="skills", name="demo", src=src)]
+            ),
+        )
+
+        assert check_readme_coverage() == [
+            "README.md: undocumented -> skills/demo (add a row linking src/demo/SKILL.md)"
+        ]
+
+    def test_parse_args_defaults_to_human_output(self) -> None:
+        assert parse_args([]).json is False
+        assert parse_args(["--json"]).json is True
 
 
 class TestJsonOutput:

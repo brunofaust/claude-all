@@ -1,42 +1,10 @@
 #!/usr/bin/env python3
-"""Gate: relative markdown links resolve and every resource is linked from the README.
+"""Gate: relative markdown links resolve; every resource is linked from the README.
 
-Vendored files are exempt from the link check (kept byte-identical to upstream);
-their `local_only` sidecars stay checked. README links are the proxy for "documented".
-
-Usage:
-    check_md_links.py          human-readable findings on stdout, count on stderr
-    check_md_links.py --json   one JSON object on stdout (nothing else); count on stderr
-
-Exit codes (identical in both modes): 0 when there are no findings, 1 when there
-is at least one finding.
-
-JSON shape (`--json`):
-
-    {
-      "pass": bool,                 # true iff there are no findings (exit 0)
-      "counts": {
-        "markdown_scanned": int,    # tracked .md files scanned (not vendored, on disk)
-        "vendored_skipped": int,    # tracked .md files exempt as vendored
-        "links_resolved": int,      # in-scope relative links whose target exists
-        "resources_checked": int    # discovered resources checked against the README
-      },
-      "broken_links": [             # one entry per relative link that does not resolve
-        {
-          "file": str,              # repo-relative path of the containing markdown file
-          "line": int,              # 1-based line number of the link
-          "target": str,            # raw link target as written, e.g. "../x.md#anchor"
-          "resolved": str           # resolved path that did not exist (repo-relative)
-        }
-      ],
-      "unlinked_resources": [       # one entry per discovered resource with no README link
-        {
-          "kind": str,              # resource kind, e.g. "skills" or "agents"
-          "name": str,              # resource name
-          "path": str               # repo-relative source path the README must link
-        }
-      ]
-    }
+Vendored files are exempt from the link check. Exit 0 when clean, 1 on any finding.
+Default output is human-readable. `--json` prints one object on stdout instead:
+pass, counts{markdown_scanned, vendored_skipped, links_resolved, resources_checked},
+broken_links[{file, line, target, resolved}], unlinked_resources[{kind, name, path}].
 """
 
 import argparse
@@ -92,14 +60,13 @@ def tracked_markdown() -> list[Path]:
     return [ROOT / p for p in out.split("\0") if p]
 
 
-def _display(path: Path) -> str:
-    try:
-        return path.relative_to(ROOT).as_posix()
-    except ValueError:
-        return path.as_posix()
-
-
 def scan_links(registry: list[dict]) -> tuple[list[dict], dict[str, int]]:
+    def repo_relative(path: Path) -> str:
+        try:
+            return path.relative_to(ROOT).as_posix()
+        except ValueError:
+            return path.as_posix()
+
     broken: list[dict] = []
     counts = {"markdown_scanned": 0, "vendored_skipped": 0, "links_resolved": 0}
     for md in tracked_markdown():
@@ -128,7 +95,7 @@ def scan_links(registry: list[dict]) -> tuple[list[dict], dict[str, int]]:
                             "file": md.relative_to(ROOT).as_posix(),
                             "line": line_no,
                             "target": target,
-                            "resolved": _display(resolved),
+                            "resolved": repo_relative(resolved),
                         }
                     )
     return broken, counts
