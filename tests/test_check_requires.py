@@ -11,6 +11,7 @@ import importlib.util
 import json
 import sys
 from pathlib import Path
+from unittest.mock import patch
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SPEC = importlib.util.spec_from_file_location(
@@ -68,3 +69,45 @@ def test_shipped_instructions_declare_every_reference() -> None:
     known = check_requires.load_resource_keys()
 
     assert check_requires.find_undeclared_instruction_refs(known) == []
+
+
+def test_success(capsys) -> None:
+    """Successful run prints summary line and exits 0."""
+    with (
+        patch.object(check_requires, "load_resource_keys", return_value={"a/b", "c/d"}),
+        patch.object(check_requires, "find_violations", return_value=[]),
+        patch.object(check_requires, "find_undeclared_instruction_refs", return_value=[]),
+    ):
+        exit_code = check_requires.main()
+        assert exit_code == 0
+        captured = capsys.readouterr()
+        assert "Inspected 2 resources" in captured.out
+        assert captured.err == ""
+
+
+def test_zero_discovery(capsys) -> None:
+    """Zero-discovery run prints error message and exits 1."""
+    expected_msg = (
+        "Pattern 'the installer's discovery (agents, skills, plugins, mcps, "
+        "tools, instructions, hooks)' matched no resources"
+    )
+    with patch.object(check_requires, "load_resource_keys", return_value=set()):
+        exit_code = check_requires.main()
+        assert exit_code == 1
+        captured = capsys.readouterr()
+        assert expected_msg in captured.out
+        assert captured.err == ""
+
+
+def test_failure(capsys) -> None:
+    """Run with findings prints findings and exits 1 (no summary line)."""
+    with (
+        patch.object(check_requires, "load_resource_keys", return_value={"a/b"}),
+        patch.object(check_requires, "find_violations", return_value=["some finding"]),
+        patch.object(check_requires, "find_undeclared_instruction_refs", return_value=[]),
+    ):
+        exit_code = check_requires.main()
+        assert exit_code == 1
+        captured = capsys.readouterr()
+        assert "some finding" in captured.out
+        assert "Inspected" not in captured.out
