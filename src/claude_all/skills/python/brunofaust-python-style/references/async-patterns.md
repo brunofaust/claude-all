@@ -406,6 +406,8 @@ parallelism (each has its own GIL) with lower overhead than
 `ProcessPoolExecutor`. Use it for **CPU-bound** work that doesn't need to share
 mutable state.
 
+For CPU-bound pure Python on a free-threaded 3.14t build, threads can also run in parallel; see [`free-threading.md`](free-threading.md) for the opt-in path and its GIL rules.
+
 ```python
 from concurrent.futures import InterpreterPoolExecutor
 
