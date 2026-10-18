@@ -9,40 +9,41 @@ Usage:
     python scripts/check_md_links.py --json   one machine-readable JSON object on stdout
 
 Exit codes (identical in both modes): 0 when there are no findings, 1 when there
-are findings or when --json could not run the checks (see "error" below).
-
-JSON output shape (--json). Stdout carries exactly one object, nothing else;
-diagnostics go to stderr.
-
-    {
-      "ok": bool,                      # true iff broken_links and unlinked_resources are empty
-      "error": null | {                # non-null only when the checker itself failed
-        "type": str,                   # exception class name, e.g. "CalledProcessError"
-        "message": str
-      },
-      "counts": null | {               # null when "error" is set
-        "markdown_files_scanned": int, # tracked .md files, not vendored, present on disk
-        "links_checked": int,          # relative, non-anchor link targets in those files
-        "links_resolved": int,         # the subset of links_checked whose path exists
-        "resources_checked": int,      # len(discover([])): every discovered resource
-        "files_skipped_vendored": int  # tracked .md files exempted as vendored
-      },
-      "broken_links": [                # one per unresolved relative link
-        {"file": str,                  # repo-relative path of the containing markdown file
-         "line": int,                  # 1-based line number in that file
-         "target": str,                # raw link target as written
-         "resolved_path": str}         # repo-relative path that does not exist
-      ],
-      "unlinked_resources": [          # one per resource with no README row
-        {"path": str,                  # repo-relative path of the resource's source file
-         "kind": str,
-         "name": str}
-      ]
-    }
-
-A zero-file scan still exits 0; callers detect a vacuous pass via
-counts.markdown_files_scanned == 0.
+are findings or when --json could not run the checks. The --json object shape is
+documented in the comment block below this docstring.
 """
+
+# --json output shape. Stdout carries exactly one object, nothing else;
+# diagnostics go to stderr.
+#
+#     {
+#       "ok": bool,                      # true iff broken_links and unlinked_resources are empty
+#       "error": null | {                # non-null only when the checker itself failed
+#         "type": str,                   # exception class name, e.g. "CalledProcessError"
+#         "message": str
+#       },
+#       "counts": null | {               # null when "error" is set
+#         "markdown_files_scanned": int, # tracked .md files, not vendored, present on disk
+#         "links_checked": int,          # relative, non-anchor link targets in those files
+#         "links_resolved": int,         # the subset of links_checked whose path exists
+#         "resources_checked": int,      # len(discover([])): every discovered resource
+#         "files_skipped_vendored": int  # tracked .md files exempted as vendored
+#       },
+#       "broken_links": [                # one per unresolved relative link
+#         {"file": str,                  # repo-relative path of the containing markdown file
+#          "line": int,                  # 1-based line number in that file
+#          "target": str,                # raw link target as written
+#          "resolved_path": str}         # repo-relative path that does not exist
+#       ],
+#       "unlinked_resources": [          # one per resource with no README row
+#         {"path": str,                  # repo-relative path of the resource's source file
+#          "kind": str,
+#          "name": str}
+#       ]
+#     }
+#
+# A zero-file scan still exits 0; callers detect a vacuous pass via
+# counts.markdown_files_scanned == 0.
 
 import argparse
 import contextlib
@@ -99,16 +100,16 @@ def tracked_markdown() -> list[Path]:
     return [ROOT / p for p in out.split("\0") if p]
 
 
-def _display_path(path: Path) -> str:
-    # A link may climb out of the repo (`../../../x.md`); report it as written, not as a crash.
-    try:
-        return path.relative_to(ROOT).as_posix()
-    except ValueError:
-        return path.as_posix()
-
-
 def scan_links(registry: list[dict]) -> tuple[list[dict], dict[str, int]]:
     """Structured link check: broken-link records plus the counts behind them."""
+
+    def display_path(path: Path) -> str:
+        # A link may climb out of the repo (`../../../x.md`); report it as written, not as a crash.
+        try:
+            return path.relative_to(ROOT).as_posix()
+        except ValueError:
+            return path.as_posix()
+
     broken: list[dict] = []
     counts = {
         "markdown_files_scanned": 0,
@@ -143,7 +144,7 @@ def scan_links(registry: list[dict]) -> tuple[list[dict], dict[str, int]]:
                             "file": md.relative_to(ROOT).as_posix(),
                             "line": line_no,
                             "target": target,
-                            "resolved_path": _display_path(Path(os.path.normpath(named))),
+                            "resolved_path": display_path(Path(os.path.normpath(named))),
                         }
                     )
     return broken, counts

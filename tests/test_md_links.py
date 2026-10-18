@@ -428,3 +428,46 @@ class TestMainJson:
         json_exit = main(["--json"])
         capsys.readouterr()
         assert human_exit == json_exit == 1
+
+    def test_exit_code_matches_between_modes_for_unlinked_resource(
+        self,
+        fixture_repo: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        (fixture_repo / "doc.md").write_text("clean\n")
+        unlinked = [{"path": "src/x/a/SKILL.md", "kind": "skill", "name": "a"}]
+        monkeypatch.setattr(check_md_links, "scan_readme_coverage", lambda: (2, unlinked))
+        human_exit = main([])
+        capsys.readouterr()
+        json_exit = main(["--json"])
+        capsys.readouterr()
+        assert human_exit == json_exit == 1
+
+    def test_exit_code_matches_between_modes_on_clean_tree(
+        self, fixture_repo: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        (fixture_repo / "doc.md").write_text("[self](doc.md)\n")
+        human_exit = main([])
+        capsys.readouterr()
+        json_exit = main(["--json"])
+        capsys.readouterr()
+        assert human_exit == json_exit == 0
+
+    def test_diagnostics_during_checks_do_not_reach_json_stdout(
+        self,
+        fixture_repo: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        def noisy_tracked() -> list[Path]:
+            print("stray diagnostic")
+            return [fixture_repo / "doc.md"]
+
+        (fixture_repo / "doc.md").write_text("[self](doc.md)\n")
+        monkeypatch.setattr(check_md_links, "tracked_markdown", noisy_tracked)
+        assert main(["--json"]) == 0
+        captured = capsys.readouterr()
+        report = json.loads(captured.out)
+        assert report["ok"] is True
+        assert "stray diagnostic" in captured.err
