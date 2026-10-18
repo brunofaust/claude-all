@@ -80,15 +80,7 @@ def fake_repo(
     snippet_body: str | None,
     known: set[str],
 ) -> None:
-    """Point the checker's discovery roots at a throwaway repo layout.
-
-    Args:
-        root: pytest's per-test temporary directory, used as the fake repo root.
-        monkeypatch: pytest fixture used to redirect the module globals.
-        manifest_requires: ``requires`` written into the fake resource manifest.
-        snippet_body: body of the fake instruction snippet, or None for no snippet.
-        known: resource keys the fake installer discovers.
-    """
+    """Point the checker's discovery roots at a throwaway repo layout."""
     src = root / "src"
     (src / "claude_all" / "skills" / "bar").mkdir(parents=True)
     (src / "claude_all" / "skills" / "bar" / "claude-all.json").write_text(
@@ -107,13 +99,7 @@ def fake_repo(
 def test_main_success_prints_one_scanned_summary(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """A clean run exits 0, keeps stdout empty and prints one ``scanned=N`` line to stderr.
-
-    Args:
-        tmp_path: pytest's per-test temporary directory.
-        monkeypatch: pytest fixture used to redirect the discovery roots.
-        capsys: pytest fixture capturing stdout and stderr.
-    """
+    """A clean run exits 0, prints nothing to stdout and one ``scanned=N`` line to stderr."""
     fake_repo(
         tmp_path,
         monkeypatch,
@@ -138,13 +124,7 @@ def test_main_success_prints_one_scanned_summary(
 def test_main_zero_manifest_discovery_fails_closed(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """A manifest pattern matching nothing exits 2 and names that pattern.
-
-    Args:
-        tmp_path: pytest's per-test temporary directory.
-        monkeypatch: pytest fixture used to redirect the discovery roots.
-        capsys: pytest fixture capturing stdout and stderr.
-    """
+    """A manifest pattern matching nothing exits 2 and names that pattern."""
     fake_repo(
         tmp_path,
         monkeypatch,
@@ -165,13 +145,7 @@ def test_main_zero_manifest_discovery_fails_closed(
 def test_main_zero_snippet_discovery_fails_closed(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """An instruction glob matching nothing exits 2 and names that pattern.
-
-    Args:
-        tmp_path: pytest's per-test temporary directory.
-        monkeypatch: pytest fixture used to redirect the discovery roots.
-        capsys: pytest fixture capturing stdout and stderr.
-    """
+    """An instruction glob matching nothing exits 2 and names that pattern."""
     fake_repo(
         tmp_path,
         monkeypatch,
@@ -188,13 +162,7 @@ def test_main_zero_snippet_discovery_fails_closed(
 def test_main_zero_resource_keys_fails_closed(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """An installer that discovers no resources exits 2 rather than passing vacuously.
-
-    Args:
-        tmp_path: pytest's per-test temporary directory.
-        monkeypatch: pytest fixture used to redirect the discovery roots.
-        capsys: pytest fixture capturing stdout and stderr.
-    """
+    """An installer discovering no resources exits 2 rather than passing vacuously."""
     fake_repo(
         tmp_path,
         monkeypatch,
@@ -211,13 +179,7 @@ def test_main_zero_resource_keys_fails_closed(
 def test_main_dangling_requires_still_exits_1(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """A genuine dangling ``requires`` entry keeps the existing finding and exit 1.
-
-    Args:
-        tmp_path: pytest's per-test temporary directory.
-        monkeypatch: pytest fixture used to redirect the discovery roots.
-        capsys: pytest fixture capturing stdout and stderr.
-    """
+    """A genuine dangling ``requires`` entry keeps the existing finding and exit 1."""
     fake_repo(
         tmp_path,
         monkeypatch,
@@ -236,13 +198,7 @@ def test_main_dangling_requires_still_exits_1(
 def test_main_undeclared_instruction_ref_still_exits_1(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """An instruction naming an undeclared resource keeps the existing finding and exit 1.
-
-    Args:
-        tmp_path: pytest's per-test temporary directory.
-        monkeypatch: pytest fixture used to redirect the discovery roots.
-        capsys: pytest fixture capturing stdout and stderr.
-    """
+    """An instruction naming an undeclared resource keeps the existing finding and exit 1."""
     fake_repo(
         tmp_path,
         monkeypatch,
@@ -261,13 +217,7 @@ def test_main_undeclared_instruction_ref_still_exits_1(
 def test_main_allows_zero_optional_suffix_manifests(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """Zero ``*.claude-all.json`` matches is a valid state; the required manifest still counts.
-
-    Args:
-        tmp_path: pytest's per-test temporary directory.
-        monkeypatch: pytest fixture used to redirect the discovery roots.
-        capsys: pytest fixture capturing stdout and stderr.
-    """
+    """Zero ``*.claude-all.json`` matches is valid; the required manifest still counts."""
     fake_repo(
         tmp_path,
         monkeypatch,
@@ -285,13 +235,7 @@ def test_main_allows_zero_optional_suffix_manifests(
 def test_main_counts_optional_suffix_manifests(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """A ``*.claude-all.json`` manifest is inspected and counted in the summary.
-
-    Args:
-        tmp_path: pytest's per-test temporary directory.
-        monkeypatch: pytest fixture used to redirect the discovery roots.
-        capsys: pytest fixture capturing stdout and stderr.
-    """
+    """A ``*.claude-all.json`` manifest is inspected and counted in the summary."""
     fake_repo(
         tmp_path,
         monkeypatch,
