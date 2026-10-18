@@ -41,7 +41,9 @@ def test_undeclared_reference_is_reported(tmp_path: Path) -> None:
     """
     root = snippet(tmp_path, "Load `foo-skill`; delegate to `bar-agent`.\n", ["agents/bar-agent"])
 
-    findings = check_requires.find_undeclared_instruction_refs(KNOWN, root)
+    findings = check_requires.find_undeclared_instruction_refs(
+        KNOWN, [root / "demo" / "claude_md.md"], root
+    )
 
     assert len(findings) == 1
     assert "`foo-skill`" in findings[0]
@@ -60,11 +62,22 @@ def test_declared_and_non_resource_tokens_pass(tmp_path: Path) -> None:
         ["skills/foo-skill"],
     )
 
-    assert check_requires.find_undeclared_instruction_refs(KNOWN, root) == []
+    assert (
+        check_requires.find_undeclared_instruction_refs(
+            KNOWN, [root / "demo" / "claude_md.md"], root
+        )
+        == []
+    )
 
 
 def test_shipped_instructions_declare_every_reference() -> None:
     """Every shipped instruction requires each resource it names."""
     known = check_requires.load_resource_keys()
+    snippets = list((REPO_ROOT / "src" / "claude_all" / "instructions").glob("*/claude_md.md"))
 
-    assert check_requires.find_undeclared_instruction_refs(known) == []
+    assert (
+        check_requires.find_undeclared_instruction_refs(
+            known, snippets, REPO_ROOT / "src" / "claude_all" / "instructions"
+        )
+        == []
+    )

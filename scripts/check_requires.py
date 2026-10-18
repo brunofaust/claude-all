@@ -27,11 +27,9 @@ def load_resource_keys() -> set[str]:
     return {state_key(it.kind, it.name) for it in discover([])}
 
 
-def find_violations(known: set[str]) -> list[str]:
+def find_violations(known: set[str], manifests: list[Path]) -> list[str]:
     findings: list[str] = []
-    for manifest in sorted((SRC / "claude_all").rglob("claude-all.json")) + sorted(
-        (SRC / "claude_all").rglob("*.claude-all.json")
-    ):
+    for manifest in manifests:
         rel = manifest.relative_to(REPO_ROOT)
         try:
             config = json.loads(manifest.read_text(encoding="utf-8"))
@@ -54,13 +52,13 @@ def find_violations(known: set[str]) -> list[str]:
 
 
 def find_undeclared_instruction_refs(
-    known: set[str], instructions_dir: Path = INSTRUCTIONS_DIR
+    known: set[str], snippets: list[Path], instructions_dir: Path
 ) -> list[str]:
     keys_by_name: dict[str, set[str]] = {}
     for key in known:
         keys_by_name.setdefault(key.split("/", 1)[1], set()).add(key)
     findings: list[str] = []
-    for snippet in sorted(instructions_dir.glob("*/claude_md.md")):
+    for snippet in sorted(snippets):
         manifest = snippet.parent / "claude-all.json"
         declared: set[str] = set()
         if manifest.exists():
@@ -83,7 +81,14 @@ def find_undeclared_instruction_refs(
 def main() -> int:
     """CLI entry point — print findings to stdout, exit 1 on any."""
     known = load_resource_keys()
-    findings = find_violations(known) + find_undeclared_instruction_refs(known)
+    manifests = list((SRC / "claude_all").rglob("claude-all.json")) + list(
+        (SRC / "claude_all").rglob("*.claude-all.json")
+    )
+    snippets = list((INSTRUCTIONS_DIR).glob("*/claude_md.md"))
+    units = len(manifests) + len(snippets)
+    findings = find_violations(known, manifests) + find_undeclared_instruction_refs(
+        known, snippets, INSTRUCTIONS_DIR
+    )
     for finding in findings:
         print(finding)
     if findings:
@@ -94,6 +99,15 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
+    if units == 0:
+        print(
+            "Error: discovery matched zero files. "
+            "No manifest files found (patterns: src/claude_all/**/claude-all.json, src/claude_all/**/*.claude-all.json) "
+            "and no instruction snippets found (pattern: src/claude_all/instructions/*/claude_md.md)",
+            file=sys.stderr,
+        )
+        return 2
+    print(f"scanned={units}")
     return 0
 
 
