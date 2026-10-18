@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
 """Gate: every `claude-all.json` `requires` entry resolves to a real resource.
 
-Also checks that resources named by an instruction snippet are in its `requires`.
-Targets are resolved via the installer's own `discover()`, never re-derived here.
-Exit 0 = all resolve, 1 = dangling/malformed entry, 2 = discovery matched nothing
-(zero resource keys, zero manifests or zero instruction snippets — the gate cannot
-check anything, so it refuses to pass). A success run prints one `scanned=N` line
-on stderr with the number of manifests and instruction snippets inspected.
+Also checks instruction snippets name only resources they `requires`.
+Targets come from the installer's own `discover()`.
+Exit 0 = all resolve, 1 = findings, 2 = discovery matched nothing (fails closed).
+A success run prints one `scanned=N` line on stderr.
 """
 
 from __future__ import annotations
