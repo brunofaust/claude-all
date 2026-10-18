@@ -12,6 +12,8 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SPEC = importlib.util.spec_from_file_location(
     "check_requires", REPO_ROOT / "scripts" / "check_requires.py"
@@ -68,3 +70,127 @@ def test_shipped_instructions_declare_every_reference() -> None:
     known = check_requires.load_resource_keys()
 
     assert check_requires.find_undeclared_instruction_refs(known) == []
+
+
+def test_real_repo_run_succeeds_with_one_summary_line(capsys: pytest.CaptureFixture[str]) -> None:
+    """A run over the shipped repo exits 0 and reports a nonzero inspected count.
+
+    Args:
+        capsys: pytest fixture capturing stdout and stderr.
+    """
+    assert check_requires.main() == 0
+
+    lines = capsys.readouterr().out.splitlines()
+    summaries = [line for line in lines if line.startswith("requires-check: inspected ")]
+    assert len(summaries) == 1
+    assert int(summaries[0].split()[2]) > 0
+
+
+def test_zero_discovery_exits_two_and_names_the_pattern(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """An empty tree matches nothing, so the gate fails closed with exit 2.
+
+    Args:
+        tmp_path: pytest's per-test temporary directory.
+        monkeypatch: pytest fixture for patching module globals.
+        capsys: pytest fixture capturing stdout and stderr.
+    """
+    src = tmp_path / "src"
+    (src / "claude_all").mkdir(parents=True)
+    monkeypatch.setattr(check_requires, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_requires, "SRC", src)
+    monkeypatch.setattr(check_requires, "INSTRUCTIONS_DIR", src / "claude_all" / "instructions")
+
+    assert check_requires.main() == 2
+
+    captured = capsys.readouterr()
+    assert "CANNOT CHECK:" in captured.err
+    assert "claude-all.json" in captured.err
+    assert "*/claude_md.md" in captured.err
+    assert "requires-check: inspected" not in captured.out
+
+
+def test_missing_instructions_dir_fails_even_with_manifests(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Manifests still matching must not mask an empty snippet discovery point.
+
+    Args:
+        tmp_path: pytest's per-test temporary directory.
+        monkeypatch: pytest fixture for patching module globals.
+        capsys: pytest fixture capturing stdout and stderr.
+    """
+    src = tmp_path / "src"
+    skill = src / "claude_all" / "skills" / "generic" / "demo"
+    skill.mkdir(parents=True)
+    (skill / "claude-all.json").write_text(json.dumps({"requires": []}))
+    monkeypatch.setattr(check_requires, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_requires, "SRC", src)
+    monkeypatch.setattr(check_requires, "INSTRUCTIONS_DIR", src / "claude_all" / "instructions")
+
+    assert check_requires.main() == 2
+
+    captured = capsys.readouterr()
+    assert "CANNOT CHECK:" in captured.err
+    assert "*/claude_md.md" in captured.err
+    assert "claude-all.json" not in captured.err
+    assert "requires-check: inspected" not in captured.out
+
+
+def test_genuine_dangling_requires_still_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A manifest requiring a missing resource still yields exit 1 and the finding.
+
+    Args:
+        tmp_path: pytest's per-test temporary directory.
+        monkeypatch: pytest fixture for patching module globals.
+        capsys: pytest fixture capturing stdout and stderr.
+    """
+    src = tmp_path / "src"
+    skill = src / "claude_all" / "skills" / "generic" / "demo"
+    skill.mkdir(parents=True)
+    (skill / "claude-all.json").write_text(json.dumps({"requires": ["skills/ghost"]}))
+    instructions = src / "claude_all" / "instructions" / "demo"
+    instructions.mkdir(parents=True)
+    (instructions / "claude_md.md").write_text("Plain snippet.\n", encoding="utf-8")
+    monkeypatch.setattr(check_requires, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_requires, "SRC", src)
+    monkeypatch.setattr(check_requires, "INSTRUCTIONS_DIR", src / "claude_all" / "instructions")
+
+    assert check_requires.main() == 1
+
+    captured = capsys.readouterr()
+    assert "requires 'skills/ghost' — no such resource" in captured.out
+    assert "1 requires finding(s)" in captured.err
+    assert "requires-check: inspected" not in captured.out
+
+
+def test_undeclared_instruction_reference_still_fails_through_main(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A snippet naming an undeclared shipped resource still yields exit 1.
+
+    Args:
+        tmp_path: pytest's per-test temporary directory.
+        monkeypatch: pytest fixture for patching module globals.
+        capsys: pytest fixture capturing stdout and stderr.
+    """
+    src = tmp_path / "src"
+    skill = src / "claude_all" / "skills" / "generic" / "demo"
+    skill.mkdir(parents=True)
+    (skill / "claude-all.json").write_text(json.dumps({"requires": []}))
+    instructions = src / "claude_all" / "instructions" / "demo"
+    instructions.mkdir(parents=True)
+    (instructions / "claude_md.md").write_text("Delegate to `retro`.\n", encoding="utf-8")
+    monkeypatch.setattr(check_requires, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_requires, "SRC", src)
+    monkeypatch.setattr(check_requires, "INSTRUCTIONS_DIR", src / "claude_all" / "instructions")
+
+    assert check_requires.main() == 1
+
+    captured = capsys.readouterr()
+    assert "names `retro` but its claude-all.json does not require" in captured.out
+    assert "1 requires finding(s)" in captured.err
+    assert "requires-check: inspected" not in captured.out
