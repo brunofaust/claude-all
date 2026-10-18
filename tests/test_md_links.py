@@ -141,7 +141,8 @@ class TestCheckLinks:
         # tracked-but-deleted file must be skipped, not crash read_text()
         missing = tmp_path / "GONE.md"
         monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [missing])
-        assert check_links(registry=[]) == []
+        findings, _ = check_links(registry=[])
+        assert findings == []
 
 
 def test_non_vendored_routes_use_discoverable_skill_names() -> None:
@@ -218,3 +219,189 @@ def test_claude_hook_examples_use_timeout_seconds() -> None:
                 findings.append(f"{path.relative_to(ROOT)}: timeout={value}")
 
     assert findings == []
+
+
+def test_json_output_clean_tree(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """--json on a clean tree should show zero findings and counts."""
+    # Mock a simple scenario with no markdown files
+    monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [])
+    # Mock discover to return no items (imported from claude_all.cli inside check_readme_coverage)
+    monkeypatch.setattr("claude_all.cli.discover", lambda _: [])
+
+    # Test JSON output
+    import sys
+    from io import StringIO
+
+    old_argv = sys.argv
+    sys.argv = ["check_md_links.py", "--json"]
+    old_stdout = sys.stdout
+    sys.stdout = StringIO()
+
+    try:
+        from check_md_links import main
+
+        result = main()
+        output = sys.stdout.getvalue()
+        sys.stdout = old_stdout
+        sys.argv = old_argv
+
+        assert result == 0  # Should pass
+        data = json.loads(output)
+        assert data["passed"] is True
+        assert data["markdown_files_scanned"] == 0
+        assert data["links_inspected"] == 0
+        assert data["resources_checked"] == 0
+        assert data["files_skipped_as_vendored"] == 0
+        assert data["broken_links"] == []
+        assert data["unlinked_resources"] == []
+    finally:
+        sys.stdout = old_stdout
+        sys.argv = old_argv
+
+
+def test_json_output_with_broken_link(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """--json with a broken link should show the broken link in output."""
+    # Create a mock markdown file with a broken link
+    md_file = tmp_path / "test.md"
+    md_file.write_text("See [broken link](missing.md) for details.\n")
+
+    # Mock tracked_markdown to return our file
+    monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [md_file])
+    # Mock is_vendored to return False (not vendored)
+    monkeypatch.setattr("check_md_links.is_vendored", lambda p, r: False)
+    # Mock the discover function inside check_md_links module where it's imported
+    monkeypatch.setattr("check_md_links.discover", lambda _: [])
+
+    # Test JSON output
+    import sys
+    from io import StringIO
+
+    old_argv = sys.argv
+    sys.argv = ["check_md_links.py", "--json"]
+    old_stdout = sys.stdout
+    sys.stdout = StringIO()
+
+    try:
+        from check_md_links import main
+
+        result = main()
+        output = sys.stdout.getvalue()
+        sys.stdout = old_stdout
+        sys.argv = old_argv
+
+        assert result == 1  # Should fail due to broken link
+        data = json.loads(output)
+        assert data["passed"] is False
+        assert data["markdown_files_scanned"] == 1
+        assert data["links_inspected"] == 1
+        assert data["resources_checked"] == 0
+        assert data["files_skipped_as_vendored"] == 0
+        assert len(data["broken_links"]) == 1
+        broken_link = data["broken_links"][0]
+        assert broken_link["target"] == "missing.md"
+        assert "test.md" in broken_link["file"]
+        assert data["unlinked_resources"] == []
+    finally:
+        sys.stdout = old_stdout
+        sys.argv = old_argv
+
+
+def test_json_output_with_unlinked_resource(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """--json with an unlinked resource should show the resource in output."""
+
+    # Mock an item that would be discovered but not linked in README
+    class MockItem:
+        def __init__(self):
+            self.kind = "skill"
+            self.name = "test-skill"
+            self.src = tmp_path / "src" / "test-skill" / "SKILL.md"
+
+    # Mock tracked_markdown to return empty (no markdown files to check links)
+    monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [])
+    # Mock the discover function inside check_md_links module where it's imported
+    monkeypatch.setattr("check_md_links.discover", lambda _: [MockItem()])
+    # Mock README.md to not contain the link
+    monkeypatch.setattr("check_md_links.ROOT", tmp_path)
+    readme_file = tmp_path / "README.md"
+    readme_file.write_text("# Test README\n\nNo links here.\n")
+
+    # Test JSON output
+    import sys
+    from io import StringIO
+
+    old_argv = sys.argv
+    sys.argv = ["check_md_links.py", "--json"]
+    old_stdout = sys.stdout
+    sys.stdout = StringIO()
+
+    try:
+        from check_md_links import main
+
+        result = main()
+        output = sys.stdout.getvalue()
+        sys.stdout = old_stdout
+        sys.argv = old_argv
+
+        assert result == 1  # Should fail due to unlinked resource
+        data = json.loads(output)
+        assert data["passed"] is False
+        assert data["markdown_files_scanned"] == 0
+        assert data["links_inspected"] == 0
+        assert data["resources_checked"] == 1
+        assert data["files_skipped_as_vendored"] == 0
+        assert data["broken_links"] == []
+        assert len(data["unlinked_resources"]) == 1
+        resource = data["unlinked_resources"][0]
+        assert resource["kind"] == "skill"
+        assert resource["name"] == "test-skill"
+        assert "src/test-skill/SKILL.md" in resource["path"]
+    finally:
+        sys.stdout = old_stdout
+        sys.argv = old_argv
+
+
+def test_default_output_unchanged(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that default (non-JSON) output is unaffected by the --json flag addition."""
+    # Create a mock markdown file with a broken link
+    md_file = tmp_path / "test.md"
+    md_file.write_text("See [broken link](missing.md) for details.\n")
+
+    # Mock tracked_markdown to return our file
+    monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [md_file])
+    # Mock is_vendored to return False (not vendored)
+    monkeypatch.setattr("check_md_links.is_vendored", lambda p, r: False)
+    # Mock the discover function inside check_md_links module where it's imported
+    monkeypatch.setattr("check_md_links.discover", lambda _: [])
+
+    # Test default output (no --json flag)
+    import sys
+    from io import StringIO
+
+    old_argv = sys.argv
+    sys.argv = ["check_md_links.py"]  # No --json flag
+    old_stdout = sys.stdout
+    old_stderr = sys.stderr
+    sys.stdout = StringIO()
+    sys.stderr = StringIO()
+
+    try:
+        from check_md_links import main
+
+        result = main()
+        stdout_output = sys.stdout.getvalue()
+        stderr_output = sys.stderr.getvalue()
+        sys.stdout = old_stdout
+        sys.stderr = old_stderr
+        sys.argv = old_argv
+
+        assert result == 1  # Should fail due to broken link
+        # Should print the finding to stdout
+        assert "test.md:1: broken-link -> missing.md" in stdout_output
+        # Should print count to stderr
+        assert "1 finding(s)." in stderr_output
+    finally:
+        sys.stdout = old_stdout
+        sys.stderr = old_stderr
+        sys.argv = old_argv
