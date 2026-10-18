@@ -111,22 +111,22 @@ def test_main_success_case(capsys, tmp_path) -> None:
 
 def test_main_zero_discovery_failure(capsys) -> None:
     """Main function fails when discovery returns zero resources."""
-    import scripts.check_requires as cr
-
-    original_load = cr.load_resource_keys
+    # Save original functions
+    original_load = check_requires.load_resource_keys
 
     def mock_load_resource_keys_empty() -> set[str]:
         return set()
 
-    cr.load_resource_keys = mock_load_resource_keys  # type: ignore
+    check_requires.load_resource_keys = mock_load_resource_keys_empty  # type: ignore
 
     try:
-        exit_code = cr.main()
+        exit_code = check_requires.main()
         captured = capsys.readouterr()
         assert exit_code == 1
-        assert "error: installer discovery returned zero resources" in captured.err
+        assert "error: installer discovery pattern matched zero resources" in captured.err
     finally:
-        cr.load_resource_keys = original_load
+        # Restore original functions
+        check_requires.load_resource_keys = original_load
 
 
 def test_main_existing_failure_case(capsys) -> None:
