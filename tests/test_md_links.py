@@ -13,16 +13,21 @@ import json
 import re
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from check_md_links import (
     CODE_SPAN,
     LINK,
     check_links,
+    check_readme_coverage,
     is_vendored,
+    main,
+    scan_links,
     strip_code_blocks,
 )
 from vendor_sync import clone_upstream
@@ -142,6 +147,198 @@ class TestCheckLinks:
         missing = tmp_path / "GONE.md"
         monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [missing])
         assert check_links(registry=[]) == []
+
+
+class TestCheckReadmeCoverage:
+    def test_string_wrapper_keeps_the_human_line(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import claude_all.cli as cli
+
+        src = ROOT / "src/claude_all/skills/generic/fake-skill/SKILL.md"
+        fake = SimpleNamespace(kind="skills", name="fake-skill", src=src)
+        monkeypatch.setattr(cli, "discover", lambda filters: [fake])
+
+        assert check_readme_coverage() == [
+            "README.md: undocumented -> skills/fake-skill "
+            "(add a row linking src/claude_all/skills/generic/fake-skill/SKILL.md)"
+        ]
+
+
+class TestMainJson:
+    """`--json` is the machine-readable contract; these pin its shape and exit codes."""
+
+    def test_clean_tree_emits_one_passing_document(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        assert main(["--json"]) == 0
+        out, err = capsys.readouterr()
+        payload = json.loads(out)  # whole stdout must be one JSON document
+        assert payload["schema_version"] == 1
+        assert payload["passed"] is True
+        assert payload["broken_links"] == []
+        assert payload["unlinked_resources"] == []
+        counts = payload["counts"]
+        # Non-vacuous: the gate really inspected files, links and resources.
+        assert counts["markdown_files_scanned"] > 0
+        assert counts["links_checked"] > 0
+        assert counts["links_resolved"] == counts["links_checked"]
+        assert counts["resources_checked"] > 0
+        assert err == ""
+
+    def test_broken_link_is_reported_with_its_fields(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        doc = tmp_path.resolve() / "doc.md"
+        doc.write_text("intro\nsee [gone](missing/nope.md#sec)\n")
+        monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [doc])
+
+        assert main(["--json"]) == 1
+        out, err = capsys.readouterr()
+        payload = json.loads(out)
+        assert payload["passed"] is False
+        assert payload["broken_links"] == [
+            {
+                "file": doc.as_posix(),
+                "line": 2,
+                "target": "missing/nope.md#sec",
+                "resolved_path": (doc.parent / "missing/nope.md").as_posix(),
+            }
+        ]
+        assert payload["counts"]["links_checked"] == 1
+        assert payload["counts"]["links_resolved"] == 0
+        assert "finding(s)." in err
+
+    def test_unlinked_resource_is_reported_with_its_path(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        import claude_all.cli as cli
+
+        src = ROOT / "src/claude_all/skills/generic/fake-skill/SKILL.md"
+        fake = SimpleNamespace(kind="skills", name="fake-skill", src=src)
+        monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [])
+        monkeypatch.setattr(cli, "discover", lambda filters: [fake])
+
+        assert main(["--json"]) == 1
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["passed"] is False
+        assert payload["unlinked_resources"] == [
+            {
+                "kind": "skills",
+                "name": "fake-skill",
+                "path": "src/claude_all/skills/generic/fake-skill/SKILL.md",
+            }
+        ]
+        assert payload["counts"]["resources_checked"] == 1
+        assert payload["broken_links"] == []
+
+
+class TestMainDefaultOutput:
+    def test_clean_tree_prints_nothing_on_stdout(self, capsys: pytest.CaptureFixture[str]) -> None:
+        assert main([]) == 0
+        out, err = capsys.readouterr()
+        assert out == ""
+        assert err == ""
+
+    def test_broken_link_keeps_human_format(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        doc = tmp_path.resolve() / "doc.md"
+        doc.write_text("see [gone](missing/nope.md#sec)\n")
+        monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [doc])
+
+        assert main([]) == 1
+        out, err = capsys.readouterr()
+        assert out == f"{doc}:1: broken-link -> missing/nope.md#sec\n"
+        assert err == "\n1 finding(s).\n"
+
+    def test_unlinked_resource_keeps_human_format(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        import claude_all.cli as cli
+
+        src = ROOT / "src/claude_all/skills/generic/fake-skill/SKILL.md"
+        fake = SimpleNamespace(kind="skills", name="fake-skill", src=src)
+        monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [])
+        monkeypatch.setattr(cli, "discover", lambda filters: [fake])
+
+        assert main([]) == 1
+        out, err = capsys.readouterr()
+        assert out == (
+            "README.md: undocumented -> skills/fake-skill "
+            "(add a row linking src/claude_all/skills/generic/fake-skill/SKILL.md)\n"
+        )
+        assert err == "\n1 finding(s).\n"
+
+
+class TestExitCodeParity:
+    def test_json_and_default_modes_exit_the_same_on_a_broken_link(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        doc = tmp_path.resolve() / "doc.md"
+        doc.write_text("see [gone](missing/nope.md)\n")
+        monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [doc])
+
+        json_code = main(["--json"])
+        capsys.readouterr()
+        default_code = main([])
+        capsys.readouterr()
+        assert json_code == default_code == 1
+
+
+class TestScanLinksCounts:
+    def test_counts_follow_the_documented_definitions(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        # Anchors, external schemes and mailto are not counted as links checked.
+        doc = tmp_path.resolve() / "doc.md"
+        doc.write_text(
+            "[self](#top) [web](https://example.com) [mail](mailto:a@example.com) "
+            "[ok](doc.md) [bad](gone.md#x)\n"
+        )
+        monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [doc])
+
+        counts, broken = scan_links([])
+        assert counts == {
+            "markdown_files_scanned": 1,
+            "files_skipped_vendored": 0,
+            "links_checked": 2,
+            "links_resolved": 1,
+        }
+        assert [b["target"] for b in broken] == ["gone.md#x"]
+
+    def test_vendored_and_deleted_files_are_skipped_and_not_scanned(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        root = tmp_path.resolve()
+        monkeypatch.setattr("check_md_links.ROOT", root)
+        vendored_doc = root / "vendor" / "SKILL.md"
+        vendored_doc.parent.mkdir()
+        vendored_doc.write_text("[bad](nope.md)\n")
+        local_doc = root / "notes.md"
+        local_doc.write_text("[bad](nope.md)\n")
+        deleted_doc = root / "GONE.md"  # tracked but not on disk
+        registry = [{"path": "vendor", "vendor_mode": "dir"}]
+        monkeypatch.setattr(
+            "check_md_links.tracked_markdown",
+            lambda: [vendored_doc, local_doc, deleted_doc],
+        )
+
+        counts, broken = scan_links(registry)
+        assert counts["files_skipped_vendored"] == 1
+        assert counts["markdown_files_scanned"] == 1
+        assert [b["file"] for b in broken] == ["notes.md"]
 
 
 def test_non_vendored_routes_use_discoverable_skill_names() -> None:
