@@ -3,7 +3,8 @@
 
 Also checks that resources named by an instruction snippet are in its `requires`.
 Targets are resolved via the installer's own `discover()`, never re-derived here.
-Exit 0 = all resolve, 1 = dangling/malformed entry.
+Exit codes: 0 = all resolve (prints a `scanned=N` summary line), 1 = dangling or
+malformed entry, 2 = a discovery pattern matched zero units (fail closed, nothing was checked).
 """
 
 from __future__ import annotations
@@ -27,11 +28,16 @@ def load_resource_keys() -> set[str]:
     return {state_key(it.kind, it.name) for it in discover([])}
 
 
-def find_violations(known: set[str]) -> list[str]:
-    findings: list[str] = []
-    for manifest in sorted((SRC / "claude_all").rglob("claude-all.json")) + sorted(
+def discover_manifests() -> list[Path]:
+    """Return every dependency manifest the gate validates, in a stable order."""
+    return sorted((SRC / "claude_all").rglob("claude-all.json")) + sorted(
         (SRC / "claude_all").rglob("*.claude-all.json")
-    ):
+    )
+
+
+def find_violations(known: set[str], manifests: list[Path] | None = None) -> list[str]:
+    findings: list[str] = []
+    for manifest in discover_manifests() if manifests is None else manifests:
         rel = manifest.relative_to(REPO_ROOT)
         try:
             config = json.loads(manifest.read_text(encoding="utf-8"))
@@ -81,9 +87,26 @@ def find_undeclared_instruction_refs(
 
 
 def main() -> int:
-    """CLI entry point — print findings to stdout, exit 1 on any."""
+    """CLI entry point — findings to stdout, exit 1 on any, exit 2 on zero discovery."""
+    manifests = discover_manifests()
+    snippets = sorted(INSTRUCTIONS_DIR.glob("*/claude_md.md"))
     known = load_resource_keys()
-    findings = find_violations(known) + find_undeclared_instruction_refs(known)
+    scanned = len(manifests) + len(snippets)
+    empty: list[str] = []
+    if not any(manifest.name == "claude-all.json" for manifest in manifests):
+        empty.append("rglob 'claude-all.json' under src/claude_all")
+    if not snippets:
+        empty.append("instructions/*/claude_md.md")
+    if not known:
+        empty.append("installer discover([]) resource keys")
+    if empty:
+        print(
+            "requires discovery matched zero units — nothing was checked. Patterns that "
+            "matched nothing: " + "; ".join(empty) + ".",
+            file=sys.stderr,
+        )
+        return 2
+    findings = find_violations(known, manifests) + find_undeclared_instruction_refs(known)
     for finding in findings:
         print(finding)
     if findings:
@@ -94,6 +117,10 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
+    print(
+        f"scanned={scanned} units (manifests={len(manifests)}, "
+        f"snippets={len(snippets)}, resource_keys={len(known)})"
+    )
     return 0
 
 
