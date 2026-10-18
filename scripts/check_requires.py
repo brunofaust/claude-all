@@ -82,10 +82,41 @@ def find_undeclared_instruction_refs(
 
 def main() -> int:
     """CLI entry point — print findings to stdout, exit 1 on any."""
+    # Count discovered files for reporting and zero-discovery detection
+    src_claude_all = SRC / "claude_all"
+    manifest_files = list(src_claude_all.rglob("claude-all.json")) + list(
+        src_claude_all.rglob("*.claude-all.json")
+    )
+    instruction_files = list(INSTRUCTIONS_DIR.glob("*/claude_md.md"))
+
+    # Check for zero-discovery conditions
+    zero_patterns = []
+    if not manifest_files:
+        zero_patterns.append("'claude-all.json' and '*.claude-all.json'")
+    if not instruction_files:
+        zero_patterns.append("'*/claude_md.md'")
+
+    if zero_patterns:
+        patterns_msg = " and ".join(zero_patterns)
+        pattern_plural = "s" if len(zero_patterns) != 1 else ""
+        print(
+            f"Error: discovery pattern{pattern_plural} {patterns_msg} matched nothing",
+            file=sys.stderr,
+        )
+        return 1
+
     known = load_resource_keys()
     findings = find_violations(known) + find_undeclared_instruction_refs(known)
     for finding in findings:
         print(finding)
+
+    # Print summary line on success
+    total_inspected = len(manifest_files) + len(instruction_files)
+    print(
+        f"Inspected {total_inspected} files ({len(manifest_files)} manifests, "
+        f"{len(instruction_files)} instruction snippets)"
+    )
+
     if findings:
         print(
             f"\n{len(findings)} requires finding(s) — a dependency manifest points at a "
