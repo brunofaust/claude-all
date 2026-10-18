@@ -1,46 +1,11 @@
 #!/usr/bin/env python3
 """Gate: relative markdown links resolve and every resource is linked from the README.
 
-Vendored files are exempt from the link check (kept byte-identical to upstream);
-their `local_only` sidecars stay checked. README links are the proxy for "documented".
-
-Usage:
-    python scripts/check_md_links.py          human-readable report on stdout
-    python scripts/check_md_links.py --json   one JSON object on stdout, nothing else
-
-Exit code is 0 when nothing is found and 1 otherwise, in both modes.
-
-JSON shape (`--json`):
-
-    {
-      "passed": bool,                 # false when any broken link or unlinked resource exists
-      "counts": {
-        "files_scanned": int,         # markdown files read and checked: tracked, not vendored,
-                                      #   and present on disk
-        "files_skipped_vendored": int,  # tracked markdown exempted by the vendored registry
-        "files_skipped_missing": int,   # tracked in the git index but absent on disk
-        "links_checked": int,         # local links left after the SKIP_PREFIX filter and the
-                                      #   pure-anchor skip (anchors and external URLs excluded)
-        "links_resolved": int,        # of links_checked, those whose target exists
-                                      #   (broken links = links_checked - links_resolved)
-        "resources_checked": int      # resources returned by discover([])
-      },
-      "broken_links": [
-        {"file": str,                 # containing markdown file, repo-relative POSIX path
-         "line": int,                 # 1-based line number in that file
-         "target": str,               # raw link target as written, anchor included
-         "resolved": str}             # normalised repo-relative path that does not exist
-      ],
-      "unlinked_resources": [
-        {"kind": str,                 # resource kind, e.g. "skill" or "agent"
-         "name": str,                 # resource name
-         "path": str}                 # resource source file, repo-relative POSIX path
-      ]
-    }
-
-If an unexpected exception occurs in `--json` mode, stdout carries
-`{"passed": false, "error": "<ExceptionType>: <message>"}` and the exit code is 1.
-Default (non-JSON) output is unchanged. All paths are repo-relative POSIX strings.
+Vendored files are exempt from the link check; their `local_only` sidecars stay checked.
+Exit 1 on any finding, in both modes. `--json` prints one object on stdout:
+{passed, counts: {files_scanned, files_skipped_vendored, files_skipped_missing,
+links_checked, links_resolved, resources_checked}, broken_links: [{file, line,
+target, resolved}], unlinked_resources: [{kind, name, path}]}
 """
 
 import json
