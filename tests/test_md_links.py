@@ -296,6 +296,24 @@ class TestExitCodeParity:
         capsys.readouterr()
         assert json_code == default_code == 1
 
+    def test_json_and_default_modes_exit_the_same_on_an_unlinked_resource(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        import claude_all.cli as cli
+
+        src = ROOT / "src/claude_all/skills/generic/fake-skill/SKILL.md"
+        fake = SimpleNamespace(kind="skills", name="fake-skill", src=src)
+        monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [])
+        monkeypatch.setattr(cli, "discover", lambda filters: [fake])
+
+        json_code = main(["--json"])
+        capsys.readouterr()
+        default_code = main([])
+        capsys.readouterr()
+        assert json_code == default_code == 1
+
 
 class TestScanLinksCounts:
     def test_counts_follow_the_documented_definitions(

@@ -1,52 +1,12 @@
 #!/usr/bin/env python3
 """Gate: relative markdown links resolve and every resource is linked from the README.
 
-Vendored files are exempt from the link check (kept byte-identical to upstream);
-their `local_only` sidecars stay checked. README links are the proxy for "documented".
+Vendored files are exempt from the link check; their `local_only` sidecars stay checked.
 
-Usage:
-    python3 scripts/check_md_links.py          human-readable findings on stdout
-    python3 scripts/check_md_links.py --json   one JSON object on stdout, nothing else
-
-Exit code is the same in both modes: 0 when there are no findings, 1 otherwise.
-The "N finding(s)." diagnostic goes to stderr in both modes.
-
-JSON output (`schema_version` 1):
-
-    {
-      "schema_version": 1,
-      "passed": true,                      # false when any finding exists
-      "counts": {
-        "markdown_files_scanned": 0,       # tracked .md files read by the link check
-        "files_skipped_vendored": 0,       # tracked .md files exempted as vendored
-        "links_checked": 0,                # link targets evaluated (see below)
-        "links_resolved": 0,               # of those, targets that exist
-        "resources_checked": 0             # discovered resources checked for a README row
-      },
-      "broken_links": [
-        {"file": "docs/a.md",              # repo-relative POSIX path of the containing file
-         "line": 3,                        # 1-based line of the link in that file
-         "target": "../nope.md#x",         # raw target exactly as written, incl. any #anchor
-         "resolved_path": "nope.md"}       # repo-relative POSIX path that does not exist
-      ],
-      "unlinked_resources": [
-        {"kind": "skills",                 # resource kind from discover()
-         "name": "my-skill",
-         "path": "src/claude_all/skills/generic/my-skill/SKILL.md"}  # src, repo-relative POSIX
-      ]
-    }
-
-Counting semantics:
-- markdown_files_scanned: tracked `*.md` files that were read. Vendored files and
-  tracked-but-deleted files are not counted.
-- files_skipped_vendored: tracked `*.md` files exempted by `is_vendored`.
-- links_checked: link targets evaluated. Anchors, `http(s)://`, `mailto:`, `tel:` and
-  `/`-prefixed targets are not counted.
-- links_resolved: the subset of links_checked whose target path exists.
-- resources_checked: `len(discover([]))`, the resources the README coverage check covers.
-
-Paths are repo-relative POSIX strings, so output is identical on a developer machine and
-in CI. A link that escapes the repository keeps its absolute POSIX path in resolved_path.
+Usage: check_md_links.py [--json]. Default prints human-readable findings on stdout;
+--json prints one JSON object on stdout instead. Exit code is 0 without findings, 1 with
+them, in both modes. The JSON shape and counting semantics are in the comment block
+above SCHEMA_VERSION.
 """
 
 import argparse
@@ -57,6 +17,43 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+
+# JSON output (`--json`), `schema_version` 1:
+#
+#     {
+#       "schema_version": 1,
+#       "passed": true,                      # false when any finding exists
+#       "counts": {
+#         "markdown_files_scanned": 0,       # tracked .md files read by the link check
+#         "files_skipped_vendored": 0,       # tracked .md files exempted as vendored
+#         "links_checked": 0,                # link targets evaluated (see below)
+#         "links_resolved": 0,               # of those, targets that exist
+#         "resources_checked": 0             # discovered resources checked for a README row
+#       },
+#       "broken_links": [
+#         {"file": "docs/a.md",              # repo-relative POSIX path of the containing file
+#          "line": 3,                        # 1-based line of the link in that file
+#          "target": "../nope.md#x",         # raw target exactly as written, incl. any #anchor
+#          "resolved_path": "nope.md"}       # repo-relative POSIX path that does not exist
+#       ],
+#       "unlinked_resources": [
+#         {"kind": "skills",                 # resource kind from discover()
+#          "name": "my-skill",
+#          "path": "src/claude_all/skills/generic/my-skill/SKILL.md"}  # repo-relative POSIX
+#       ]
+#     }
+#
+# Counting semantics:
+# - markdown_files_scanned: tracked `*.md` files that were read. Vendored files and
+#   tracked-but-deleted files are not counted.
+# - files_skipped_vendored: tracked `*.md` files exempted by `is_vendored`.
+# - links_checked: link targets evaluated. Anchors, `http(s)://`, `mailto:`, `tel:` and
+#   `/`-prefixed targets are not counted.
+# - links_resolved: the subset of links_checked whose target path exists.
+# - resources_checked: `len(discover([]))`, the resources the README coverage check covers.
+#
+# Paths are repo-relative POSIX strings, so output is identical on a developer machine and
+# in CI. A link that escapes the repository keeps its absolute POSIX path in resolved_path.
 SCHEMA_VERSION = 1
 
 # [label](target) — skip images, absolute URLs, anchors and mailto. A leading `/` is
