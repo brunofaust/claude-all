@@ -3,9 +3,51 @@
 
 Vendored files are exempt from the link check (kept byte-identical to upstream);
 their `local_only` sidecars stay checked. README links are the proxy for "documented".
+
+Usage:
+    python scripts/check_md_links.py          human-readable report on stdout
+    python scripts/check_md_links.py --json   one machine-readable JSON object on stdout
+
+Exit codes (identical in both modes): 0 when there are no findings, 1 when there
+are findings or when --json could not run the checks (see "error" below).
+
+JSON output shape (--json). Stdout carries exactly one object, nothing else;
+diagnostics go to stderr.
+
+    {
+      "ok": bool,                      # true iff broken_links and unlinked_resources are empty
+      "error": null | {                # non-null only when the checker itself failed
+        "type": str,                   # exception class name, e.g. "CalledProcessError"
+        "message": str
+      },
+      "counts": null | {               # null when "error" is set
+        "markdown_files_scanned": int, # tracked .md files, not vendored, present on disk
+        "links_checked": int,          # relative, non-anchor link targets in those files
+        "links_resolved": int,         # the subset of links_checked whose path exists
+        "resources_checked": int,      # len(discover([])): every discovered resource
+        "files_skipped_vendored": int  # tracked .md files exempted as vendored
+      },
+      "broken_links": [                # one per unresolved relative link
+        {"file": str,                  # repo-relative path of the containing markdown file
+         "line": int,                  # 1-based line number in that file
+         "target": str,                # raw link target as written
+         "resolved_path": str}         # repo-relative path that does not exist
+      ],
+      "unlinked_resources": [          # one per resource with no README row
+        {"path": str,                  # repo-relative path of the resource's source file
+         "kind": str,
+         "name": str}
+      ]
+    }
+
+A zero-file scan still exits 0; callers detect a vacuous pass via
+counts.markdown_files_scanned == 0.
 """
 
+import argparse
+import contextlib
 import json
+import os
 import re
 import subprocess
 import sys
@@ -57,16 +99,33 @@ def tracked_markdown() -> list[Path]:
     return [ROOT / p for p in out.split("\0") if p]
 
 
-def check_links(registry: list[dict]) -> list[str]:
-    findings = []
+def _display_path(path: Path) -> str:
+    # A link may climb out of the repo (`../../../x.md`); report it as written, not as a crash.
+    try:
+        return path.relative_to(ROOT).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
+def scan_links(registry: list[dict]) -> tuple[list[dict], dict[str, int]]:
+    """Structured link check: broken-link records plus the counts behind them."""
+    broken: list[dict] = []
+    counts = {
+        "markdown_files_scanned": 0,
+        "links_checked": 0,
+        "links_resolved": 0,
+        "files_skipped_vendored": 0,
+    }
     for md in tracked_markdown():
         if is_vendored(md, registry):
+            counts["files_skipped_vendored"] += 1
             continue
         if not md.exists():
             # `git ls-files` reflects the INDEX: a tracked file deleted from the
             # working tree but not yet re-staged (`git rm`/`git add`) still shows up
             # here. Nothing left to check its links against.
             continue
+        counts["markdown_files_scanned"] += 1
         for line_no, line in strip_code_blocks(md.read_text()):
             for target in LINK.findall(CODE_SPAN.sub("", line)):
                 if target.startswith(SKIP_PREFIX):
@@ -74,27 +133,59 @@ def check_links(registry: list[dict]) -> list[str]:
                 bare = target.split("#", 1)[0]
                 if not bare:
                     continue  # pure anchor
-                if not (md.parent / bare).resolve().exists():
-                    rel = md.relative_to(ROOT)
-                    findings.append(f"{rel}:{line_no}: broken-link -> {target}")
-    return findings
+                counts["links_checked"] += 1
+                named = md.parent / bare
+                if named.resolve().exists():
+                    counts["links_resolved"] += 1
+                else:
+                    broken.append(
+                        {
+                            "file": md.relative_to(ROOT).as_posix(),
+                            "line": line_no,
+                            "target": target,
+                            "resolved_path": _display_path(Path(os.path.normpath(named))),
+                        }
+                    )
+    return broken, counts
 
 
-def check_readme_coverage() -> list[str]:
+def check_links(registry: list[dict]) -> list[str]:
+    broken, _ = scan_links(registry)
+    return [
+        f"{record['file']}:{record['line']}: broken-link -> {record['target']}" for record in broken
+    ]
+
+
+def scan_readme_coverage() -> tuple[int, list[dict]]:
+    """Structured README check: (resources_checked, unlinked-resource records)."""
     sys.path.insert(0, str(ROOT / "src"))
     from claude_all.cli import discover
 
     readme = (ROOT / "README.md").read_text()
+    resources = discover([])
+    unlinked = []
+    for item in resources:
+        rel = item.src.relative_to(ROOT).as_posix()
+        if f"]({rel})" not in readme:
+            unlinked.append({"path": rel, "kind": item.kind, "name": item.name})
+    return len(resources), unlinked
+
+
+def check_readme_coverage() -> list[str]:
+    _, unlinked = scan_readme_coverage()
     return [
-        f"README.md: undocumented -> {item.kind}/{item.name} "
-        f"(add a row linking {item.src.relative_to(ROOT).as_posix()})"
-        for item in discover([])
-        if f"]({item.src.relative_to(ROOT).as_posix()})" not in readme
+        f"README.md: undocumented -> {record['kind']}/{record['name']} "
+        f"(add a row linking {record['path']})"
+        for record in unlinked
     ]
 
 
-def main() -> int:
-    registry = json.loads((ROOT / "vendored.json").read_text()).get("vendored", [])
+def load_registry() -> list[dict]:
+    return json.loads((ROOT / "vendored.json").read_text()).get("vendored", [])
+
+
+def main_human() -> int:
+    registry = load_registry()
     findings = check_links(registry) + check_readme_coverage()
     for finding in findings:
         print(finding)
@@ -102,6 +193,48 @@ def main() -> int:
         print(f"\n{len(findings)} finding(s).", file=sys.stderr)
         return 1
     return 0
+
+
+def main_json() -> int:
+    # Anything a check prints to stdout is diagnostics here: keep stdout to the one object.
+    try:
+        with contextlib.redirect_stdout(sys.stderr):
+            registry = load_registry()
+            broken, counts = scan_links(registry)
+            resources_checked, unlinked = scan_readme_coverage()
+    except Exception as exc:  # the caller must always get parseable JSON
+        print(f"check_md_links: {type(exc).__name__}: {exc}", file=sys.stderr)
+        report = {
+            "ok": False,
+            "error": {"type": type(exc).__name__, "message": str(exc)},
+            "counts": None,
+            "broken_links": [],
+            "unlinked_resources": [],
+        }
+        print(json.dumps(report, indent=2))
+        return 1
+    counts["resources_checked"] = resources_checked
+    ok = not broken and not unlinked
+    report = {
+        "ok": ok,
+        "error": None,
+        "counts": counts,
+        "broken_links": broken,
+        "unlinked_resources": unlinked,
+    }
+    print(json.dumps(report, indent=2))
+    return 0 if ok else 1
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__.split("\n\n", 1)[0])
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="emit one machine-readable JSON object on stdout instead of the report",
+    )
+    args = parser.parse_args(argv)
+    return main_json() if args.json else main_human()
 
 
 if __name__ == "__main__":

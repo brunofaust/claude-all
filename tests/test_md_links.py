@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -18,11 +19,13 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
+import check_md_links
 from check_md_links import (
     CODE_SPAN,
     LINK,
     check_links,
     is_vendored,
+    main,
     strip_code_blocks,
 )
 from vendor_sync import clone_upstream
@@ -218,3 +221,210 @@ def test_claude_hook_examples_use_timeout_seconds() -> None:
                 findings.append(f"{path.relative_to(ROOT)}: timeout={value}")
 
     assert findings == []
+
+
+class TestMainJson:
+    """--json mode runs against a fixture repo: ROOT, git listing and discovery are patched."""
+
+    @pytest.fixture
+    def fixture_repo(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
+        root = tmp_path.resolve()
+        monkeypatch.setattr(check_md_links, "ROOT", root)
+        (root / "vendored.json").write_text('{"vendored": []}')
+        monkeypatch.setattr(
+            check_md_links,
+            "tracked_markdown",
+            lambda: [root / "doc.md"],
+        )
+        monkeypatch.setattr(check_md_links, "scan_readme_coverage", lambda: (1, []))
+        return root
+
+    def test_clean_tree_json_is_ok(
+        self, fixture_repo: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        (fixture_repo / "doc.md").write_text("[self](doc.md)\n")
+        assert main(["--json"]) == 0
+        report = json.loads(capsys.readouterr().out)
+        assert report["ok"] is True
+        assert report["error"] is None
+        assert report["broken_links"] == []
+        assert report["unlinked_resources"] == []
+        assert report["counts"] == {
+            "markdown_files_scanned": 1,
+            "links_checked": 1,
+            "links_resolved": 1,
+            "resources_checked": 1,
+            "files_skipped_vendored": 0,
+        }
+
+    def test_broken_link_is_reported_with_target_and_resolved_path(
+        self, fixture_repo: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        (fixture_repo / "doc.md").write_text("intro\n[gone](missing.md)\n")
+        assert main(["--json"]) == 1
+        report = json.loads(capsys.readouterr().out)
+        assert report["ok"] is False
+        assert report["broken_links"] == [
+            {
+                "file": "doc.md",
+                "line": 2,
+                "target": "missing.md",
+                "resolved_path": "missing.md",
+            }
+        ]
+        assert report["counts"]["links_checked"] == 1
+        assert report["counts"]["links_resolved"] == 0
+
+    def test_unlinked_resource_is_reported(
+        self,
+        fixture_repo: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        (fixture_repo / "doc.md").write_text("clean\n")
+        unlinked = [{"path": "src/x/a/SKILL.md", "kind": "skill", "name": "a"}]
+        monkeypatch.setattr(check_md_links, "scan_readme_coverage", lambda: (2, unlinked))
+        assert main(["--json"]) == 1
+        report = json.loads(capsys.readouterr().out)
+        assert report["ok"] is False
+        assert report["unlinked_resources"] == unlinked
+        assert report["counts"]["resources_checked"] == 2
+        assert report["broken_links"] == []
+
+    def test_default_output_is_unchanged_for_broken_link(
+        self, fixture_repo: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        (fixture_repo / "doc.md").write_text("[gone](missing.md)\n")
+        assert main([]) == 1
+        captured = capsys.readouterr()
+        assert captured.out == "doc.md:1: broken-link -> missing.md\n"
+        assert captured.err == "\n1 finding(s).\n"
+
+    def test_default_output_is_unchanged_for_unlinked_resource(
+        self,
+        fixture_repo: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        (fixture_repo / "doc.md").write_text("clean\n")
+        unlinked = [{"path": "src/x/a/SKILL.md", "kind": "skill", "name": "a"}]
+        monkeypatch.setattr(check_md_links, "scan_readme_coverage", lambda: (2, unlinked))
+        assert main([]) == 1
+        assert capsys.readouterr().out == (
+            "README.md: undocumented -> skill/a (add a row linking src/x/a/SKILL.md)\n"
+        )
+
+    def test_checker_failure_emits_error_object_only(
+        self,
+        fixture_repo: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        def fail() -> list[Path]:
+            raise subprocess.CalledProcessError(128, ["git", "ls-files"])
+
+        monkeypatch.setattr(check_md_links, "tracked_markdown", fail)
+        assert main(["--json"]) == 1
+        captured = capsys.readouterr()
+        report = json.loads(captured.out)
+        assert report["ok"] is False
+        assert report["error"]["type"] == "CalledProcessError"
+        assert report["counts"] is None
+        assert captured.out == json.dumps(report, indent=2) + "\n"
+        assert "CalledProcessError" in captured.err
+
+    def test_malformed_vendored_registry_emits_error_object(
+        self, fixture_repo: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        (fixture_repo / "vendored.json").write_text("{not json")
+        assert main(["--json"]) == 1
+        captured = capsys.readouterr()
+        report = json.loads(captured.out)
+        assert report["ok"] is False
+        assert report["error"]["type"] == "JSONDecodeError"
+        assert report["counts"] is None
+
+    def test_discovery_failure_emits_error_object(
+        self,
+        fixture_repo: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        def boom() -> tuple[int, list[dict]]:
+            raise RuntimeError("discovery broke")
+
+        monkeypatch.setattr(check_md_links, "scan_readme_coverage", boom)
+        assert main(["--json"]) == 1
+        captured = capsys.readouterr()
+        report = json.loads(captured.out)
+        assert report["error"] == {"type": "RuntimeError", "message": "discovery broke"}
+        assert "discovery broke" in captured.err
+
+    def test_zero_file_scan_exits_zero_and_reports_no_files(
+        self,
+        fixture_repo: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        monkeypatch.setattr(check_md_links, "tracked_markdown", lambda: [])
+        assert main(["--json"]) == 0
+        report = json.loads(capsys.readouterr().out)
+        assert report["ok"] is True
+        assert report["counts"]["markdown_files_scanned"] == 0
+
+    def test_vendored_markdown_is_skipped_and_counted(
+        self,
+        fixture_repo: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        vendored_dir = fixture_repo / "vendor"
+        vendored_dir.mkdir()
+        upstream = vendored_dir / "upstream.md"
+        upstream.write_text("[up](not-here.md)\n")
+        (fixture_repo / "doc.md").write_text("clean\n")
+        monkeypatch.setattr(
+            check_md_links, "load_registry", lambda: [{"path": "vendor", "vendor_mode": "dir"}]
+        )
+        monkeypatch.setattr(
+            check_md_links,
+            "tracked_markdown",
+            lambda: [upstream, fixture_repo / "doc.md"],
+        )
+        assert main(["--json"]) == 0
+        report = json.loads(capsys.readouterr().out)
+        assert report["ok"] is True
+        assert report["broken_links"] == []
+        assert report["counts"]["files_skipped_vendored"] == 1
+        assert report["counts"]["markdown_files_scanned"] == 1
+
+    def test_link_climbing_out_of_repo_is_reported_not_crashed(
+        self, fixture_repo: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        (fixture_repo / "doc.md").write_text("[up](../../../x.md)\n")
+        assert main([]) == 1
+        assert capsys.readouterr().out == "doc.md:1: broken-link -> ../../../x.md\n"
+        assert main(["--json"]) == 1
+        report = json.loads(capsys.readouterr().out)
+        assert report["error"] is None
+        assert report["broken_links"][0]["target"] == "../../../x.md"
+        assert report["broken_links"][0]["resolved_path"].endswith("/x.md")
+
+    def test_human_output_is_empty_on_clean_tree(
+        self, fixture_repo: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        (fixture_repo / "doc.md").write_text("[self](doc.md)\n")
+        assert main([]) == 0
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        assert captured.err == ""
+
+    def test_exit_code_matches_between_modes(
+        self, fixture_repo: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        (fixture_repo / "doc.md").write_text("[gone](missing.md)\n")
+        human_exit = main([])
+        capsys.readouterr()
+        json_exit = main(["--json"])
+        capsys.readouterr()
+        assert human_exit == json_exit == 1
