@@ -18,6 +18,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
+import check_md_links
 from check_md_links import (
     CODE_SPAN,
     LINK,
@@ -218,3 +219,302 @@ def test_claude_hook_examples_use_timeout_seconds() -> None:
                 findings.append(f"{path.relative_to(ROOT)}: timeout={value}")
 
     assert findings == []
+
+
+def test_json_clean_tree(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """--json on a clean tree returns pass=True and zero counts."""
+    # Create a simple markdown file with no links
+    md_file = tmp_path / "test.md"
+    md_file.write_text("# Test\n\nSome text.")
+
+    # Mock tracked_markdown to return our file
+    monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [md_file])
+
+    # Mock vendored.json to return empty registry
+    monkeypatch.setattr("check_md_links.json.loads", lambda x: {"vendored": []})
+
+    # Import and run main with --json
+    import sys
+    from io import StringIO
+
+    from check_md_links import main
+
+    # Capture stdout and stderr
+    old_stdout, old_stderr = sys.stdout, sys.stderr
+    sys.stdout, sys.stderr = StringIO(), StringIO()
+
+    try:
+        # Set up argv for --json
+        sys.argv = ["check_md_links.py", "--json"]
+        result = main()
+
+        # Get output
+        stdout_val = sys.stdout.getvalue()
+        stderr_val = sys.stderr.getvalue()
+    finally:
+        sys.stdout, sys.stderr = old_stdout, old_stderr
+
+    # Parse JSON output
+    data = json.loads(stdout_val)
+    print(f"DEBUG: data = {data}")  # Debug line
+
+    # Assertions
+    assert result == 0  # Should return 0 for clean tree
+    assert data["pass_fail"] is True
+    assert data["counts"]["markdown_files_scanned"] == 1
+    assert data["counts"]["links_resolved"] == 0
+    assert data["counts"]["resources_checked"] == 0  # No resources discovered in mock
+    assert data["counts"]["files_skipped_as_vendored"] == 0
+    assert data["broken_links"] == []
+    assert data["unlinked_resources"] == []
+    # stderr should have findings count (0 findings -> no output)
+    assert stderr_val == ""
+
+
+def test_json_with_broken_link(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """--json with a broken link returns pass=False and broken link details."""
+    # Create a markdown file with a broken link
+    md_file = tmp_path / "test.md"
+    md_file.write_text("# Test\n\n[link](missing.md)")
+
+    # Mock tracked_markdown to return our file
+    monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [md_file])
+
+    # Mock vendored.json to return empty registry
+    monkeypatch.setattr("check_md_links.json.loads", lambda x: {"vendored": []})
+
+    # Import and run main with --json
+    import sys
+    from io import StringIO
+
+    from check_md_links import main
+
+    # Capture stdout and stderr
+    old_stdout, old_stderr = sys.stdout, sys.stderr
+    sys.stdout, sys.stderr = StringIO(), StringIO()
+
+    try:
+        # Set up argv for --json
+        sys.argv = ["check_md_links.py", "--json"]
+        result = main()
+
+        # Get output
+        stdout_val = sys.stdout.getvalue()
+        stderr_val = sys.stderr.getvalue()
+    finally:
+        sys.stdout, sys.stderr = old_stdout, old_stderr
+
+    # Parse JSON output
+    data = json.loads(stdout_val)
+
+    # Assertions
+    assert result == 1  # Should return 1 for findings
+    assert data["pass_fail"] is False
+    assert data["counts"]["markdown_files_scanned"] == 1
+    assert data["counts"]["links_resolved"] == 1
+    assert data["counts"]["resources_checked"] == 0
+    assert data["counts"]["files_skipped_as_vendored"] == 0
+    assert len(data["broken_links"]) == 1
+    broken_link = data["broken_links"][0]
+    assert broken_link["file"] == "test.md"
+    assert broken_link["line"] == 2
+    assert broken_link["raw_target"] == "missing.md"
+    assert broken_link["resolved_path"] == str((tmp_path / "missing.md").resolve())
+    assert data["unlinked_resources"] == []
+    # stderr should have findings count
+    assert "1 finding(s)" in stderr_val
+
+
+def test_json_with_unlinked_resource(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """--json with an unlinked resource returns pass=False and unlinked resource details."""
+    # We need to mock the discover function to return a resource
+    # Create a temporary CLI module to mock
+    import types
+
+    mock_cli = types.ModuleType("claude_all.cli")
+
+    # Create a mock item that represents a resource
+    mock_item = types.SimpleNamespace()
+    mock_item.kind = "skill"
+    mock_item.name = "test-skill"
+    mock_item.src = tmp_path / "src" / "test-skill" / "SKILL.md"
+    mock_item.src.parent.mkdir(parents=True)
+    mock_item.src.write_text("# Test Skill")
+
+    # Mock discover to return our item
+    def mock_discover(_):
+        return [mock_item]
+
+    mock_cli.discover = mock_discover
+
+    # Create a README that does NOT link to our resource
+    readme = tmp_path / "README.md"
+    readme.write_text("# README\n\nSome content but no link to test-skill.")
+
+    # Create a markdown file (to satisfy the markdown scanning)
+    md_file = tmp_path / "test.md"
+    md_file.write_text("# Test\n\nSome text.")
+
+    # Mock tracked_markdown to return our markdown file
+    monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [md_file])
+
+    # Mock vendored.json to return empty registry
+    monkeypatch.setattr("check_md_links.json.loads", lambda x: {"vendored": []})
+
+    # Mock sys.path.insert and import of claude_all.cli
+    import sys
+
+    original_path_insert = sys.path.insert
+
+    def mock_path_insert(pos, path):
+        if "src" in str(path):
+            sys.modules["claude_all.cli"] = mock_cli
+        return original_path_insert(pos, path)
+
+    monkeypatch.setattr("sys.path.insert", mock_path_insert)
+
+    # Also need to mock the README path in check_readme_coverage functions
+    original_readme_path = None
+
+    def mock_check_readme_coverage():
+        return [
+            f"README.md: undocumented -> {mock_item.kind}/{mock_item.name} "
+            f"(add a row linking {mock_item.src.relative_to(tmp_path).as_posix()})"
+        ]
+
+    def mock_check_readme_coverage_json():
+        return (
+            1,
+            [
+                {
+                    "kind": mock_item.kind,
+                    "name": mock_item.name,
+                    "path": mock_item.src.relative_to(tmp_path).as_posix(),
+                }
+            ],
+        )
+
+    # Patch the functions
+    monkeypatch.setattr("check_md_links.check_readme_coverage", mock_check_readme_coverage)
+    monkeypatch.setattr(
+        "check_md_links.check_readme_coverage_json", mock_check_readme_coverage_json
+    )
+
+    # Import and run main with --json
+    from io import StringIO
+
+    from check_md_links import main
+
+    # Capture stdout and stderr
+    old_stdout, old_stderr = sys.stdout, sys.stderr
+    sys.stdout, sys.stderr = StringIO(), StringIO()
+
+    try:
+        # Set up argv for --json
+        sys.argv = ["check_md_links.py", "--json"]
+        result = main()
+
+        # Get output
+        stdout_val = sys.stdout.getvalue()
+        stderr_val = sys.stderr.getvalue()
+    finally:
+        sys.stdout, sys.stderr = old_stdout, old_stderr
+
+    # Parse JSON output
+    data = json.loads(stdout_val)
+
+    # Assertions
+    assert result == 1  # Should return 1 for findings
+    assert data["pass_fail"] is False
+    assert data["counts"]["markdown_files_scanned"] == 1
+    assert data["counts"]["links_resolved"] == 0
+    assert data["counts"]["resources_checked"] == 1
+    assert data["counts"]["files_skipped_as_vendored"] == 0
+    assert data["broken_links"] == []
+    assert len(data["unlinked_resources"]) == 1
+    unlinked_resource = data["unlinked_resources"][0]
+    assert unlinked_resource["kind"] == "skill"
+    assert unlinked_resource["name"] == "test-skill"
+    assert unlinked_resource["path"] == "src/test-skill/SKILL.md"
+    # stderr should have findings count
+    assert "1 finding(s)" in stderr_val
+
+
+def test_default_output_unaffected(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Default (non-JSON) output remains byte-identical to today."""
+    # Create a markdown file with a broken link
+    md_file = tmp_path / "test.md"
+    md_file.write_text("# Test\n\n[link](missing.md)\n\n[another](also_missing.md)")
+
+    # Mock tracked_markdown to return our file
+    monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [md_file])
+
+    # Mock vendored.json to return empty registry
+    monkeypatch.setattr("check_md_links.json.loads", lambda x: {"vendored": []})
+
+    # Mock Path.relative_to to work with tmp_path
+    original_relative_to = Path.relative_to
+
+    def mock_relative_to(self, other, *args, **kwargs):
+        # Make paths relative to tmp_path for testing
+        if other == Path(check_md_links.__globals__["ROOT"]):
+            return self.relative_to(tmp_path, *args, **kwargs)
+        return original_relative_to(self, other, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "relative_to", mock_relative_to)
+
+    # Import and run main without --json (default)
+    import sys
+    from io import StringIO
+
+    from check_md_links import main
+
+    # Capture stdout and stderr
+    old_stdout, old_stderr = sys.stdout, sys.stderr
+    sys.stdout, sys.stderr = StringIO(), StringIO()
+
+    try:
+        # Set up argv for default mode
+        sys.argv = ["check_md_links.py"]
+        result = main()
+
+        # Get output
+        stdout_val = sys.stdout.getvalue()
+        stderr_val = sys.stderr.getvalue()
+    finally:
+        sys.stdout, sys.stderr = old_stdout, old_stderr
+
+    # Expected output format (based on existing check_links function)
+    expected_lines = [
+        "test.md:2: broken-link -> missing.md",
+        "test.md:4: broken-link -> also_missing.md",
+        "",
+        "2 finding(s).",
+    ]
+    expected_stdout = "\n".join(expected_lines)
+
+    # Assertions
+    assert result == 1  # Should return 1 for findings
+    assert stdout_val == expected_stdout
+    assert "2 finding(s)" in stderr_val
+
+    # Also test clean tree default output
+    md_file_clean = tmp_path / "clean.md"
+    md_file_clean.write_text("# Clean\n\nNo links here.")
+    monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [md_file_clean])
+
+    old_stdout, old_stderr = sys.stdout, sys.stderr
+    sys.stdout, sys.stderr = StringIO(), StringIO()
+
+    try:
+        sys.argv = ["check_md_links.py"]
+        result = main()
+
+        stdout_val = sys.stdout.getvalue()
+        stderr_val = sys.stderr.getvalue()
+    finally:
+        sys.stdout, sys.stderr = old_stdout, old_stderr
+
+    assert result == 0  # Should return 0 for clean tree
+    assert stdout_val == ""  # No findings, so no output
+    assert stderr_val == ""  # No findings, so no output to stderr
