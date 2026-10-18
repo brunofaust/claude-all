@@ -13,6 +13,7 @@ import json
 import re
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -23,6 +24,7 @@ from check_md_links import (
     LINK,
     check_links,
     is_vendored,
+    main,
     strip_code_blocks,
 )
 from vendor_sync import clone_upstream
@@ -141,7 +143,9 @@ class TestCheckLinks:
         # tracked-but-deleted file must be skipped, not crash read_text()
         missing = tmp_path / "GONE.md"
         monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [missing])
-        assert check_links(registry=[]) == []
+        scan = check_links(registry=[])
+        assert scan.markdown_files_scanned == 0
+        assert scan.broken_links == []
 
 
 def test_non_vendored_routes_use_discoverable_skill_names() -> None:
@@ -218,3 +222,140 @@ def test_claude_hook_examples_use_timeout_seconds() -> None:
                 findings.append(f"{path.relative_to(ROOT)}: timeout={value}")
 
     assert findings == []
+
+
+@pytest.fixture
+def gate_tree(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """A tiny repo with one skill; the README links it unless a test removes the link."""
+    root = tmp_path / "repo"
+    (root / "docs").mkdir(parents=True)
+    (root / "skills" / "a").mkdir(parents=True)
+    skill = root / "skills" / "a" / "SKILL.md"
+    skill.write_text("# a\n", encoding="utf-8")
+    (root / "vendored.json").write_text('{"vendored": []}', encoding="utf-8")
+    (root / "README.md").write_text("[a](skills/a/SKILL.md)\n", encoding="utf-8")
+    (root / "docs" / "guide.md").write_text(
+        "see [readme](../README.md) and [skill](../skills/a/SKILL.md)\n", encoding="utf-8"
+    )
+    resource = SimpleNamespace(kind="skills", name="a", src=skill)
+    monkeypatch.syspath_prepend(str(ROOT / "src"))
+    monkeypatch.setattr("check_md_links.ROOT", root)
+    monkeypatch.setattr(
+        "check_md_links.tracked_markdown",
+        lambda: [root / "README.md", root / "docs" / "guide.md"],
+    )
+    monkeypatch.setattr("claude_all.cli.discover", lambda filters: [resource])
+    return root
+
+
+def run_gate(monkeypatch: pytest.MonkeyPatch, *args: str) -> int:
+    monkeypatch.setattr(sys, "argv", ["check_md_links.py", *args])
+    return main()
+
+
+class TestJsonMode:
+    def test_clean_tree_emits_passing_object(
+        self, gate_tree: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        code = run_gate(monkeypatch, "--json")
+        report = json.loads(capsys.readouterr().out)
+        assert code == 0
+        assert report["pass"] is True
+        assert report["broken_links"] == []
+        assert report["unlinked_resources"] == []
+        assert report["counts"] == {
+            "markdown_files_scanned": 2,
+            "vendored_files_skipped": 0,
+            "links_checked": 3,
+            "links_resolved": 3,
+            "resources_checked": 1,
+        }
+
+    def test_broken_link_is_reported_with_resolved_path(
+        self, gate_tree: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        (gate_tree / "docs" / "guide.md").write_text(
+            "see [gone](../missing.md)\n", encoding="utf-8"
+        )
+        code = run_gate(monkeypatch, "--json")
+        report = json.loads(capsys.readouterr().out)
+        assert code == 1
+        assert report["pass"] is False
+        assert report["broken_links"] == [
+            {
+                "file": "docs/guide.md",
+                "line": 1,
+                "target": "../missing.md",
+                "resolved": "missing.md",
+            }
+        ]
+        assert report["counts"]["links_checked"] == 2
+        assert report["counts"]["links_resolved"] == 1
+
+    def test_unlinked_resource_is_reported(
+        self, gate_tree: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        (gate_tree / "README.md").write_text("no links here\n", encoding="utf-8")
+        code = run_gate(monkeypatch, "--json")
+        report = json.loads(capsys.readouterr().out)
+        assert code == 1
+        assert report["pass"] is False
+        assert report["unlinked_resources"] == [
+            {"kind": "skills", "name": "a", "path": "skills/a/SKILL.md"}
+        ]
+        assert report["counts"]["resources_checked"] == 1
+
+
+class TestDefaultOutput:
+    def test_clean_tree_prints_nothing_and_exits_zero(
+        self, gate_tree: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        code = run_gate(monkeypatch)
+        captured = capsys.readouterr()
+        assert code == 0
+        assert captured.out == ""
+
+    def test_findings_stay_human_readable(
+        self, gate_tree: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        (gate_tree / "README.md").write_text("no links here\n", encoding="utf-8")
+        code = run_gate(monkeypatch)
+        captured = capsys.readouterr()
+        assert code == 1
+        assert captured.out == (
+            "README.md: undocumented -> skills/a (add a row linking skills/a/SKILL.md)\n"
+        )
+        assert captured.err == "\n1 finding(s).\n"
+
+
+class TestJsonEdgeCases:
+    def test_target_escaping_the_repo_is_reported_as_relative_path(
+        self, gate_tree: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        (gate_tree / "docs" / "guide.md").write_text(
+            "see [outside](../../../elsewhere.md)\n", encoding="utf-8"
+        )
+        code = run_gate(monkeypatch, "--json")
+        report = json.loads(capsys.readouterr().out)
+        assert code == 1
+        (broken,) = report["broken_links"]
+        assert broken["target"] == "../../../elsewhere.md"
+        assert not Path(broken["resolved"]).is_absolute()
+        assert broken["resolved"].startswith("../")
+        assert broken["resolved"].endswith("elsewhere.md")
+
+    def test_script_error_is_a_json_error_object_on_stdout(
+        self, gate_tree: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        def broken_listing() -> list[Path]:
+            raise RuntimeError("git ls-files exploded")
+
+        monkeypatch.setattr("check_md_links.tracked_markdown", broken_listing)
+        code = run_gate(monkeypatch, "--json")
+        captured = capsys.readouterr()
+        assert code == 1
+        assert json.loads(captured.out) == {
+            "pass": False,
+            "error": {"type": "RuntimeError", "message": "git ls-files exploded"},
+        }
+        assert "Traceback" in captured.err
