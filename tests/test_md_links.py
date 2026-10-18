@@ -218,3 +218,347 @@ def test_claude_hook_examples_use_timeout_seconds() -> None:
                 findings.append(f"{path.relative_to(ROOT)}: timeout={value}")
 
     assert findings == []
+
+
+def test_json_output_clean_tree(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """--json emits valid JSON with passed=True and zero counts on a clean tree."""
+    from check_md_links import main
+
+    # Create a simple markdown file with no broken links and full README coverage
+    md_file = tmp_path / "test.md"
+    md_file.write_text("See [dummy](dummy.md) for more info.\n")
+    dummy_file = tmp_path / "dummy.md"
+    dummy_file.write_text("# Dummy\n")
+
+    # Mock git ls-files to return our test file
+    def mock_tracked_markdown():
+        return [md_file]
+
+    monkeypatch.setattr("check_md_links.tracked_markdown", mock_tracked_markdown)
+    # Mock vendored registry as empty
+    monkeypatch.setattr(
+        "check_md_links.json.loads",
+        lambda _: {"vendored": []},
+    )
+
+    # Mock discover to return no items (so no README coverage issues)
+    class MockItem:
+        kind = "skill"
+        name = "test"
+        src = tmp_path / "test.md"
+
+    def mock_discover(_):
+        return [MockItem()]
+
+    monkeypatch.setattr("check_md_links.cli.discover", mock_discover)
+    # Mock README to contain the link
+    readme_mock = tmp_path / "README.md"
+    readme_mock.write_text("See [dummy](test/dummy.md) for more info.\n")
+    monkeypatch.setattr("check_md_links.ROOT", tmp_path)
+    monkeypatch.setattr(
+        "builtins.open",
+        lambda *args, **kwargs: (
+            open(readme_mock, *args, **kwargs)
+            if "README.md" in str(args)
+            else open(*args, **kwargs)
+        ),
+    )
+
+    # Capture stdout/stderr
+    import contextlib
+    import io
+
+    stdout_capture = io.StringIO()
+    stderr_capture = io.StringO()
+
+    with contextlib.redirect_stdout(stdout_capture), contextlib.redirect_stderr(stderr_capture):
+        result = main(["--json"])
+
+    assert result == 0  # Should pass
+    output = stdout_capture.getvalue().strip()
+    # Should be valid JSON
+    data = json.loads(output)
+    assert data["passed"] is True
+    assert data["counts"]["markdown_files_scanned"] >= 0
+    assert data["counts"]["links_resolved"] >= 0
+    assert data["counts"]["resources_checked"] >= 0
+    assert data["counts"]["files_skipped_as_vendored"] >= 0
+    assert data["broken_links"] == []
+    assert data["unlinked_resources"] == []
+    # stderr should be empty in JSON mode (no diagnostics)
+    assert stderr_capture.getvalue() == ""
+
+
+def test_json_output_with_broken_link(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """--json emits valid JSON with broken link details."""
+    from check_md_links import main
+
+    # Create a markdown file with a broken link
+    md_file = tmp_path / "test.md"
+    md_file.write_text("See [broken](missing.md) for more info.\n")
+
+    # Mock git ls-files to return our test file
+    def mock_tracked_markdown():
+        return [md_file]
+
+    monkeypatch.setattr("check_md_links.tracked_markdown", mock_tracked_markdown)
+    # Mock vendored registry as empty
+    monkeypatch.setattr(
+        "check_md_links.json.loads",
+        lambda _: {"vendored": []},
+    )
+
+    # Mock discover to return no items (so no README coverage issues)
+    class MockItem:
+        kind = "skill"
+        name = "test"
+        src = tmp_path / "test.md"
+
+    def mock_discover(_):
+        return [MockItem()]
+
+    monkeypatch.setattr("check_md_links.cli.discover", mock_discover)
+    # Mock README to contain the link (so no coverage issues)
+    readme_mock = tmp_path / "README.md"
+    readme_mock.write_text("See [broken](test/missing.md) for more info.\n")
+    monkeypatch.setattr("check_md_links.ROOT", tmp_path)
+    monkeypatch.setattr(
+        "builtins.open",
+        lambda *args, **kwargs: (
+            open(readme_mock, *args, **kwargs)
+            if "README.md" in str(args)
+            else open(*args, **kwargs)
+        ),
+    )
+
+    # Capture stdout/stderr
+    import contextlib
+    import io
+
+    stdout_capture = io.StringIO()
+    stderr_capture = io.StringIO()
+
+    with contextlib.redirect_stdout(stdout_capture), contextlib.redirect_stderr(stderr_capture):
+        result = main(["--json"])
+
+    assert result == 1  # Should fail due to broken link
+    output = stdout_capture.getvalue().strip()
+    # Should be valid JSON
+    data = json.loads(output)
+    assert data["passed"] is False
+    assert data["counts"]["markdown_files_scanned"] == 1
+    assert data["counts"]["links_resolved"] == 1
+    assert len(data["broken_links"]) == 1
+    broken_link = data["broken_links"][0]
+    assert broken_link["file"] == "test.md"
+    assert broken_link["line"] == 1
+    assert broken_link["target"] == "missing.md"
+    # resolved_path should be the path that was checked
+    assert broken_link["resolved_path"] == "missing.md" or broken_link["resolved_path"].endswith(
+        "/missing.md"
+    )
+    assert data["unlinked_resources"] == []
+    # stderr should be empty in JSON mode (no diagnostics)
+    assert stderr_capture.getvalue() == ""
+
+
+def test_json_output_with_unlinked_resource(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """--json emits valid JSON with unlinked resource details."""
+    from check_md_links import main
+
+    # Create a markdown file (no broken links)
+    md_file = tmp_path / "test.md"
+    md_file.write_text("Some content.\n")
+
+    # Mock git ls-files to return our test file
+    def mock_tracked_markdown():
+        return [md_file]
+
+    monkeypatch.setattr("check_md_links.tracked_markdown", mock_tracked_markdown)
+    # Mock vendored registry as empty
+    monkeypatch.setattr(
+        "check_md_links.json.loads",
+        lambda _: {"vendored": []},
+    )
+
+    # Mock discover to return an item that is NOT in README
+    class MockItem:
+        kind = "skill"
+        name = "testskill"
+        src = tmp_path / "testskill" / "SKILL.md"
+
+    def mock_discover(_):
+        return [MockItem()]
+
+    monkeypatch.setattr("check_md_links.cli.discover", mock_discover)
+    # Mock README to NOT contain the link (so we get an unlinked resource)
+    readme_mock = tmp_path / "README.md"
+    readme_mock.write_text("# Readme\n\nNo links here.\n")
+    monkeypatch.setattr("check_md_links.ROOT", tmp_path)
+    monkeypatch.setattr(
+        "builtins.open",
+        lambda *args, **kwargs: (
+            open(readme_mock, *args, **kwargs)
+            if "README.md" in str(args)
+            else open(*args, **kwargs)
+        ),
+    )
+
+    # Capture stdout/stderr
+    import contextlib
+    import io
+
+    stdout_capture = io.StringIO()
+    stderr_capture = io.StringIO()
+
+    with contextlib.redirect_stdout(stdout_capture), contextlib.redirect_stderr(stderr_capture):
+        result = main(["--json"])
+
+    assert result == 1  # Should fail due to unlinked resource
+    output = stdout_capture.getvalue().strip()
+    # Should be valid JSON
+    data = json.loads(output)
+    assert data["passed"] is False
+    assert data["counts"]["markdown_files_scanned"] == 1
+    assert data["counts"]["links_resolved"] == 0
+    assert data["broken_links"] == []
+    assert len(data["unlinked_resources"]) == 1
+    resource = data["unlinked_resources"][0]
+    assert resource["kind"] == "skill"
+    assert resource["name"] == "testskill"
+    assert resource["path"] == "testskill/SKILL.md"
+    # stderr should be empty in JSON mode (no diagnostics)
+    assert stderr_capture.getvalue() == ""
+
+
+def test_non_json_output_unchanged(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Ensure that without --json, output and exit codes are unchanged from today."""
+    from check_md_links import main
+
+    # Create a markdown file with a broken link and an unlinked resource
+    md_file = tmp_path / "test.md"
+    md_file.write_text("See [broken](missing.md) for more info.\n")
+
+    # Mock git ls-files to return our test file
+    def mock_tracked_markdown():
+        return [md_file]
+
+    monkeypatch.setattr("check_md_links.tracked_markdown", mock_tracked_markdown)
+    # Mock vendored registry as empty
+    monkeypatch.setattr(
+        "check_md_links.json.loads",
+        lambda _: {"vendored": []},
+    )
+
+    # Mock discover to return an item that is NOT in README
+    class MockItem:
+        kind = "skill"
+        name = "testskill"
+        src = tmp_path / "testskill" / "SKILL.md"
+
+    def mock_discover(_):
+        return [MockItem()]
+
+    monkeypatch.setattr("check_md_links.cli.discover", mock_discover)
+    # Mock README to NOT contain the link (so we get an unlinked resource)
+    # Also don't contain the broken link target to avoid false positives
+    readme_mock = tmp_path / "README.md"
+    readme_mock.write_text("# Readme\n\nNo links here.\n")
+    monkeypatch.setattr("check_md_links.ROOT", tmp_path)
+    monkeypatch.setattr(
+        "builtins.open",
+        lambda *args, **kwargs: (
+            open(readme_mock, *args, **kwargs)
+            if "README.md" in str(args)
+            else open(*args, **kwargs)
+        ),
+    )
+
+    # Capture stdout/stderr for non-JSON mode
+    import contextlib
+    import io
+
+    stdout_capture = io.StringIO()
+    stderr_capture = io.StringIO()
+
+    with contextlib.redirect_stdout(stdout_capture), contextlib.redirect_stderr(stderr_capture):
+        result = main([])  # No --json flag
+
+    assert result == 1  # Should fail
+    output = stdout_capture.getvalue().strip()
+    stderr_output = stderr_capture.getvalue().strip()
+
+    # Should contain human-readable output
+    assert "test.md:1: broken-link -> missing.md" in output
+    assert (
+        "README.md: undocumented -> testskill/testskill "
+        "(add a row linking testskill/SKILL.md)" in output
+    )
+    # Should contain the findings count on stderr
+    assert "2 finding(s)." in stderr_output
+
+
+def test_exit_codes_identical_in_both_modes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Exit codes are identical in both modes for the same input."""
+    from check_md_links import main
+
+    # Create a markdown file with a broken link
+    md_file = tmp_path / "test.md"
+    md_file.write_text("See [broken](missing.md) for more info.\n")
+
+    # Mock git ls-files to return our test file
+    def mock_tracked_markdown():
+        return [md_file]
+
+    monkeypatch.setattr("check_md_links.tracked_markdown", mock_tracked_markdown)
+    # Mock vendored registry as empty
+    monkeypatch.setattr(
+        "check_md_links.json.loads",
+        lambda _: {"vendored": []},
+    )
+
+    # Mock discover to return no items (so no README coverage issues)
+    class MockItem:
+        kind = "skill"
+        name = "test"
+        src = tmp_path / "test.md"
+
+    def mock_discover(_):
+        return [MockItem()]
+
+    monkeypatch.setattr("check_md_links.cli.discover", mock_discover)
+    # Mock README to contain the link (so no coverage issues, only broken link)
+    readme_mock = tmp_path / "README.md"
+    readme_mock.write_text("See [broken](test/missing.md) for more info.\n")
+    monkeypatch.setattr("check_md_links.ROOT", tmp_path)
+    monkeypatch.setattr(
+        "builtins.open",
+        lambda *args, **kwargs: (
+            open(readme_mock, *args, **kwargs)
+            if "README.md" in str(args)
+            else open(*args, **kwargs)
+        ),
+    )
+
+    # Test non-JSON mode
+    import contextlib
+    import io
+
+    stdout_capture = io.StringIO()
+    stderr_capture = io.StringIO()
+
+    with contextlib.redirect_stdout(stdout_capture), contextlib.redirect_stderr(stderr_capture):
+        result_non_json = main([])  # No --json flag
+
+    # Test JSON mode
+    stdout_capture = io.StringIO()
+    stderr_capture = io.StringIO()
+
+    with contextlib.redirect_stdout(stdout_capture), contextlib.redirect_stderr(stderr_capture):
+        result_json = main(["--json"])
+
+    assert result_non_json == result_json == 1
