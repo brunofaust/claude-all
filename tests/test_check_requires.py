@@ -74,7 +74,18 @@ def test_shipped_instructions_declare_every_reference() -> None:
 
 def test_main_success_case(capsys, tmp_path) -> None:
     """Main function prints summary on successful validation."""
-    import scripts.check_requires as cr
+    import importlib.util
+    import sys
+    from pathlib import Path
+
+    REPO_ROOT = Path(__file__).resolve().parent.parent
+    SPEC = importlib.util.spec_from_file_location(
+        "check_requires", REPO_ROOT / "scripts" / "check_requires.py"
+    )
+    assert SPEC is not None and SPEC.loader is not None
+    cr = importlib.util.module_from_spec(SPEC)
+    sys.modules["check_requires"] = cr
+    SPEC.loader.exec_module(cr)
 
     # Save original functions
     original_load = cr.load_resource_keys
@@ -104,9 +115,9 @@ def test_main_success_case(capsys, tmp_path) -> None:
         assert captured.out.strip() == "inspected 2 manifests and 3 instruction snippets"
     finally:
         # Restore original functions
-        cr.load_resource_keys = original_load
-        cr.find_violations = original_violations
-        cr.find_undeclared_instruction_refs = original_undeclared
+        cr.load_resource_keys = original_load  # type: ignore
+        cr.find_violations = original_violations  # type: ignore
+        cr.find_undeclared_instruction_refs = original_undeclared  # type: ignore
 
 
 def test_main_zero_discovery_failure(capsys) -> None:
@@ -126,15 +137,26 @@ def test_main_zero_discovery_failure(capsys) -> None:
         assert "error: installer discovery pattern matched zero resources" in captured.err
     finally:
         # Restore original functions
-        check_requires.load_resource_keys = original_load
+        check_requires.load_resource_keys = original_load  # type: ignore
 
 
 def test_main_existing_failure_case(capsys) -> None:
     """Main function still fails on genuine validation errors."""
-    import scripts.check_requires as cr
+    import importlib.util
+    import sys
+    from pathlib import Path
 
-    original_load = cr.load_resource_keys
-    cr.load_resource_keys = lambda: {"skills/foo-skill"}  # Missing bar-agent
+    REPO_ROOT = Path(__file__).resolve().parent.parent
+    SPEC = importlib.util.spec_from_file_location(
+        "check_requires", REPO_ROOT / "scripts" / "check_requires.py"
+    )
+    assert SPEC is not None and SPEC.loader is not None
+    cr = importlib.util.module_from_spec(SPEC)
+    sys.modules["check_requires"] = cr
+    SPEC.loader.exec_module(cr)
+
+    original_load = cr.load_resource_keys  # type: ignore
+    cr.load_resource_keys = lambda: {"skills/foo-skill"}  # Missing bar-agent  # type: ignore
 
     try:
         exit_code = cr.main()
@@ -142,4 +164,4 @@ def test_main_existing_failure_case(capsys) -> None:
         assert exit_code == 1
         assert "requires finding(s)" in captured.err
     finally:
-        cr.load_resource_keys = original_load
+        cr.load_resource_keys = original_load  # type: ignore
