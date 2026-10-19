@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 """Gate: relative markdown links resolve and every resource is linked from the README.
 
-Vendored files are exempt from the link check (kept byte-identical to upstream);
-their `local_only` sidecars stay checked. README links are the proxy for "documented".
-
+Vendored files are exempt from the link check (kept byte-identical to upstream).
 With --json flag, emits machine-readable JSON to stdout instead of human-readable
 findings. JSON includes: passed, markdown_files_scanned, links_resolved,
 vendored_files_skipped, resources_checked, broken_links[], unlinked_resources[].
