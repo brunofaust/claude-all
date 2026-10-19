@@ -4,6 +4,7 @@
 Also checks that resources named by an instruction snippet are in its `requires`.
 Targets are resolved via the installer's own `discover()`, never re-derived here.
 Exit 0 = all resolve, 1 = dangling/malformed entry.
+# BDN-2 fix: ensures zero-discovery fails loudly
 """
 
 from __future__ import annotations
@@ -14,10 +15,13 @@ import re
 import sys
 from pathlib import Path
 
+# Backward compatibility attribute for tests
+SRC = None  # Will be set below
+
 CODE_SPAN = re.compile(r"`([^`\s]+)`")
 
 
-def _get_repo_root() -> Path:
+def get_repo_root() -> Path:
     """Get the repository root, allowing override for testing."""
     test_base = os.environ.get("CLAUDE_ALL_TEST_BASE")
     if test_base:
@@ -25,22 +29,18 @@ def _get_repo_root() -> Path:
     return Path(__file__).resolve().parent.parent
 
 
-def _get_src_path() -> Path:
+def get_src_path() -> Path:
     """Get the src path."""
-    return _get_repo_root() / "src"
+    return get_repo_root() / "src"
 
 
-def _get_instructions_dir() -> Path:
+def get_instructions_dir() -> Path:
     """Get the instructions directory path."""
-    return _get_src_path() / "claude_all" / "instructions"
+    return get_src_path() / "claude_all" / "instructions"
 
 
-def load_resource_keys() -> set[str]:
-    """Return every installable resource key (``kind/name``) via the installer."""
-    sys.path.insert(0, str(_get_src_path()))
-    from claude_all.cli import discover, state_key
-
-    return {state_key(it.kind, it.name) for it in discover([])}
+# Set backward compatibility attribute
+SRC = get_src_path()
 
 
 def load_resource_keys() -> set[str]:
@@ -53,7 +53,7 @@ def load_resource_keys() -> set[str]:
 
 def find_violations(known: set[str], manifest_paths: list[Path]) -> list[str]:
     findings: list[str] = []
-    repo_root = _get_repo_root()
+    repo_root = get_repo_root()
     for manifest in sorted(manifest_paths):
         rel = manifest.relative_to(repo_root)
         try:
@@ -83,7 +83,6 @@ def find_undeclared_instruction_refs(
     for key in known:
         keys_by_name.setdefault(key.split("/", 1)[1], set()).add(key)
     findings: list[str] = []
-    repo_root = _get_repo_root()
     for snippet in sorted(snippet_paths):
         manifest = snippet.parent / "claude-all.json"
         declared: set[str] = set()
@@ -105,13 +104,13 @@ def find_undeclared_instruction_refs(
 
 
 def main() -> int:
-    """CLI entry point — print findings to stdout, exit 1 on any."""
+    """CLI entry point - print findings to stdout, exit 1 on any."""
     # Discover files relative to the repository root
     manifest_paths = list(
-        sorted((_get_src_path() / "claude_all").rglob("claude-all.json"))
-        + sorted((_get_src_path() / "claude_all").rglob("*.claude-all.json"))
+        sorted((get_src_path() / "claude_all").rglob("claude-all.json"))
+        + sorted((get_src_path() / "claude_all").rglob("*.claude-all.json"))
     )
-    snippet_paths = sorted(_get_instructions_dir().glob("*/claude_md.md"))
+    snippet_paths = sorted(get_instructions_dir().glob("*/claude_md.md"))
 
     # Check for zero discovery
     if not manifest_paths and not snippet_paths:
@@ -130,13 +129,13 @@ def main() -> int:
 
     known = load_resource_keys()
     findings = find_violations(known, manifest_paths) + find_undeclared_instruction_refs(
-        known, snippet_paths, _get_instructions_dir()
+        known, snippet_paths, get_instructions_dir()
     )
     for finding in findings:
         print(finding)
     if findings:
         print(
-            f"\n{len(findings)} requires finding(s) — a dependency manifest points at a "
+            f"\n{len(findings)} requires finding(s) - a dependency manifest points at a "
             "resource the installer cannot discover, or an instruction names one it "
             "does not require.",
             file=sys.stderr,
