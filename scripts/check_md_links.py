@@ -1,30 +1,11 @@
 #!/usr/bin/env python3
-"""Gate: relative markdown links resolve and every resource is linked from the README.
+"""Gate: relative markdown links resolve; README coverage check.
 
-Vendored files are exempt from the link check (kept byte-identical to upstream);
-their `local_only` sidecars stay checked. README links are the proxy for "documented".
+Vendored files exempt; local_only sidecars stay checked.
 
---json flag: when supplied, emits a single machine-readable JSON object to stdout
-instead of the human-formatted report. The JSON carries:
+--json: emit machine-readable JSON to stdout instead of human report.
 
-{
-    "pass": bool,              # overall pass/fail
-    "markdown_files_scanned": int,
-    "links_resolved": int,
-    "files_skipped_vendored": int,
-    "broken_links": [          # list of broken link details
-        {
-            "containing_file": str,
-            "raw_link_target": str,
-            "resolved_path": str
-        }
-    ],
-    "unlinked_resources": [   # list of unlinked resource paths
-        str
-    ]
-}
-
-Human output stays the default and stays byte-identical — this is additive.
+JSON: {pass, markdown_files_scanned, links_resolved, files_skipped_vendored, broken_links[], unlinked_resources[]}
 """
 
 import argparse
@@ -81,14 +62,7 @@ def tracked_markdown() -> list[Path]:
 
 
 def check_links(registry: list[dict]) -> dict:
-    """Check markdown links and return structured results.
-
-    Returns a dict with:
-    - markdown_files_scanned: count of .md files tracked by git
-    - links_resolved: count of link resolutions attempted
-    - files_skipped_vendored: count of files skipped as vendored
-    - broken_links: list of dicts with containing_file, raw_link_target, resolved_path
-    """
+    """Check mkd links; return structured results with counts and broken_links[] of {containing_file, raw_link_target, resolved_path}."""
     markdown_files_scanned = 0
     links_resolved = 0
     files_skipped_vendored = 0
