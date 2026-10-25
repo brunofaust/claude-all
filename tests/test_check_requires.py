@@ -71,11 +71,7 @@ def test_shipped_instructions_declare_every_reference() -> None:
 
 
 def test_main_success_summary_line() -> None:
-    """Success path: when known is non-empty, no findings, summary line format is correct.
-
-    This test verifies the success summary logic: with a non-empty known set
-    and no violations, the expected summary line format is produced.
-    """
+    """Success: summary line format is correct when known resources exist and no violations."""
     # Use the repo's actual known resources (non-empty) and verify no findings.
     known = check_requires.load_resource_keys()
     assert known, "Expected discover to find resources in the repo"
@@ -87,13 +83,7 @@ def test_main_success_summary_line() -> None:
 
 
 def test_main_zero_discovery_guard() -> None:
-    """Zero-discovery guard: when known is empty, the script exits 1.
-
-    This tests the if-not-known guard added in main(): if load_resource_keys()
-    returns an empty set, the script must print the zero-discovery message to stderr
-    and return 1. We simulate the condition directly since the repo always has
-    resources discoverable.
-    """
+    """Zero-discovery guard: script exits 1 when no resources are discoverable."""
     # The message format is as specified in main().
     msg = "check_requires: inspected 0 units — the discovery pattern matched no resources"
     assert msg  # verify the message format matches the implementation
