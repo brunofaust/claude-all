@@ -4,32 +4,8 @@
 Vendored files are exempt from the link check (kept byte-identical to upstream);
 their `local_only` sidecars stay checked. README links are the proxy for "documented".
 
-Usage:
-    python3 scripts/check_md_links.py          human-readable findings on stdout
-    python3 scripts/check_md_links.py --json   one JSON object on stdout, nothing else
-
-Both modes exit 1 when there is any finding and 0 otherwise.
-
-JSON shape (`--json`), field names are stable:
-
-    {
-      "pass": bool,                      # true when there are no findings
-      "counts": {
-        "markdown_files_scanned": int,   # tracked, non-vendored .md files whose links were read
-        "links_resolved": int,           # relative link targets that exist on disk
-        "resources_checked": int,        # discovered resources checked against the README
-        "vendored_files_skipped": int    # tracked .md files exempt as vendored
-      },
-      "broken_links": [                  # rule 1: relative markdown links that do not resolve
-        {"file": str, "line": int, "target": str, "resolved": str}
-      ],
-      "unlinked_resources": [            # rule 2: discovered resources with no README link
-        {"kind": str, "name": str, "path": str}
-      ]
-    }
-
-`file` and `path` are repo-relative POSIX paths; `resolved` is the repo-relative
-POSIX path the target resolved to (absolute when it lies outside the repo).
+Usage: `check_md_links.py` (human output) or `check_md_links.py --json` (one JSON
+object, see the comment below the imports). Both exit 1 on any finding, else 0.
 """
 
 import argparse
@@ -38,6 +14,27 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+
+# JSON shape (`--json`), field names are stable:
+#
+#     {
+#       "pass": bool,                      # true when there are no findings
+#       "counts": {
+#         "markdown_files_scanned": int,   # tracked, non-vendored .md files whose links were read
+#         "links_resolved": int,           # relative link targets that exist on disk
+#         "resources_checked": int,        # discovered resources checked against the README
+#         "vendored_files_skipped": int    # tracked .md files exempt as vendored
+#       },
+#       "broken_links": [                  # rule 1: relative markdown links that do not resolve
+#         {"file": str, "line": int, "target": str, "resolved": str}
+#       ],
+#       "unlinked_resources": [            # rule 2: discovered resources with no README link
+#         {"kind": str, "name": str, "path": str}
+#       ]
+#     }
+#
+# `file` and `path` are repo-relative POSIX paths; `resolved` is the repo-relative
+# POSIX path the target resolved to (absolute when it lies outside the repo).
 
 ROOT = Path(__file__).resolve().parent.parent
 
