@@ -184,7 +184,7 @@ without a stated reason is indistinguishable from an accident and never gets rem
 
 ```toml
 [tool.mypy]
-python_version = "3.12"
+python_version = "3.14"
 strict = true
 plugins = [ "pydantic.mypy" ]
 warn_return_any = true
