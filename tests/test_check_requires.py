@@ -12,6 +12,8 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SPEC = importlib.util.spec_from_file_location(
     "check_requires", REPO_ROOT / "scripts" / "check_requires.py"
@@ -68,3 +70,60 @@ def test_shipped_instructions_declare_every_reference() -> None:
     known = check_requires.load_resource_keys()
 
     assert check_requires.find_undeclared_instruction_refs(known) == []
+
+
+def test_main_prints_inspected_count_on_success(capsys: pytest.CaptureFixture[str]) -> None:
+    """A clean scan reports exactly how many units it discovered."""
+    resource_count = len(check_requires.load_resource_keys())
+    manifests = sorted((check_requires.SRC / "claude_all").rglob("claude-all.json")) + sorted(
+        (check_requires.SRC / "claude_all").rglob("*.claude-all.json")
+    )
+    snippet_count = len(sorted(check_requires.INSTRUCTIONS_DIR.glob("*/claude_md.md")))
+    assert check_requires.main() == 0
+
+    output = capsys.readouterr().out
+    assert output == (
+        f"check-requires: inspected {resource_count} resources, {len(manifests)} manifests, "
+        f"{snippet_count} instruction snippets\n"
+    )
+
+
+def test_main_fails_when_no_inputs_are_discovered(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """An empty scan is a hard failure that identifies its discovery patterns."""
+    source = tmp_path / "src" / "claude_all"
+    instructions = source / "instructions"
+    monkeypatch.setattr(check_requires, "SRC", tmp_path / "src")
+    monkeypatch.setattr(check_requires, "INSTRUCTIONS_DIR", instructions)
+    monkeypatch.setattr(check_requires, "load_resource_keys", lambda: set())
+
+    assert check_requires.main() == 2
+
+    error = capsys.readouterr().err
+    assert "No dependency scan inputs discovered" in error
+    assert "installer discover([])" in error
+    assert "src/claude_all/**/claude-all.json" in error
+    assert "src/claude_all/**/*.claude-all.json" in error
+    assert "src/claude_all/instructions/*/claude_md.md" in error
+
+
+def test_main_preserves_genuine_validation_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A dangling dependency remains a validation failure."""
+    source = tmp_path / "src" / "claude_all"
+    source.mkdir(parents=True)
+    (source / "claude-all.json").write_text(
+        json.dumps({"requires": ["skills/missing"]}), encoding="utf-8"
+    )
+    monkeypatch.setattr(check_requires, "SRC", tmp_path / "src")
+    monkeypatch.setattr(check_requires, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_requires, "INSTRUCTIONS_DIR", source / "instructions")
+    monkeypatch.setattr(check_requires, "load_resource_keys", lambda: {"skills/real"})
+
+    assert check_requires.main() == 1
+
+    captured = capsys.readouterr()
+    assert "requires 'skills/missing'" in captured.out
+    assert "requires finding(s)" in captured.err
