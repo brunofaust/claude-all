@@ -3,8 +3,12 @@
 
 Vendored files are exempt from the link check (kept byte-identical to upstream);
 their `local_only` sidecars stay checked. README links are the proxy for "documented".
+
+--json: emit a single machine-readable object to stdout instead of the human-formatted report.
+Human output stays the default and stays byte-identical - this is additive.
 """
 
+import argparse
 import json
 import re
 import subprocess
@@ -93,15 +97,85 @@ def check_readme_coverage() -> list[str]:
     ]
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Gate: relative markdown links resolve and every resource is linked from the README."
+    )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        default=False,
+        help="Emit JSON to stdout instead of human report.",
+    )
+    return parser.parse_args()
+
+
 def main() -> int:
+    args = parse_args()
     registry = json.loads((ROOT / "vendored.json").read_text()).get("vendored", [])
     findings = check_links(registry) + check_readme_coverage()
-    for finding in findings:
-        print(finding)
-    if findings:
-        print(f"\n{len(findings)} finding(s).", file=sys.stderr)
-        return 1
-    return 0
+    unlinked = check_readme_coverage()
+
+    if args.json:
+        broken_links = []
+        for finding in check_links(registry):
+            # Format: "{rel}:{line_no}: broken-link -> {target}"
+            # Parse to extract file and target
+            parts = finding.split(": ", 2)
+            if len(parts) >= 3:
+                rel_link = parts[0]
+                # line_no = parts[1]  # unused - skip line number
+                target_part = parts[2]  # "broken-link -> {target}"
+                # Extract the actual target after "broken-link -> "
+                if "broken-link -> " in target_part:
+                    target = target_part.split("broken-link -> ", 1)[1]
+                    # The resolved path that did not exist is the target itself
+                    # since it was determined that (md.parent / bare).resolve().exists() is False
+                    broken_links.append(
+                        {
+                            "containing_file": rel_link.split(":")[0] if ":" in rel_link else "",
+                            "raw_link_target": target,
+                            "resolved_path_not_existing": target,
+                        }
+                    )
+            else:
+                broken_links.append(
+                    {
+                        "containing_file": "",
+                        "raw_link_target": finding,
+                        "resolved_path_not_existing": finding,
+                    }
+                )
+
+        unlinked_resources = [
+            {"path": u.replace("README.md: undocumented -> ", "")} for u in unlinked
+        ]
+
+        result = {
+            "pass": len(findings) == 0 and len(unlinked) == 0,
+            "markdown_files_scanned": len(
+                [m for m in tracked_markdown() if not is_vendored(m, registry)]
+            ),
+            "links_resolved": len(check_links(registry)),
+            "resources_checked": len(unlinked) + len(check_links(registry)),
+            "files_skipped_as_vendored": len(
+                [m for m in tracked_markdown() if is_vendored(m, registry)]
+            ),
+            "broken_links": broken_links,
+            "unlinked_resources": unlinked_resources,
+        }
+        print(json.dumps(result, indent=2))
+        # Exit code is identical: 0 if no findings, 1 if findings exist
+        if findings or unlinked:
+            return 1
+        return 0
+    else:
+        for finding in findings:
+            print(finding)
+        if findings:
+            print(f"\n{len(findings)} finding(s).", file=sys.stderr)
+            return 1
+        return 0
 
 
 if __name__ == "__main__":

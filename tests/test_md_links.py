@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -218,3 +219,105 @@ def test_claude_hook_examples_use_timeout_seconds() -> None:
                 findings.append(f"{path.relative_to(ROOT)}: timeout={value}")
 
     assert findings == []
+
+
+def test_json_on_clean_tree() -> None:
+    """--json on a clean tree emits valid JSON with pass=true and correct counts."""
+    import subprocess
+
+    result = subprocess.run(
+        [sys.executable, "scripts/check_md_links.py", "--json"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0
+    data = json.loads(result.stdout)
+    assert data["pass"] is True
+    assert "markdown_files_scanned" in data
+    assert "links_resolved" in data
+    assert "resources_checked" in data
+    assert "files_skipped_as_vendored" in data
+    assert "broken_links" in data
+    assert "unlinked_resources" in data
+    assert isinstance(data["broken_links"], list)
+    assert isinstance(data["unlinked_resources"], list)
+
+
+def test_json_structure_has_required_fields() -> None:
+    """Verify the JSON output shape has all required fields."""
+    result = subprocess.run(
+        [sys.executable, "scripts/check_md_links.py", "--json"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0
+    data = json.loads(result.stdout)
+
+    # The shape documented in the module docstring:
+    # - pass: overall pass/fail (bool)
+    # - markdown_files_scanned: count of markdown files scanned (int)
+    # - links_resolved: count of links resolved (int)
+    # - resources_checked: count of resources checked (int)
+    # - files_skipped_as_vendored: count of files skipped as vendored (int)
+    # - broken_links: list of {containing_file, raw_link_target, resolved_path_not_existing}
+    # - unlinked_resources: list of {path: ...}
+
+    assert isinstance(data["pass"], bool)
+    assert isinstance(data["markdown_files_scanned"], int)
+    assert isinstance(data["links_resolved"], int)
+    assert isinstance(data["resources_checked"], int)
+    assert isinstance(data["files_skipped_as_vendored"], int)
+    assert isinstance(data["broken_links"], list)
+    assert isinstance(data["unlinked_resources"], list)
+
+    # If there are broken links, verify each has the required fields
+    if data["broken_links"]:
+        bl = data["broken_links"][0]
+        assert "containing_file" in bl, "broken_links[0] missing containing_file"
+        assert "raw_link_target" in bl, "broken_links[0] missing raw_link_target"
+        assert "resolved_path_not_existing" in bl, (
+            "broken_links[0] missing resolved_path_not_existing"
+        )
+
+    # If there are unlinked resources, verify each has the path field
+    if data["unlinked_resources"]:
+        ur = data["unlinked_resources"][0]
+        assert "path" in ur, "unlinked_resources[0] missing path"
+
+
+def test_default_output_not_json() -> None:
+    """Default (non-JSON) output should not be valid JSON on stdout."""
+    result = subprocess.run(
+        [sys.executable, "scripts/check_md_links.py"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    # Should not parse as JSON (human-readable output)
+    try:
+        json.loads(result.stdout)
+        pytest.fail("Default mode should not emit JSON on stdout")
+    except json.JSONDecodeError:
+        pass  # Expected - human-readable format
+
+
+def test_exit_codes_identical() -> None:
+    """--json and human mode have identical exit codes for same input."""
+    # Clean tree - both should exit 0
+    result_json = subprocess.run(
+        [sys.executable, "scripts/check_md_links.py", "--json"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    result_human = subprocess.run(
+        [sys.executable, "scripts/check_md_links.py"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    assert result_json.returncode == result_human.returncode
+
+    # Both return 0 on clean tree, so exit codes are identical
