@@ -168,8 +168,12 @@ class TestJsonReport:
         self._setup(tmp_path, monkeypatch, "clean")
         report = json_report([])
         assert report["passed"] is True
-        assert report["counts"]["markdown_files_scanned"] == 1
-        assert report["counts"]["links_resolved"] == 1
+        assert report["counts"] == {
+            "markdown_files_scanned": 1,
+            "links_resolved": 1,
+            "resources_checked": 0,
+            "vendored_files_skipped": 0,
+        }
         assert report["broken_links"] == []
         assert report["unlinked_resources"] == []
 
