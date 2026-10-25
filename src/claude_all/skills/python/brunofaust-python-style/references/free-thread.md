@@ -234,4 +234,4 @@ Check these resources for up-to-date compatibility information:
 - **Python 3.14 release notes** — known compatible/incompatible packages
 - **Package maintainers' blogs** — announcements about free-threaded builds
 - **GitHub Issues** — search `free-threaded` or `PEP 703` in relevant repos
-- **Conditional dependencies** in `pyproject.toml` — some projects use markers like `; python_free_throwed == true`
+- **Conditional dependencies** in `pyproject.toml` — some projects use markers like `; python_free_threaded == true`
