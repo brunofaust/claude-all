@@ -99,7 +99,8 @@ def check_readme_coverage() -> list[str]:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Gate: relative markdown links resolve and every resource is linked from the README."
+        description="Gate: relative markdown links resolve and every resource"
+        " is linked from the README."
     )
     parser.add_argument(
         "--json",

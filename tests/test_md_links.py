@@ -321,3 +321,78 @@ def test_exit_codes_identical() -> None:
     assert result_json.returncode == result_human.returncode
 
     # Both return 0 on clean tree, so exit codes are identical
+
+
+def test_json_with_broken_link() -> None:
+    """--json with a broken link emits pass=false and populated broken_links."""
+    import json
+    import os
+    import subprocess
+
+    # Create a temporary markdown file with a broken link
+    broken_md = ROOT / "tests" / "tmp_broken_link_test.md"
+    broken_md.write_text("[broken](nonexistent.md)\n")
+
+    # Add it to git's staging area so git ls-files picks it up
+    os.system(f"git add {broken_md}")
+
+    try:
+        result = subprocess.run(
+            [sys.executable, "scripts/check_md_links.py", "--json"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 1
+        data = json.loads(result.stdout)
+        assert data["pass"] is False
+        assert len(data["broken_links"]) == 1
+        bl = data["broken_links"][0]
+        assert "containing_file" in bl, "broken_links[0] missing containing_file"
+        assert "raw_link_target" in bl, "broken_links[0] missing raw_link_target"
+        assert "resolved_path_not_existing" in bl, (
+            "broken_links[0] missing resolved_path_not_existing"
+        )
+    finally:
+        # Cleanup: unstage and remove the file
+        os.system("git reset HEAD tests/tmp_broken_link_test.md 2>/dev/null")
+        broken_md.unlink(missing_ok=True)
+
+
+def test_json_with_unlinked_resource() -> None:
+    """--json with an unlinked resource emits pass=false and populated unlinked_resources."""
+    import json
+    import subprocess
+
+    # Temporarily remove a README link pattern so a resource appears unlinked
+    readme_path = ROOT / "README.md"
+    original_readme = readme_path.read_text()
+
+    # check_readme_coverage looks for pattern: f"]({item.src.relative_to(ROOT).as_posix()})"
+    # which is e.g. "](src/claude_all/agents/generic/code-quality/agent.md)"
+    # Remove one such pattern from the README
+    target = "](src/claude_all/agents/generic/code-quality/agent.md)"
+    if target not in original_readme:
+        pytest.skip("Target link pattern not found in README")
+
+    modified = original_readme.replace(target, "", 1)
+    readme_path.write_text(modified)
+
+    try:
+        result = subprocess.run(
+            [sys.executable, "scripts/check_md_links.py", "--json"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 1
+        data = json.loads(result.stdout)
+        assert data["pass"] is False
+        assert len(data["unlinked_resources"]) > 0, (
+            "Expected unlinked_resources to be non-empty when a README link is removed"
+        )
+        # Verify structure
+        ur = data["unlinked_resources"][0]
+        assert "path" in ur, "unlinked_resources[0] missing path"
+    finally:
+        readme_path.write_text(original_readme)
