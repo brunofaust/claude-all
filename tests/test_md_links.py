@@ -23,6 +23,8 @@ from check_md_links import (
     LINK,
     check_links,
     is_vendored,
+    json_report,
+    main,
     strip_code_blocks,
 )
 from vendor_sync import clone_upstream
@@ -132,6 +134,119 @@ class TestIsVendored:
         registry = [{"path": "src/x/skill", "vendor_mode": "dir"}]
         root = Path(is_vendored.__globals__["ROOT"])
         assert not is_vendored(root / "README.md", registry)
+
+
+class TestJsonReport:
+    def _setup(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, markdown: str) -> Path:
+        root = tmp_path
+        source = root / "resource.md"
+        source.write_text("resource")
+        (root / "README.md").write_text("[resource](resource.md)" if markdown != "unlinked" else "")
+        doc = root / "check.md"
+        doc.write_text(
+            "[link](missing.md)"
+            if markdown == "broken"
+            else "[link](resource.md)"
+            if markdown == "clean"
+            else ""
+        )
+        monkeypatch.setattr("check_md_links.ROOT", root)
+        monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [doc])
+        from types import SimpleNamespace
+
+        sys.path.insert(0, str(ROOT / "src"))
+        import claude_all.cli
+
+        monkeypatch.setattr(
+            claude_all.cli,
+            "discover",
+            lambda _: [SimpleNamespace(src=source)] if markdown == "unlinked" else [],
+        )
+        return root
+
+    def test_clean_json_report(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        self._setup(tmp_path, monkeypatch, "clean")
+        report = json_report([])
+        assert report["passed"] is True
+        assert report["counts"]["markdown_files_scanned"] == 1
+        assert report["counts"]["links_resolved"] == 1
+        assert report["broken_links"] == []
+        assert report["unlinked_resources"] == []
+
+    def test_broken_link_report_has_target_and_path(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._setup(tmp_path, monkeypatch, "broken")
+        report = json_report([])
+        assert report["passed"] is False
+        assert report["broken_links"] == [
+            {
+                "file": "check.md",
+                "target": "missing.md",
+                "resolved_path": "missing.md",
+                "line": 1,
+            }
+        ]
+
+    def test_unlinked_resource_report(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._setup(tmp_path, monkeypatch, "unlinked")
+        report = json_report([])
+        assert report["passed"] is False
+        assert report["unlinked_resources"] == ["resource.md"]
+        assert report["counts"]["resources_checked"] == 1
+
+
+def test_json_cli_emits_only_json(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["check_md_links.py", "--json"])
+    monkeypatch.setattr("check_md_links.json_report", lambda _: {"passed": True})
+    assert main() == 0
+    captured = capsys.readouterr()
+    assert json.loads(captured.out) == {"passed": True}
+    assert captured.err == ""
+
+
+def test_json_cli_returns_failure_status_without_non_json_stderr(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["check_md_links.py", "--json"])
+    failure_report = {
+        "passed": False,
+        "counts": {
+            "markdown_files_scanned": 1,
+            "links_resolved": 0,
+            "resources_checked": 0,
+            "vendored_files_skipped": 0,
+        },
+        "broken_links": [
+            {
+                "file": "check.md",
+                "target": "missing.md",
+                "resolved_path": "missing.md",
+            }
+        ],
+        "unlinked_resources": [],
+    }
+    monkeypatch.setattr("check_md_links.json_report", lambda _: failure_report)
+    assert main() == 1
+    captured = capsys.readouterr()
+    assert json.loads(captured.out) == failure_report
+    assert captured.err == ""
+
+
+def test_default_cli_output_is_unchanged(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["check_md_links.py"])
+    monkeypatch.setattr("check_md_links.check_links", lambda _: ["broken finding"])
+    monkeypatch.setattr("check_md_links.check_readme_coverage", lambda: [])
+    assert main() == 1
+    captured = capsys.readouterr()
+    assert captured.out == "broken finding\n"
+    assert captured.err == "\n1 finding(s).\n"
 
 
 class TestCheckLinks:
