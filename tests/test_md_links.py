@@ -18,11 +18,13 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
+import check_md_links
 from check_md_links import (
     CODE_SPAN,
     LINK,
     check_links,
     is_vendored,
+    main,
     strip_code_blocks,
 )
 from vendor_sync import clone_upstream
@@ -141,7 +143,172 @@ class TestCheckLinks:
         # tracked-but-deleted file must be skipped, not crash read_text()
         missing = tmp_path / "GONE.md"
         monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [missing])
-        assert check_links(registry=[]) == []
+        broken, counts = check_links(registry=[])
+        assert broken == []
+        assert counts["markdown_files_scanned"] == 0
+
+    def test_vendored_file_is_counted_as_skipped_not_scanned(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The JSON counts must say how many files the vendored exemption skipped.
+        upstream = ROOT / "src/x/skill/SKILL.md"
+        registry = [{"path": "src/x/skill", "vendor_mode": "dir"}]
+        monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [upstream])
+        broken, counts = check_links(registry=registry)
+        assert broken == []
+        assert counts["vendored_files_skipped"] == 1
+        assert counts["markdown_files_scanned"] == 0
+
+
+def _clean_tree(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Point the link scan at one file with a resolving link, and report no unlinked resources."""
+    target = tmp_path / "target.md"
+    target.write_text("ok\n")
+    doc = tmp_path / "doc.md"
+    doc.write_text("see [target](target.md)\n")
+    monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [doc])
+    monkeypatch.setattr("check_md_links.check_readme_coverage", lambda: ([], 2))
+
+
+def _broken_tree(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
+    doc = tmp_path / "doc.md"
+    doc.write_text("intro\n\nsee [gone](missing.md)\n")
+    monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [doc])
+    monkeypatch.setattr("check_md_links.check_readme_coverage", lambda: ([], 2))
+    return doc
+
+
+def _unlinked_tree(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    doc = tmp_path / "doc.md"
+    doc.write_text("no links here\n")
+    monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [doc])
+    monkeypatch.setattr(
+        "check_md_links.check_readme_coverage",
+        lambda: (
+            [
+                {
+                    "kind": "skill",
+                    "name": "demo",
+                    "path": "src/claude_all/skills/generic/demo/SKILL.md",
+                }
+            ],
+            3,
+        ),
+    )
+
+
+class TestJsonMode:
+    def test_clean_tree_emits_passing_object(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        _clean_tree(monkeypatch, tmp_path)
+        assert main(["--json"]) == 0
+        report = json.loads(capsys.readouterr().out)
+        assert report["pass"] is True
+        assert report["broken_links"] == []
+        assert report["unlinked_resources"] == []
+        assert report["counts"]["markdown_files_scanned"] == 1
+        assert report["counts"]["links_resolved"] == 1
+        assert report["counts"]["resources_checked"] == 2
+
+    def test_broken_link_is_reported_with_file_target_and_resolved_path(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        doc = _broken_tree(monkeypatch, tmp_path)
+        assert main(["--json"]) == 1
+        report = json.loads(capsys.readouterr().out)
+        assert report["pass"] is False
+        assert report["broken_links"] == [
+            {
+                "file": doc.as_posix(),
+                "line": 3,
+                "target": "missing.md",
+                "resolved": (tmp_path / "missing.md").resolve().as_posix(),
+            }
+        ]
+
+    def test_unlinked_resource_is_reported_with_kind_name_and_path(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        _unlinked_tree(monkeypatch, tmp_path)
+        assert main(["--json"]) == 1
+        report = json.loads(capsys.readouterr().out)
+        assert report["pass"] is False
+        assert report["unlinked_resources"] == [
+            {
+                "kind": "skill",
+                "name": "demo",
+                "path": "src/claude_all/skills/generic/demo/SKILL.md",
+            }
+        ]
+
+    def test_stdout_is_only_the_json_object(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        _broken_tree(monkeypatch, tmp_path)
+        main(["--json"])
+        out = capsys.readouterr().out
+        assert json.loads(out) is not None
+        assert out.startswith("{") and out.endswith("}\n")
+
+    def test_exit_codes_match_human_mode(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        _broken_tree(monkeypatch, tmp_path)
+        human = main([])
+        capsys.readouterr()
+        as_json = main(["--json"])
+        capsys.readouterr()
+        assert human == as_json == 1
+
+        _clean_tree(monkeypatch, tmp_path)
+        assert main([]) == main(["--json"]) == 0
+        capsys.readouterr()
+
+
+class TestHumanMode:
+    def test_default_output_is_unchanged(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        doc = _broken_tree(monkeypatch, tmp_path)
+        assert main([]) == 1
+        captured = capsys.readouterr()
+        assert captured.out == f"{doc.as_posix()}:3: broken-link -> missing.md\n"
+        assert captured.err == "\n1 finding(s).\n"
+
+    def test_unlinked_line_is_unchanged(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        _unlinked_tree(monkeypatch, tmp_path)
+        assert main([]) == 1
+        assert capsys.readouterr().out == (
+            "README.md: undocumented -> skill/demo "
+            "(add a row linking src/claude_all/skills/generic/demo/SKILL.md)\n"
+        )
+
+    def test_clean_tree_prints_nothing(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        _clean_tree(monkeypatch, tmp_path)
+        assert main([]) == 0
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        assert captured.err == ""
+
+
+def test_real_repo_json_counts_are_non_vacuous(capsys: pytest.CaptureFixture[str]) -> None:
+    """A gate that inspected nothing and passed would be a vacuous pass."""
+    main(["--json"])
+    report = json.loads(capsys.readouterr().out)
+    assert report["counts"]["markdown_files_scanned"] > 0
+    assert report["counts"]["resources_checked"] > 0
+    assert report["counts"]["links_resolved"] > 0
+
+
+def test_check_readme_coverage_reports_real_resources() -> None:
+    unlinked, resources_checked = check_md_links.check_readme_coverage()
+    assert resources_checked > 0
+    assert all({"kind", "name", "path"} <= item.keys() for item in unlinked)
 
 
 def test_non_vendored_routes_use_discoverable_skill_names() -> None:
