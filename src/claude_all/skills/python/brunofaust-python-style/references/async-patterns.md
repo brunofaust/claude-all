@@ -404,7 +404,7 @@ class thread:
 adopt this only once the project's floor is 3.14. Subinterpreters provide true
 parallelism (each has its own GIL) with lower overhead than
 `ProcessPoolExecutor`. Use it for **CPU-bound** work that doesn't need to share
-mutable state.
+mutable state. For the opt-in free-threaded build (3.14t) as an alternative for CPU-bound threads, see [`free-threading.md`](free-threading.md).
 
 ```python
 from concurrent.futures import InterpreterPoolExecutor
