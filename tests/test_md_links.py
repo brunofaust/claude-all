@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -23,6 +24,7 @@ from check_md_links import (
     LINK,
     check_links,
     is_vendored,
+    main,
     strip_code_blocks,
 )
 from vendor_sync import clone_upstream
@@ -140,8 +142,240 @@ class TestCheckLinks:
     ) -> None:
         # tracked-but-deleted file must be skipped, not crash read_text()
         missing = tmp_path / "GONE.md"
+        monkeypatch.setattr("check_md_links.ROOT", tmp_path)
         monkeypatch.setattr("check_md_links.tracked_markdown", lambda: [missing])
-        assert check_links(registry=[]) == []
+        result = check_links(registry=[])
+        assert result["broken_links"] == []
+        assert result["counts"]["markdown_skipped_missing"] == 1
+        assert result["counts"]["markdown_scanned"] == 0
+
+
+def _isolated_repo(monkeypatch: pytest.MonkeyPatch, root: Path, files: dict[str, str]) -> None:
+    """Point the gate at a throwaway tree so results never depend on the live repo."""
+    monkeypatch.setattr("check_md_links.ROOT", root)
+    (root / "vendored.json").write_text(json.dumps({"vendored": []}))
+    for name, text in files.items():
+        (root / name).parent.mkdir(parents=True, exist_ok=True)
+        (root / name).write_text(text)
+    monkeypatch.setattr(
+        "check_md_links.tracked_markdown",
+        lambda: [root / name for name in files if name.endswith(".md")],
+    )
+
+
+def _clean_readme() -> dict:
+    return {
+        "resources_checked": 2,
+        "resources_by_kind": {"skill": 2},
+        "unlinked_resources": [],
+    }
+
+
+class TestJsonMode:
+    def test_clean_tree_emits_one_ok_object(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        _isolated_repo(monkeypatch, tmp_path, {"docs/a.md": "[b](b.md)\n", "docs/b.md": "x\n"})
+        monkeypatch.setattr("check_md_links.check_readme_coverage", _clean_readme)
+
+        assert main(["--json"]) == 0
+        captured = capsys.readouterr()
+        report = json.loads(captured.out)
+        assert captured.err == ""
+        assert report["schema_version"] == 1
+        assert report["ok"] is True
+        assert report["broken_links"] == []
+        assert report["unlinked_resources"] == []
+        assert report["counts"]["markdown_tracked"] == 2
+        assert report["counts"]["markdown_scanned"] == 2
+        assert report["counts"]["links_checked"] == 1
+        assert report["counts"]["links_resolved"] == 1
+        assert report["counts"]["resources_checked"] == 2
+        assert report["counts"]["resources_by_kind"] == {"skill": 2}
+
+    def test_broken_link_is_reported_with_location(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        _isolated_repo(monkeypatch, tmp_path, {"docs/a.md": "intro\n[x](../nope.md)\n"})
+        monkeypatch.setattr("check_md_links.check_readme_coverage", _clean_readme)
+
+        assert main(["--json"]) == 1
+        report = json.loads(capsys.readouterr().out)
+        assert report["ok"] is False
+        assert report["broken_links"] == [
+            {
+                "file": "docs/a.md",
+                "line": 2,
+                "target": "../nope.md",
+                "resolved": "nope.md",
+            }
+        ]
+        assert report["counts"]["links_checked"] == 1
+        assert report["counts"]["links_resolved"] == 0
+
+    def test_unlinked_resource_is_reported(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        _isolated_repo(monkeypatch, tmp_path, {"docs/a.md": "clean\n"})
+        monkeypatch.setattr(
+            "check_md_links.check_readme_coverage",
+            lambda: {
+                "resources_checked": 1,
+                "resources_by_kind": {"skill": 1},
+                "unlinked_resources": [{"kind": "skill", "name": "s", "path": "src/s/SKILL.md"}],
+            },
+        )
+
+        assert main(["--json"]) == 1
+        report = json.loads(capsys.readouterr().out)
+        assert report["ok"] is False
+        assert report["broken_links"] == []
+        assert report["unlinked_resources"] == [
+            {"kind": "skill", "name": "s", "path": "src/s/SKILL.md"}
+        ]
+
+    def test_git_failure_yields_error_object_and_exit_1(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        _isolated_repo(monkeypatch, tmp_path, {})
+
+        def fail() -> list[Path]:
+            raise subprocess.CalledProcessError(
+                128, ["git", "ls-files"], stderr="fatal: not a git repository"
+            )
+
+        monkeypatch.setattr("check_md_links.tracked_markdown", fail)
+
+        assert main(["--json"]) == 1
+        captured = capsys.readouterr()
+        report = json.loads(captured.out)
+        assert report["ok"] is False
+        assert "not a git repository" in report["error"]
+        assert "not a git repository" in captured.err
+
+    def test_vendored_files_are_counted_and_local_only_stays_checked(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        _isolated_repo(
+            monkeypatch,
+            tmp_path,
+            {
+                "vendor/skill/SKILL.md": "[x](gone.md)\n",
+                "vendor/skill/ATTRIBUTION.md": "[y](gone.md)\n",
+                "docs/a.md": "clean\n",
+            },
+        )
+        (tmp_path / "vendored.json").write_text(
+            json.dumps(
+                {
+                    "vendored": [
+                        {
+                            "path": "vendor/skill",
+                            "vendor_mode": "dir",
+                            "local_only": ["ATTRIBUTION.md"],
+                        }
+                    ]
+                }
+            )
+        )
+        monkeypatch.setattr("check_md_links.check_readme_coverage", _clean_readme)
+
+        assert main(["--json"]) == 1
+        report = json.loads(capsys.readouterr().out)
+        assert report["counts"]["markdown_tracked"] == 3
+        assert report["counts"]["markdown_skipped_vendored"] == 1
+        assert report["counts"]["markdown_scanned"] == 2
+        assert [b["file"] for b in report["broken_links"]] == ["vendor/skill/ATTRIBUTION.md"]
+
+    def test_zero_scanned_files_is_visible_in_counts(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        # A glob that stopped matching exits 0 with nothing inspected; the counts
+        # are what let a caller spot that.
+        _isolated_repo(monkeypatch, tmp_path, {})
+        monkeypatch.setattr("check_md_links.check_readme_coverage", _clean_readme)
+
+        assert main(["--json"]) == 0
+        report = json.loads(capsys.readouterr().out)
+        assert report["counts"]["markdown_tracked"] == 0
+        assert report["counts"]["markdown_scanned"] == 0
+
+    def test_resolved_path_is_normalised_and_repo_relative(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        _isolated_repo(monkeypatch, tmp_path, {"docs/a.md": "[x](sub/../gone.md)\n"})
+        monkeypatch.setattr("check_md_links.check_readme_coverage", _clean_readme)
+
+        assert main(["--json"]) == 1
+        report = json.loads(capsys.readouterr().out)
+        assert report["broken_links"] == [
+            {
+                "file": "docs/a.md",
+                "line": 1,
+                "target": "sub/../gone.md",
+                "resolved": "docs/gone.md",
+            }
+        ]
+
+
+class TestDefaultMode:
+    def test_clean_tree_prints_nothing_and_exits_0(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        _isolated_repo(monkeypatch, tmp_path, {"docs/a.md": "[b](b.md)\n", "docs/b.md": "x\n"})
+        monkeypatch.setattr("check_md_links.check_readme_coverage", _clean_readme)
+
+        assert main([]) == 0
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        assert captured.err == ""
+
+    def test_human_lines_and_summary_are_unchanged(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        _isolated_repo(monkeypatch, tmp_path, {"docs/a.md": "intro\n[x](../nope.md)\n"})
+        monkeypatch.setattr(
+            "check_md_links.check_readme_coverage",
+            lambda: {
+                "resources_checked": 1,
+                "resources_by_kind": {"skill": 1},
+                "unlinked_resources": [{"kind": "skill", "name": "s", "path": "src/s/SKILL.md"}],
+            },
+        )
+
+        assert main([]) == 1
+        captured = capsys.readouterr()
+        assert captured.out == (
+            "docs/a.md:2: broken-link -> ../nope.md\n"
+            "README.md: undocumented -> skill/s (add a row linking src/s/SKILL.md)\n"
+        )
+        assert captured.err == "\n2 finding(s).\n"
+
+    def test_exit_code_matches_json_mode(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        _isolated_repo(monkeypatch, tmp_path, {"docs/a.md": "[x](../nope.md)\n"})
+        monkeypatch.setattr("check_md_links.check_readme_coverage", _clean_readme)
+
+        default_code = main([])
+        json_code = main(["--json"])
+        assert default_code == json_code == 1
+
+
+def test_real_repo_json_clean_run_exits_0() -> None:
+    """The live tree passes the gate, and --json says so on stdout alone."""
+    result = subprocess.run(
+        [sys.executable, str(ROOT / "scripts" / "check_md_links.py"), "--json"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    report = json.loads(result.stdout)
+    assert result.returncode == 0, result.stderr
+    assert report["ok"] is True
+    assert report["counts"]["markdown_scanned"] > 0
+    assert report["counts"]["resources_checked"] > 0
 
 
 def test_non_vendored_routes_use_discoverable_skill_names() -> None:
