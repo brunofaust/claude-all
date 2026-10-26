@@ -94,11 +94,7 @@ def find_undeclared_instruction_refs(
 
 
 def main() -> int:
-    """CLI entry point — findings to stdout (exit 1); zero discovery is CANNOT CHECK (exit 2).
-
-    A gate that examined nothing must never pass, so every discovery pattern must
-    match at least one unit before any validation runs.
-    """
+    """CLI entry point; a zero-match discovery pattern exits 2 (CANNOT CHECK)."""
     known = load_resource_keys()
     manifests = discover_manifests(SRC)
     snippets = discover_snippets(INSTRUCTIONS_DIR)

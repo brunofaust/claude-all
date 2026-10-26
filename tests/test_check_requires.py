@@ -80,17 +80,7 @@ def make_repo(
     snippet_requires: list[str] | None = None,
     suffixed_manifest: bool = True,
 ) -> tuple[Path, Path]:
-    """Build a fake ``src/claude_all`` tree with optional manifest and snippet.
-
-    Args:
-        tmp_path: pytest's per-test temporary directory.
-        manifest_requires: ``requires`` of a skill ``claude-all.json``, if any.
-        snippet_body: body of ``instructions/demo/claude_md.md``, if any.
-        snippet_requires: ``requires`` of the snippet's ``claude-all.json``, if any.
-
-    Returns:
-        The fake ``src`` directory and its ``instructions`` directory.
-    """
+    """Build a fake ``src/claude_all`` tree; returns ``(src, instructions)``."""
     src = tmp_path / "src"
     instructions = src / "claude_all" / "instructions"
     instructions.mkdir(parents=True)
@@ -119,13 +109,7 @@ def point_gate_at(monkeypatch: pytest.MonkeyPatch, src: Path, instructions: Path
 def test_clean_run_prints_one_scanned_line(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """A clean run exits 0, prints nothing on stdout and one ``scanned=N`` line on stderr.
-
-    Args:
-        tmp_path: pytest's per-test temporary directory.
-        monkeypatch: pytest fixture used to aim the gate at the fake tree.
-        capsys: pytest fixture capturing stdout and stderr.
-    """
+    """A clean run exits 0 with one ``scanned=N`` line on stderr only."""
     src, instructions = make_repo(
         tmp_path,
         manifest_requires=["skills/foo-skill"],
@@ -139,20 +123,14 @@ def test_clean_run_prints_one_scanned_line(
     captured = capsys.readouterr()
     assert captured.out == ""
     summary = [line for line in captured.err.splitlines() if line.startswith("scanned=")]
-    # Two manifests: the skill's claude-all.json and the snippet folder's own one.
+    # Three manifests: the skill's claude-all.json, its suffixed sibling and the snippet's.
     assert summary == ["scanned=4 manifests=3 snippets=1 resources=3"]
 
 
 def test_empty_instructions_glob_fails_closed(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """When the snippet glob matches nothing the run exits 2 and names that pattern.
-
-    Args:
-        tmp_path: pytest's per-test temporary directory.
-        monkeypatch: pytest fixture used to aim the gate at the fake tree.
-        capsys: pytest fixture capturing stdout and stderr.
-    """
+    """An empty snippet glob exits 2 and names that pattern."""
     src, instructions = make_repo(tmp_path, manifest_requires=["skills/foo-skill"])
     point_gate_at(monkeypatch, src, instructions)
 
@@ -168,13 +146,7 @@ def test_empty_instructions_glob_fails_closed(
 def test_no_manifests_fails_closed(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """When no ``claude-all.json`` manifest is found the run exits 2 and names that pattern.
-
-    Args:
-        tmp_path: pytest's per-test temporary directory.
-        monkeypatch: pytest fixture used to aim the gate at the fake tree.
-        capsys: pytest fixture capturing stdout and stderr.
-    """
+    """No ``claude-all.json`` manifest exits 2 and names that pattern."""
     src, instructions = make_repo(tmp_path, snippet_body="Plain text.\n")
     point_gate_at(monkeypatch, src, instructions)
 
@@ -189,13 +161,7 @@ def test_no_manifests_fails_closed(
 def test_plain_manifest_glob_fails_closed_even_when_suffixed_matches(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """The plain manifest glob matching nothing fails the run even if the suffixed glob matches.
-
-    Args:
-        tmp_path: pytest's per-test temporary directory.
-        monkeypatch: pytest fixture used to aim the gate at the fake tree.
-        capsys: pytest fixture capturing stdout and stderr.
-    """
+    """An empty plain manifest glob fails even when the suffixed glob matches."""
     src, instructions = make_repo(tmp_path, snippet_body="Plain text.\n")
     skill = src / "claude_all" / "skills" / "foo"
     skill.mkdir(parents=True)
@@ -211,11 +177,7 @@ def test_plain_manifest_glob_fails_closed_even_when_suffixed_matches(
 
 
 def test_shipped_tree_passes_zero_discovery_rule(capsys: pytest.CaptureFixture[str]) -> None:
-    """The real shipped tree has discoverable manifests, snippets and resources.
-
-    Args:
-        capsys: pytest fixture capturing stdout and stderr.
-    """
+    """The shipped tree passes the zero-discovery rule."""
     assert check_requires.main() == 0
 
     captured = capsys.readouterr()
@@ -227,13 +189,7 @@ def test_shipped_tree_passes_zero_discovery_rule(capsys: pytest.CaptureFixture[s
 def test_zero_resources_fails_closed(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """When the installer discovers no resources the run exits 2 and names that pattern.
-
-    Args:
-        tmp_path: pytest's per-test temporary directory.
-        monkeypatch: pytest fixture used to aim the gate at the fake tree.
-        capsys: pytest fixture capturing stdout and stderr.
-    """
+    """No discovered resources exits 2 and names that pattern."""
     src, instructions = make_repo(
         tmp_path,
         manifest_requires=["skills/foo-skill"],
@@ -254,13 +210,7 @@ def test_zero_resources_fails_closed(
 def test_dangling_requires_still_fails(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """A dangling ``requires`` entry still exits 1 with its original finding.
-
-    Args:
-        tmp_path: pytest's per-test temporary directory.
-        monkeypatch: pytest fixture used to aim the gate at the fake tree.
-        capsys: pytest fixture capturing stdout and stderr.
-    """
+    """A dangling ``requires`` entry still exits 1 with its finding."""
     src, instructions = make_repo(
         tmp_path,
         manifest_requires=["skills/missing-skill"],
@@ -279,13 +229,7 @@ def test_dangling_requires_still_fails(
 def test_undeclared_instruction_ref_still_fails(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """An instruction naming an undeclared resource still exits 1 with its original finding.
-
-    Args:
-        tmp_path: pytest's per-test temporary directory.
-        monkeypatch: pytest fixture used to aim the gate at the fake tree.
-        capsys: pytest fixture capturing stdout and stderr.
-    """
+    """An undeclared instruction reference still exits 1 with its finding."""
     src, instructions = make_repo(
         tmp_path,
         manifest_requires=["skills/foo-skill"],
